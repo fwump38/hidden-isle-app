@@ -37,6 +37,8 @@ A request that reaches `:8080` carrying Cloudflare headers is treated as tunnel 
 
 ## Deploy (Portainer)
 
+> Step-by-step Authentik and tunnel setup (MCP OAuth, plus optional remote web sign-in): [docs/authentik-setup.md](docs/authentik-setup.md).
+
 Players only use the app **at home**, signing in with a PIN, so they never need an SSO account. Only the Seer uses it remotely (web and MCP), through Authentik.
 
 ```
@@ -57,11 +59,11 @@ claude.ai: ─▶ cloudflared ─▶ Authentik outpost (unauthenticated path) �
    - Bind the application to **only your user**. Players never go through it.
    - Set `HI_AUTHENTIK_PROXY_IPS` to the address the outpost connects to the app from (its IP, or its Docker network's subnet). The app ignores `X-authentik-email` from anyone else.
 4. **Cloudflare Tunnel:** route `https://isle.example.com` to the Authentik outpost, not to the app directly.
-5. **At home:** open `http://<nas>:8080`, sign in as the Seer with `HI_SEER_PASSWORD`, then **Admin → People → Add a player** with a name and a PIN. No email is needed.
+5. **At home:** open `http://<nas>:8390` (the LAN port in `compose.yaml`), sign in as the Seer with `HI_SEER_PASSWORD`, then **Admin → People → Add a player** with a name and a PIN. No email is needed.
 
 **Security notes:**
-- Never forward port 8080 to the internet. It accepts PINs.
-- Port 8081 needs an SSO identity on every request and ignores PIN cookies.
+- Never forward the LAN port (8390 on the host, 8080 in the container) to the internet. It accepts PINs.
+- The tunnel port (8391 on the host, 8081 in the container) needs an SSO identity on every request and ignores PIN cookies.
 - If a reverse proxy on your LAN also forwards to 8080 (for a nicer local hostname), that's fine: PIN login is still limited to `HI_LAN_CIDR`.
 
 ### Cloudflare Access instead of Authentik

@@ -1,29 +1,35 @@
-# Portainer stack (or `docker compose up -d`). One container; state lives in the hidden-isle-data volume.
+# Portainer stack (or `docker compose up -d`) for Unraid. One container; all state lives in
+# /mnt/user/appdata/hidden-isle (database, rules snapshots, backups, session and deploy keys).
+#
+# Before the first start, create the folder owned by the user the container runs as:
+#   mkdir -p /mnt/user/appdata/hidden-isle && chown 99:100 /mnt/user/appdata/hidden-isle
 services:
   hidden-isle:
     image: ghcr.io/fwump38/hidden-isle-app:latest
     container_name: hidden-isle
     restart: unless-stopped
-    # If you bind-mount a NAS folder instead of the named volume, make it writable by this user,
-    # or set user: to the folder's UID:GID.
-    # user: "1026:100"
+    user: "99:100"             # Unraid's nobody:users, the usual appdata owner
     ports:
-      - "8080:8080"            # LAN: PIN login. Don't forward this port to the internet.
-      - "127.0.0.1:8081:8081"  # Tunnel: only the Authentik outpost/proxy should reach this (SSO required). Drop the line if they share a Docker network.
+      - "8390:8080"            # LAN web UI (PIN login). Never forward this to the internet.
+      - "8391:8081"            # Tunnel listener (SSO or MCP bearer token required). Point cloudflared here
+                               # (http://<unraid-ip>:8391); drop this line if cloudflared shares a Docker network
+                               # with this container and uses http://hidden-isle:8081 instead.
     volumes:
-      - hidden-isle-data:/data
+      - /mnt/user/appdata/hidden-isle:/data
+    labels:
+      - net.unraid.docker.webui=http://[IP]:[PORT:8390]
     environment:
       HI_PUBLIC_URL: https://isle.example.com       # the tunnel hostname
       HI_SEER_NAME: Seer
-      HI_SEER_EMAIL: you@example.com                # your Authentik email
+      HI_SEER_EMAIL: you@example.com                # the email on your Authentik user
       HI_SEER_PASSWORD: ${HI_SEER_PASSWORD}          # your LAN password (8+ characters)
       # HI_LAN_CIDR: 192.168.1.0/24                 # PIN login only from these ranges (default: private ranges)
-      # Remote sign-in (the Seer only): trust X-authentik-email only from the Authentik outpost / proxy
-      # that sits between cloudflared and port 8081. A Docker subnet is fine, e.g. 172.18.0.0/16.
-      HI_AUTHENTIK_PROXY_IPS: 172.18.0.0/16
-      # MCP OAuth for claude.ai (an Authentik OAuth2/OpenID provider):
+      # MCP OAuth for claude.ai (Authentik OAuth2/OpenID provider, docs/authentik-setup.md part A):
       HI_OAUTH_ISSUER: https://auth.example.com/application/o/hidden-isle/
       HI_OAUTH_AUDIENCE: ${HI_OAUTH_CLIENT_ID}
+      # Remote web sign-in (optional, docs/authentik-setup.md part B): trust X-authentik-email only
+      # from the Authentik server's address.
+      # HI_AUTHENTIK_PROXY_IPS: 172.30.0.10
       # Rules data over SSH with a read-only deploy key (the app generates it; copy it from Admin):
       GAMEDATA_REPO: git@github.com:fwump38/The-Hidden-Isle.git
       GAMEDATA_REF: main
@@ -34,6 +40,3 @@ services:
       # Cloudflare Access instead of Authentik for remote sign-in:
       # HI_CF_TEAM_DOMAIN: yourteam.cloudflareaccess.com
       # HI_CF_AUD: ${HI_CF_AUD}
-
-volumes:
-  hidden-isle-data:
