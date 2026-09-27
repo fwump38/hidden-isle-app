@@ -4,7 +4,21 @@ package gamedata
 // no text from the books: names are real skill/suit names, everything else is placeholder.
 func Fixture() *Snapshot {
 	s := &Snapshot{ID: "fixture", Raw: map[string]map[string]any{
-		"setting": {"proficiencies": map[string]any{"schools": []any{map[string]any{"name": "Illusion"}, map[string]any{"name": "Mentalism"}}}},
+		"setting": {
+			"proficiencies": map[string]any{"schools": []any{map[string]any{"name": "Illusion"}, map[string]any{"name": "Mentalism"}}},
+			"names":         []any{map[string]any{"region": "Venice", "page": "p. 155", "names": []any{"Test A", "Test B", "Test C", "Test D", "Test E"}}},
+		},
+		"oracle": {
+			"mission_types": map[string]any{"page": "p. 72", "rows": []any{
+				map[string]any{"cards": "2-3", "mission_type": "Test retrieve", "goal_question": "What?"},
+				map[string]any{"cards": "4-10", "mission_type": "Test other", "goal_question": "Who?"},
+				map[string]any{"cards": "A", "mission_type": "Test disaster", "goal_question": "Which?"}}},
+			"fate_closed": map[string]any{"hands": map[string]any{"unlikely": map[string]any{"yes": 1, "no": 2}, "50-50": map[string]any{"yes": 1, "no": 1}, "likely": map[string]any{"yes": 2, "no": 1}}},
+			"random_events": map[string]any{"suit_themes": map[string]any{"Swords": []any{"Violence", "Scholarship"}, "Wands": []any{"Magic", "Passion"}, "Cups": []any{"Care", "Stealth"}, "Pentacles": []any{"Bargains", "Labor"}},
+				"rows": []any{map[string]any{"theme": "Violence", "past": "test past", "present": "test present", "future": "test future"},
+					map[string]any{"theme": "Scholarship", "past": "p", "present": "q", "future": "r"}}},
+			"npc_methods": map[string]any{"rows": []any{map[string]any{"suit": "Swords", "method": "test knowledge"}, map[string]any{"suit": "Cups", "method": "test kindness"}}},
+		},
 	}}
 	for _, suit := range []struct {
 		name   string

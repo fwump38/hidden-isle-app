@@ -13,6 +13,7 @@ import (
 	"github.com/fwump38/hidden-isle-app/internal/challenge"
 	"github.com/fwump38/hidden-isle-app/internal/db"
 	"github.com/fwump38/hidden-isle-app/internal/gamedata"
+	"github.com/fwump38/hidden-isle-app/internal/oracle"
 )
 
 const instructions = `The Hidden Isle: a tarot RPG set in 1562 (Forged in the Dark). This server is the campaign's master copy (Agents, contacts, clocks, adversaries, territories, sessions, journals, the change log) and serves the rules text.
@@ -216,6 +217,23 @@ type challengeResolveIn struct {
 	Seer         string      `json:"seer" jsonschema:"the Seer's card"`
 	NumeralBonus int         `json:"numeral_bonus,omitempty" jsonschema:"+3 for an ideal, +3 for a virtue (from challenge_count)"`
 	Fortunes     []fortuneIn `json:"fortunes,omitempty"`
+}
+type fateIn struct {
+	Kind       string   `json:"kind" jsonschema:"closed (yes/no) or numeric"`
+	Likelihood string   `json:"likelihood,omitempty" jsonschema:"closed: unlikely (1 yes, 2 no), 50-50 (1, 1) or likely (2, 1)"`
+	Yes        []string `json:"yes,omitempty" jsonschema:"closed: the yes hand, e.g. [\"7 of Cups\"]"`
+	No         []string `json:"no,omitempty"`
+	AceHigh    *bool    `json:"ace_high,omitempty" jsonschema:"closed: the book doesn't give the Ace's value here; true = 11, false = 1 (Seer ruling; default 11)"`
+	Range      string   `json:"range,omitempty" jsonschema:"numeric: 1-5, 1-10, 2-20 or 10-100"`
+	Card       string   `json:"card,omitempty" jsonschema:"numeric: the pip drawn"`
+}
+type pipIn struct {
+	Card string `json:"card" jsonschema:"the pip drawn, e.g. 6 of Swords"`
+}
+type npcIn struct {
+	Card   string `json:"card" jsonschema:"the vision card drawn (who they are)"`
+	Method string `json:"method,omitempty" jsonschema:"the pip drawn for their method"`
+	Region string `json:"region,omitempty" jsonschema:"for name ideas: London, Lisbon, Venice, Konstantiniyye, Qazvin"`
 }
 type drawIn struct {
 	Deck  string          `json:"deck" jsonschema:"vision (22 Majors + 16 Courts) or pips (Ace-10 in four suits)"`
@@ -502,6 +520,86 @@ func (s *Server) addTools() {
 			}
 			return challenge.Resolve(trump, played, seer, in.NumeralBonus, fs)
 		})
+	tool(s, "fate_question", "Read a fate question from the cards drawn (pp. 100-101). closed: highest card in each hand, yes wins ties, matching suits make it extreme, any Ace brings a random event. numeric: one pip scaled to the range (Ace = 1, and a random event). Fate answers questions about the world, not an Agent's own actions.",
+		func(ctx context.Context, a campaign.Actor, in fateIn) (any, error) {
+			if in.Kind == "numeric" {
+				c, err := challenge.ParseCard(in.Card)
+				if err != nil {
+					return nil, err
+				}
+				return oracle.Numeric(in.Range, c)
+			}
+			t, err := s.oracleTables()
+			if err != nil {
+				return nil, err
+			}
+			parse := func(xs []string) ([]challenge.Card, error) {
+				var out []challenge.Card
+				for _, x := range xs {
+					c, err := challenge.ParseCard(x)
+					if err != nil {
+						return nil, err
+					}
+					out = append(out, c)
+				}
+				return out, nil
+			}
+			yes, err := parse(in.Yes)
+			if err != nil {
+				return nil, err
+			}
+			no, err := parse(in.No)
+			if err != nil {
+				return nil, err
+			}
+			aceHigh := in.AceHigh == nil || *in.AceHigh
+			return t.Closed(in.Likelihood, yes, no, aceHigh)
+		})
+	tool(s, "random_event", "Read a random event from one pip (p. 102): when (2-4 past, 5-8 present, 9-Ace future) and the two themes its suit offers, with the table's ideas.",
+		func(ctx context.Context, a campaign.Actor, in pipIn) (any, error) {
+			t, err := s.oracleTables()
+			if err != nil {
+				return nil, err
+			}
+			c, err := challenge.ParseCard(in.Card)
+			if err != nil {
+				return nil, err
+			}
+			return t.RandomEvent(c), nil
+		})
+	tool(s, "generate_npc", "Build an NPC from the cards drawn (p. 103): the vision card's Characters line and meaning, the method from a pip's suit (an Ace also brings a random event), and name ideas from the region's list.",
+		func(ctx context.Context, a campaign.Actor, in npcIn) (any, error) {
+			t, err := s.oracleTables()
+			if err != nil {
+				return nil, err
+			}
+			snap, _ := s.snapshot()
+			v, err := oracle.FindVision(snap, in.Card)
+			if err != nil {
+				return nil, err
+			}
+			var m *challenge.Card
+			if in.Method != "" {
+				c, err := challenge.ParseCard(in.Method)
+				if err != nil {
+					return nil, err
+				}
+				m = &c
+			}
+			return t.MakeNPC(v, m, in.Region), nil
+		})
+	tool(s, "mission_type", "The mission type for a pip (p. 72), used when the players can't choose.",
+		func(ctx context.Context, a campaign.Actor, in pipIn) (any, error) {
+			t, err := s.oracleTables()
+			if err != nil {
+				return nil, err
+			}
+			c, err := challenge.ParseCard(in.Card)
+			if err != nil {
+				return nil, err
+			}
+			return t.MissionType(c)
+		})
 	tool(s, "draw_cards", "Digital card draw, only when the Seer asks for one (the table normally draws real cards). Hands come from one shuffled deck, so no card is in two hands. Ace = 11 in challenges, 1 for fate numbers.",
 		func(ctx context.Context, a campaign.Actor, in drawIn) (any, error) {
 			snap, err := s.snapshot()
@@ -615,4 +713,12 @@ func (s *Server) agentState(a campaign.Actor, id uint) (any, error) {
 		out["clocks"] = mine
 	}
 	return out, nil
+}
+
+func (s *Server) oracleTables() (*oracle.Tables, error) {
+	snap, err := s.snapshot()
+	if err != nil {
+		return nil, err
+	}
+	return oracle.Load(snap)
 }

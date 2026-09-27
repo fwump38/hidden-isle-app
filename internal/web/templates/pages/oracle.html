@@ -1,0 +1,132 @@
+{{define "content"}}
+{{$d := .Data}}{{$c := .Nav.Campaign}}{{$act := printf "/c/%d/oracle" $c.ID}}
+<h1 class="h4 mb-1">Oracle</h1>
+<p class="small text-body-secondary">Fate questions, random events, NPCs and complications (pp. 72, 100-103). Choose the cards you drew from your deck, or press <strong>Draw</strong> for a digital draw. Fate answers questions about the world, never about an Agent's own actions (those are challenges).</p>
+
+{{template "oracle-out" .Data.Empty}}
+
+<div class="row g-3" hx-target="#oracle-out" hx-select="#oracle-out" hx-swap="outerHTML show:#oracle-out:top">
+  <div class="col-12 col-lg-6">
+    <form class="card card-body h-100" method="post" action="{{$act}}" hx-post="{{$act}}">
+      <input type="hidden" name="tool" value="closed">
+      <h2 class="h6">Yes or no? {{help "Judge how likely it is, then draw a yes hand and a no hand. The highest card in each counts; yes wins ties; matching suits make the answer extreme; an Ace also brings a random event (p. 101)."}}</h2>
+      <div class="row g-2 small">
+        <div class="col-6"><select class="form-select form-select-sm" name="likelihood" aria-label="Likelihood"><option value="unlikely">Unlikely (1 yes, 2 no)</option><option value="50-50" selected>50-50 (1 yes, 1 no)</option><option value="likely">Likely (2 yes, 1 no)</option></select></div>
+        <div class="col-6"><select class="form-select form-select-sm" name="ace" aria-label="Ace value" title="The book doesn't say what an Ace is worth here: a Seer ruling"><option value="high">Ace counts 11</option><option value="low">Ace counts 1</option></select></div>
+        {{range $i := seq 0 1}}<div class="col-6"><select class="form-select form-select-sm" name="yes{{$i}}" aria-label="Yes card"><option value="">Yes card{{if eq $i 1}} 2 (likely){{end}}…</option>{{range $d.Pips}}<option>{{.}}</option>{{end}}</select></div>{{end}}
+        {{range $i := seq 0 1}}<div class="col-6"><select class="form-select form-select-sm" name="no{{$i}}" aria-label="No card"><option value="">No card{{if eq $i 1}} 2 (unlikely){{end}}…</option>{{range $d.Pips}}<option>{{.}}</option>{{end}}</select></div>{{end}}
+        <div class="col-12"><button class="btn btn-sm btn-primary" type="submit" name="action" value="read">Read</button> <button class="btn btn-sm btn-outline-secondary" type="submit" name="action" value="draw">Draw</button></div>
+      </div>
+    </form>
+  </div>
+  <div class="col-12 col-lg-6">
+    <form class="card card-body h-100" method="post" action="{{$act}}" hx-post="{{$act}}">
+      <input type="hidden" name="tool" value="numeric">
+      <h2 class="h6">How many? {{help "Agree the range, draw one pip. Ace = 1 here, and also brings a random event (p. 101)."}}</h2>
+      <div class="row g-2 small">
+        <div class="col-6"><select class="form-select form-select-sm" name="range" aria-label="Range"><option>1-5</option><option selected>1-10</option><option>2-20</option><option>10-100</option></select></div>
+        <div class="col-6"><select class="form-select form-select-sm" name="card" aria-label="Card"><option value="">Card…</option>{{range $d.Pips}}<option>{{.}}</option>{{end}}</select></div>
+        <div class="col-12"><button class="btn btn-sm btn-primary" type="submit" name="action" value="read">Read</button> <button class="btn btn-sm btn-outline-secondary" type="submit" name="action" value="draw">Draw</button></div>
+      </div>
+    </form>
+  </div>
+  <div class="col-12 col-lg-6">
+    <form class="card card-body h-100" method="post" action="{{$act}}" hx-post="{{$act}}">
+      <input type="hidden" name="tool" value="open">
+      <h2 class="h6">Open question {{help "Draw a vision card and read its Vision Guide entry for the question; draw a second to clarify if needed (p. 101)."}}</h2>
+      <div class="row g-2 small">
+        <div class="col-12"><select class="form-select form-select-sm" name="vision" aria-label="Vision card"><option value="">Vision card…</option>{{range $d.Vision}}<option>{{.}}</option>{{end}}</select></div>
+        <div class="col-12"><button class="btn btn-sm btn-primary" type="submit" name="action" value="read">Read</button> <button class="btn btn-sm btn-outline-secondary" type="submit" name="action" value="draw">Draw</button></div>
+      </div>
+    </form>
+  </div>
+  <div class="col-12 col-lg-6">
+    <form class="card card-body h-100" method="post" action="{{$act}}" hx-post="{{$act}}">
+      <input type="hidden" name="tool" value="event">
+      <h2 class="h6">Random event {{help "One pip: 2-4 past (evidence), 5-8 present (happening now), 9-Ace future (a plan or seed); the suit offers two themes (p. 102)."}}</h2>
+      <div class="row g-2 small">
+        <div class="col-12"><select class="form-select form-select-sm" name="card" aria-label="Card"><option value="">Card…</option>{{range $d.Pips}}<option>{{.}}</option>{{end}}</select></div>
+        <div class="col-12"><button class="btn btn-sm btn-primary" type="submit" name="action" value="read">Read</button> <button class="btn btn-sm btn-outline-secondary" type="submit" name="action" value="draw">Draw</button></div>
+      </div>
+    </form>
+  </div>
+  <div class="col-12 col-lg-6">
+    <form class="card card-body h-100" method="post" action="{{$act}}" hx-post="{{$act}}">
+      <input type="hidden" name="tool" value="npc">
+      <h2 class="h6">NPC {{help "A vision card for who they are (its Characters line), a pip for how they act; name ideas from the region's list (p. 103). An Ace for the method also brings a random event."}}</h2>
+      <div class="row g-2 small">
+        <div class="col-6"><select class="form-select form-select-sm" name="vision" aria-label="Vision card"><option value="">Vision card…</option>{{range $d.Vision}}<option>{{.}}</option>{{end}}</select></div>
+        <div class="col-6"><select class="form-select form-select-sm" name="method" aria-label="Method card"><option value="">Method card…</option>{{range $d.Pips}}<option>{{.}}</option>{{end}}</select></div>
+        <div class="col-12"><select class="form-select form-select-sm" name="region" aria-label="Names from"><option value="">Names from…</option>{{range $d.Regions}}<option>{{.}}</option>{{end}}</select></div>
+        <div class="col-12"><button class="btn btn-sm btn-primary" type="submit" name="action" value="read">Read</button> <button class="btn btn-sm btn-outline-secondary" type="submit" name="action" value="draw">Draw</button></div>
+      </div>
+    </form>
+  </div>
+  <div class="col-12 col-lg-6">
+    <form class="card card-body h-100" method="post" action="{{$act}}" hx-post="{{$act}}">
+      <input type="hidden" name="tool" value="complication">
+      <h2 class="h6">Complication {{help "Stuck for a consequence? Draw a vision card and use its bad outcomes and groups (p. 18, p. 91)."}}</h2>
+      <div class="row g-2 small">
+        <div class="col-12"><select class="form-select form-select-sm" name="vision" aria-label="Vision card"><option value="">Vision card…</option>{{range $d.Vision}}<option>{{.}}</option>{{end}}</select></div>
+        <div class="col-12"><button class="btn btn-sm btn-primary" type="submit" name="action" value="read">Read</button> <button class="btn btn-sm btn-outline-secondary" type="submit" name="action" value="draw">Draw</button></div>
+      </div>
+    </form>
+  </div>
+  <div class="col-12 col-lg-6">
+    <form class="card card-body h-100" method="post" action="{{$act}}" hx-post="{{$act}}">
+      <input type="hidden" name="tool" value="mission">
+      <h2 class="h6">Mission type {{help "If the players can't choose, draw a pip (p. 72)."}}</h2>
+      <div class="row g-2 small">
+        <div class="col-12"><select class="form-select form-select-sm" name="card" aria-label="Card"><option value="">Card…</option>{{range $d.Pips}}<option>{{.}}</option>{{end}}</select></div>
+        <div class="col-12"><button class="btn btn-sm btn-primary" type="submit" name="action" value="read">Read</button> <button class="btn btn-sm btn-outline-secondary" type="submit" name="action" value="draw">Draw</button></div>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}
+
+{{define "oracle-out"}}
+<div id="oracle-out" class="mb-3">
+  {{if .}}{{with .Title}}
+  <div class="card border-info">
+    <div class="card-body">
+      <h2 class="h6 text-info mb-2"><i class="bi bi-stars"></i> {{.}}</h2>
+      {{end}}
+      {{with .Error}}<div class="alert alert-warning py-2 small mb-0">{{.}}</div>{{end}}
+      {{with .Drawn}}<p class="small mb-2"><strong>Drawn:</strong> {{join . ", "}}</p>{{end}}
+      {{with .Fate}}
+      <div class="fs-4 fw-bold">{{.Answer}}{{if .Extreme}} <span class="badge text-bg-warning fs-6">extreme</span>{{end}}{{if .RandomEvent}} <span class="badge text-bg-info fs-6">+ random event</span>{{end}}</div>
+      <ul class="small mb-0">{{range .Steps}}<li>{{.}}</li>{{end}}</ul>
+      {{end}}
+      {{with .Event}}
+      <div class="fw-semibold">{{.Card}}: {{.When}}</div>
+      {{range .Options}}<div class="small"><strong>{{.Theme}}:</strong> {{.Ideas}}</div>{{end}}
+      <ul class="small text-body-secondary mb-0 mt-1">{{range .Steps}}<li>{{.}}</li>{{end}}</ul>
+      {{end}}
+      {{with .NPC}}
+      <div class="fw-semibold">{{.Card}}{{with .MethodCard}} · method {{.}}{{end}}</div>
+      <div class="small"><strong>Who:</strong> {{.Characters}} — {{.Meaning}}</div>
+      {{with .Method}}<div class="small"><strong>Method:</strong> {{.}}</div>{{end}}
+      {{with .Names}}<div class="small"><strong>Name ideas:</strong> {{join . ", "}} <span class="text-body-secondary">({{$.NPC.NamesFrom}})</span></div>{{end}}
+      {{if .RandomEvent}}<div class="small text-info">An Ace: after the NPC, resolve a random event.</div>{{end}}
+      {{end}}
+      {{with .Vision}}
+      <div class="fw-semibold">{{.Name}} <span class="small text-body-secondary">({{.Page}})</span></div>
+      <div class="small"><strong>Meaning:</strong> {{.Meaning}}</div>
+      <div class="small"><strong>Characters:</strong> {{.Characters}} · <strong>Locations:</strong> {{.Locations}}</div>
+      <div class="small"><strong>Groups &amp; creatures:</strong> {{.GroupsAndCreatures}} · <strong>Bad outcomes:</strong> {{.BadOutcomes}}</div>
+      {{end}}
+      {{with .Comp}}
+      <div class="fw-semibold">{{.Card}}</div>
+      <div class="small"><strong>Bad outcomes:</strong> {{.BadOutcomes}}</div>
+      <div class="small"><strong>Groups &amp; creatures:</strong> {{.Groups}}</div>
+      <div class="small text-body-secondary">{{index .Steps 0}}</div>
+      {{end}}
+      {{with .Mission}}
+      <div class="fw-semibold">{{.Card}}: {{.MissionType}}</div>
+      <div class="small">Goal question: {{.GoalQuestion}} ({{.Page}})</div>
+      {{end}}
+  {{if .Title}}</div></div>{{end}}
+  {{end}}
+</div>
+{{end}}

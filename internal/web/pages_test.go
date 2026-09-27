@@ -297,3 +297,36 @@ func TestChallengeHelper(t *testing.T) {
 		t.Errorf("failure: %s", out)
 	}
 }
+
+func TestOraclePage(t *testing.T) {
+	st, _ := newSite(t)
+	st.post("Seer", "/campaigns", url.Values{"name": {"C"}, "mode": {"group"}})
+	if code, body := st.get("Seer", "/c/1/oracle"); code != http.StatusOK || !strings.Contains(body, "Yes or no?") {
+		t.Fatalf("oracle page: %d", code)
+	}
+	read := func(form url.Values) string {
+		r := httptest.NewRequest(http.MethodPost, "/c/1/oracle", strings.NewReader(form.Encode()))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.Header.Set("Sec-Fetch-Site", "same-origin")
+		r.RemoteAddr = "192.168.1.10:1"
+		r.AddCookie(st.cookies["Seer"])
+		w := httptest.NewRecorder()
+		st.h.ServeHTTP(w, r)
+		return w.Body.String()
+	}
+	out := read(url.Values{"tool": {"closed"}, "likelihood": {"50-50"}, "yes0": {"4 of Cups"}, "no0": {"9 of Cups"}, "action": {"read"}})
+	if !strings.Contains(out, ">No") || !strings.Contains(out, "extreme") {
+		t.Errorf("closed: %s", out)
+	}
+	out = read(url.Values{"tool": {"event"}, "card": {"6 of Swords"}, "action": {"read"}})
+	if !strings.Contains(out, "present") || !strings.Contains(out, "test present") {
+		t.Errorf("event: %s", out)
+	}
+	out = read(url.Values{"tool": {"npc"}, "action": {"draw"}, "region": {"Venice"}})
+	if !strings.Contains(out, "Drawn:") || !strings.Contains(out, "Name ideas") {
+		t.Errorf("npc draw: %s", out)
+	}
+	if code, _ := st.get("Ana", "/c/1/oracle"); code != http.StatusForbidden {
+		t.Errorf("non-member opened the oracle: %d", code)
+	}
+}

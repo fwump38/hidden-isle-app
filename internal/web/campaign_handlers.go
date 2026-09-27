@@ -29,6 +29,8 @@ func (s *Server) registerCampaign(mux *http.ServeMux) {
 	mux.Handle("POST /c/{cid}/entries", u(s.saveEntry))
 	mux.Handle("POST /entries/{id}/delete", u(s.deleteEntry))
 	mux.Handle("GET /c/{cid}/sessions/{id}", u(s.sessionPage))
+	mux.Handle("GET /c/{cid}/oracle", u(s.oraclePage))
+	mux.Handle("POST /c/{cid}/oracle", u(s.oracleAction))
 	mux.Handle("GET /c/{cid}/export.json", u(s.exportJSON))
 	mux.Handle("GET /c/{cid}/export.md", u(s.exportMarkdown))
 	mux.Handle("GET /c/{cid}/{section}", u(s.recordsPage))

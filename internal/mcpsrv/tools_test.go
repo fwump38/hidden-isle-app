@@ -158,6 +158,16 @@ func TestToolsPlayACampaign(t *testing.T) {
 	if res["outcome"] != "complicated" {
 		t.Errorf("p. 19 example over MCP: %v", res)
 	}
+	fate := h.call("fate_question", map[string]any{"kind": "closed", "likelihood": "50-50", "yes": []string{"4 of Cups"}, "no": []string{"9 of Cups"}})
+	if fate["answer"] != "No" || fate["extreme"] != true {
+		t.Errorf("fate_question: %v", fate)
+	}
+	if num := h.call("fate_question", map[string]any{"kind": "numeric", "range": "2-20", "card": "9 of Wands"}); num["number"].(float64) != 18 {
+		t.Errorf("numeric: %v", num)
+	}
+	if ev := h.call("random_event", map[string]any{"card": "Ace of Swords"}); ev["when"] != "future" {
+		t.Errorf("random_event: %v", ev)
+	}
 	card, e := h.try("lookup_card", map[string]any{"name": "Page of Cups"})
 	if e != "" || card["name"] != "Page of Cups" {
 		t.Errorf("lookup_card: %v %s", card, e)

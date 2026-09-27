@@ -63,9 +63,12 @@ let hiScroll = null;
 document.addEventListener("htmx:beforeRequest", () => { hiScroll = { x: window.scrollX, y: window.scrollY, path: location.pathname }; });
 document.addEventListener("htmx:afterSettle", (e) => {
   const url = e.detail.xhr && e.detail.xhr.responseURL ? new URL(e.detail.xhr.responseURL) : null;
-  if (hiScroll && url && url.pathname === hiScroll.path) {
+  const wholePage = e.detail.target && e.detail.target.id === "main";
+  if (!wholePage) {
+    // A partial update (challenge result, oracle reading): leave scrolling to hx-swap.
+  } else if (hiScroll && url && url.pathname === hiScroll.path) {
     window.scrollTo(hiScroll.x, hiScroll.y);
-  } else if (url && e.detail.target && e.detail.target.id === "main") {
+  } else if (url) {
     window.scrollTo(0, 0);
   }
   hiScroll = null;
