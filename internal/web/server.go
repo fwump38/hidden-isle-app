@@ -10,11 +10,11 @@ import (
 	"net/http"
 	"path"
 	"strings"
-	"time"
 
 	"gorm.io/gorm"
 
 	"github.com/fwump38/hidden-isle-app/internal/auth"
+	"github.com/fwump38/hidden-isle-app/internal/campaign"
 	"github.com/fwump38/hidden-isle-app/internal/config"
 	"github.com/fwump38/hidden-isle-app/internal/db"
 	"github.com/fwump38/hidden-isle-app/internal/gamedata"
@@ -28,33 +28,15 @@ type Server struct {
 	Cfg   *config.Config
 	Auth  *auth.Authenticator
 	Data  *gamedata.Store
+	Svc   *campaign.Service
 	Build string
 
 	pages map[string]*template.Template
 }
 
-func New(g *gorm.DB, cfg *config.Config, a *auth.Authenticator, data *gamedata.Store, build string) (*Server, error) {
-	s := &Server{DB: g, Cfg: cfg, Auth: a, Data: data, Build: build, pages: map[string]*template.Template{}}
-	funcs := template.FuncMap{
-		"since": func(t time.Time) string {
-			if t.IsZero() {
-				return "never"
-			}
-			return time.Since(t).Round(time.Second).String() + " ago"
-		},
-		"short": func(s string) string {
-			if len(s) > 12 {
-				return s[:12]
-			}
-			return s
-		},
-		"deref": func(p *string) string {
-			if p == nil {
-				return ""
-			}
-			return *p
-		},
-	}
+func New(g *gorm.DB, cfg *config.Config, a *auth.Authenticator, data *gamedata.Store, svc *campaign.Service, build string) (*Server, error) {
+	s := &Server{DB: g, Cfg: cfg, Auth: a, Data: data, Svc: svc, Build: build, pages: map[string]*template.Template{}}
+	funcs := templateFuncs()
 	pages, err := fs.Glob(assets, "templates/pages/*.html")
 	if err != nil {
 		return nil, err
@@ -81,6 +63,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 
 	mux.Handle("GET /{$}", s.requireUser(http.HandlerFunc(s.home)))
 
+	s.registerCampaign(mux)
+
 	mux.Handle("GET /admin", s.requireSeer(http.HandlerFunc(s.admin)))
 	mux.Handle("POST /admin/gamedata/sync", s.requireSeer(http.HandlerFunc(s.syncGameData)))
 	mux.Handle("POST /admin/users", s.requireSeer(http.HandlerFunc(s.addUser)))
@@ -105,6 +89,7 @@ type pageData struct {
 	Flash string
 	Error string
 	Data  any
+	Nav   *campaignNav // set on campaign pages
 }
 
 func (s *Server) render(w http.ResponseWriter, r *http.Request, page string, status int, pd pageData) {
@@ -116,10 +101,7 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, page string, sta
 		http.Error(w, "no page "+page, http.StatusInternalServerError)
 		return
 	}
-	name := "layout"
-	if r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-Target") != "" {
-		name = "content" // htmx swaps only the page body
-	}
+	name := "layout" // htmx requests pick #main out of the full page (hx-select)
 	var buf bytes.Buffer
 	if err := t.ExecuteTemplate(&buf, name, pd); err != nil {
 		slog.Error("render", "page", page, "err", err)

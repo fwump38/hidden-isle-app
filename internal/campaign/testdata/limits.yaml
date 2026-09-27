@@ -1,0 +1,19 @@
+agent:
+  burden_track: {min: 0, max: 7, page: "pp. 20, 66"}
+  ideal_track: {min: 0, max: 7, page: "pp. 20, 66"}
+  suit_xp: {min: 0, max: 7, page: "p. 25"}
+  ability_xp: {min: 0, max: 7, page: "p. 25"}
+  load_used: {min: 0, max: 5, page: "p. 27"}
+  skill: {min: 0, max: 3, max_unlocked: 4, page: "pp. 25, 66"}
+  harm_per_suit: {max: 2, types: [P, S, T], page: "p. 23"}
+  virtues: {max: 3, page: "p. 14"}
+  proficiency_clock: {segments: 6, ranks: [Novice, Adept, Master], page: "pp. 33-34"}
+contact:
+  affection: {min: 0, max: 6, page: "p. 66"}
+  distance: {min: 0, max: 3, page: "p. 66"}
+clock:
+  segments: [3, 4, 6, 8]
+  page: "p. 86"
+adversary:
+  progress: {min: 0, page: "pp. 28, 81"}
+  sections: 3

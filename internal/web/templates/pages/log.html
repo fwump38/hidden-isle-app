@@ -1,0 +1,37 @@
+{{define "content"}}
+{{$d := .Data}}{{$c := .Nav.Campaign}}{{$seer := .User.IsSeer}}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+  <h1 class="h4 mb-0">Change log</h1>
+  <div class="small">Filter: <a href="/c/{{$c.ID}}/log">all</a> · <a href="/c/{{$c.ID}}/log?type=agent">agents</a> · <a href="/c/{{$c.ID}}/log?type=contact">contacts</a> · <a href="/c/{{$c.ID}}/log?type=clock">clocks</a> · <a href="/c/{{$c.ID}}/log?type=adversary">adversaries</a> · <a href="/c/{{$c.ID}}/log?type=session">sessions</a></div>
+</div>
+<p class="small text-body-secondary">Every change, who made it and why. {{if $seer}}You can undo any change{{else}}You can undo your own changes{{end}}; a later change to the same field has to be undone first.</p>
+<div class="list-group">
+  {{range $d.Events}}
+  <div class="list-group-item {{if .RevertedBy}}text-body-secondary{{end}}">
+    <div class="d-flex flex-wrap justify-content-between gap-2">
+      <div class="{{if .RevertedBy}}text-decoration-line-through{{end}}">
+        {{if isSeerVis .Visibility}}<i class="bi bi-eye-slash text-warning" title="Seer only"></i> {{end}}
+        <span class="badge text-bg-secondary">{{.Action}}</span> {{.Summary}}
+      </div>
+      <div class="small text-body-secondary text-nowrap">{{when .CreatedAt}} · {{.ActorName}}{{if ne .Via "web"}} via {{.Via}}{{end}}</div>
+    </div>
+    {{with .Reason}}<div class="small"><i class="bi bi-chat-left-text"></i> {{.}}</div>{{end}}
+    {{if .Override}}<div class="small text-warning"><i class="bi bi-exclamation-triangle"></i> Seer override (recorded as a house ruling)</div>{{end}}
+    {{if gt (len .Changes) 0}}
+    <details class="small"><summary class="text-body-secondary">Details</summary>
+      <table class="table table-sm small mb-0 mt-1"><tbody>
+        {{range .Changes}}<tr><td class="text-body-secondary">{{.Field}}</td><td class="text-break">{{changeVal .From}}</td><td>→</td><td class="text-break">{{changeVal .To}}</td></tr>{{end}}
+      </tbody></table>
+    </details>
+    {{end}}
+    {{if and (not .RevertedBy) (or $seer (eq (uintv .ActorID) $d.Me))}}
+    <form method="post" action="/events/{{.ID}}/undo" class="mt-1">
+      <input type="hidden" name="back" value="/c/{{$c.ID}}/log">
+      <button class="btn btn-sm btn-outline-secondary py-0" type="submit" hx-confirm="Undo this change?"><i class="bi bi-arrow-counterclockwise"></i> Undo</button>
+    </form>
+    {{end}}
+  </div>
+  {{else}}<div class="list-group-item text-body-secondary">Nothing logged yet.</div>{{end}}
+</div>
+{{if $d.Next}}<a class="btn btn-outline-light mt-3" href="/c/{{$c.ID}}/log?before={{$d.Next}}">Older</a>{{end}}
+{{end}}

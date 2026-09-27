@@ -111,7 +111,7 @@
     {{end}}
     {{with .KeyError}}<div class="alert alert-danger small py-2">Deploy key: {{.}}</div>{{end}}
     {{with .Status.LastError}}<div class="alert alert-danger small py-2"><strong>Last sync failed; still using the snapshot above.</strong><pre class="mb-0 mt-1 text-wrap">{{.}}</pre></div>{{end}}
-    <button class="btn btn-outline-light" hx-post="/admin/gamedata/sync" hx-target="#gamedata" hx-swap="outerHTML" hx-disabled-elt="this">
+    <button class="btn btn-outline-light" hx-post="/admin/gamedata/sync" hx-target="#gamedata" hx-select="#gamedata" hx-swap="outerHTML" hx-disabled-elt="this">
       <i class="bi bi-cloud-download"></i> Sync now <span class="htmx-indicator spinner-border spinner-border-sm"></span>
     </button>
   </div>

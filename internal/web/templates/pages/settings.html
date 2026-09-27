@@ -1,0 +1,51 @@
+{{define "content"}}
+{{$d := .Data}}{{$c := .Nav.Campaign}}{{$snap := .Nav.Snap}}{{$back := printf "/c/%d/settings" $c.ID}}{{$u := printf "/r/campaign/%d" $c.ID}}
+<h1 class="h4 mb-3">Campaign settings</h1>
+{{template "why" $}}
+<div class="row g-3" hx-include="#why">
+  <div class="col-12 col-lg-7">
+    <form method="post" action="{{$u}}" class="card card-body">
+      <input type="hidden" name="back" value="{{$back}}">
+      <div class="row g-2">
+        <div class="col-12 col-md-6"><label class="form-label small mb-0" for="cname">Name</label><input class="form-control" id="cname" name="set.name" value="{{$c.Name}}"></div>
+        <div class="col-6 col-md-3"><label class="form-label small mb-0" for="mode">Mode</label><select class="form-select" id="mode" name="set.mode">{{range $snap.Campaign.CampaignMode}}<option {{if eq . $c.Mode}}selected{{end}}>{{.}}</option>{{end}}</select></div>
+        <div class="col-6 col-md-3 d-flex align-items-end"><input type="hidden" name="set.merciful" value=""><div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="set.merciful" id="merc" {{if $c.Merciful}}checked{{end}}><label class="form-check-label" for="merc">Merciful Mode</label></div></div>
+        <div class="col-6 col-md-3"><label class="form-label small mb-0" for="season">Season</label><input class="form-control" type="number" min="1" id="season" name="set.season" value="{{$c.Season}}"></div>
+        <div class="col-6 col-md-3"><label class="form-label small mb-0" for="played">Scenarios played</label><input class="form-control" type="number" min="0" id="played" name="set.scenarios_played" value="{{$c.ScenariosPlayed}}"></div>
+        <div class="col-6 col-md-3"><label class="form-label small mb-0" for="mascot">Hand mascot (p. 42)</label><input class="form-control" id="mascot" name="set.hand_mascot" value="{{$c.HandMascot}}"></div>
+        <div class="col-6 col-md-3"><label class="form-label small mb-0" for="hname">Hand name (p. 82)</label><input class="form-control" id="hname" name="set.hand_name" value="{{$c.HandName}}"></div>
+        <div class="col-12"><label class="form-label small mb-0" for="table">Table: sessions, lines and veils, tone</label><textarea class="form-control" id="table" name="set.table" rows="3">{{$c.Table}}</textarea></div>
+        <div class="col-12"><label class="form-label small mb-0" for="opts">Options in use (downtime before session one, visions, narrative thresholds…)</label><textarea class="form-control" id="opts" name="set.options" rows="2">{{$c.Options}}</textarea></div>
+        <div class="col-12"><label class="form-label small mb-0" for="threads">Open threads (players can see these)</label><textarea class="form-control" id="threads" name="set.open_threads" rows="3">{{$c.OpenThreads}}</textarea></div>
+        <div class="col-12 d-flex justify-content-between align-items-center">
+          <button class="btn btn-primary" type="submit">Save</button>
+          <span><input type="hidden" name="set.archived" value=""><span class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="set.archived" id="arch" {{if $c.Archived}}checked{{end}}><label class="form-check-label small" for="arch">Archived</label></span></span>
+        </div>
+      </div>
+    </form>
+  </div>
+  <div class="col-12 col-lg-5">
+    <div class="card mb-3"><div class="card-body">
+      <h2 class="h6">Players in this campaign</h2>
+      <p class="small text-body-secondary">Only members can open the campaign. Add people in <a href="/admin">Admin</a> first.</p>
+      {{range $d.Users}}
+      <form method="post" action="/c/{{$c.ID}}/members" class="d-flex justify-content-between align-items-center border-bottom py-1">
+        <input type="hidden" name="user_id" value="{{.ID}}"><input type="hidden" name="back" value="{{$back}}">
+        <span>{{.Name}}</span>
+        {{if index $d.Members .ID}}
+        <button class="btn btn-sm btn-success" type="submit" name="member" value="off"><i class="bi bi-check2"></i> Member</button>
+        {{else}}
+        <button class="btn btn-sm btn-outline-secondary" type="submit" name="member" value="on">Add</button>
+        {{end}}
+      </form>
+      {{else}}<p class="small text-body-secondary mb-0">No players yet.</p>{{end}}
+    </div></div>
+    <div class="card"><div class="card-body">
+      <h2 class="h6">Export</h2>
+      <a class="btn btn-sm btn-outline-light" href="/c/{{$c.ID}}/export.md" hx-boost="false"><i class="bi bi-filetype-md"></i> Markdown</a>
+      <a class="btn btn-sm btn-outline-light" href="/c/{{$c.ID}}/export.json" hx-boost="false"><i class="bi bi-filetype-json"></i> JSON</a>
+      <p class="small text-body-secondary mt-2 mb-0">Includes Seer-only content (marked SEER ONLY). Don't share it with players as-is.</p>
+    </div></div>
+  </div>
+</div>
+{{end}}

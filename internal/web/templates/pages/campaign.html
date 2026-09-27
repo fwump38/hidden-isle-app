@@ -1,0 +1,104 @@
+{{define "content"}}
+{{$c := .Nav.Campaign}}{{$snap := .Nav.Snap}}{{$d := .Data}}
+<div class="row g-3">
+  <div class="col-12 col-xl-8">
+    <div class="card mb-3">
+      <div class="card-body">
+        <h2 class="h5 card-title"><i class="bi bi-people"></i> Agents</h2>
+        {{if $d.Agents}}
+        <div class="row g-2">
+          {{range $d.Agents}}
+          <div class="col-12 col-md-6">
+            <a class="card card-body py-2 text-decoration-none hi-agent-card" href="/agents/{{.ID}}">
+              <div class="d-flex justify-content-between align-items-center">
+                <strong>{{.Name}}</strong>
+                <span class="badge {{if eq .Status "Active"}}text-bg-success{{else}}text-bg-secondary{{end}}">{{.Status}}</span>
+              </div>
+              <div class="small text-body-secondary">{{className $snap .Class}}{{with .Burden}} · burden {{.}}{{end}}{{with .Ideal}} · ideal {{.}}{{end}}</div>
+              <div class="small">
+                <i class="bi bi-heart-pulse"></i> harm {{harmCount .Harm}}/8
+                · <i class="bi bi-bag"></i> load {{.LoadUsed}}/5
+              </div>
+            </a>
+          </div>
+          {{end}}
+        </div>
+        {{else}}<p class="text-body-secondary">No Agents yet.</p>{{end}}
+
+        {{if or $.User.IsSeer (eq $d.MyAgents 0)}}
+        <form class="row g-2 mt-2" method="post" action="/c/{{$c.ID}}/agents">
+          <div class="col-12 col-md-4"><input class="form-control" name="name" placeholder="New Agent's name" required aria-label="Agent name"></div>
+          <div class="col-6 col-md-3">
+            <select class="form-select" name="class" required aria-label="Class">
+              <option value="">Class…</option>
+              {{with $snap}}{{range .Classes.Classes}}<option value="{{.ID}}">{{.Name}}</option>{{end}}{{end}}
+            </select>
+          </div>
+          {{if $.User.IsSeer}}
+          <div class="col-6 col-md-3">
+            <select class="form-select" name="owner_id" aria-label="Player">
+              <option value="">Played by… (Seer)</option>
+              {{range $d.Players}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+            </select>
+          </div>
+          {{end}}
+          <div class="col-12 col-md-2"><button class="btn btn-primary w-100" type="submit"><i class="bi bi-person-plus"></i> Create</button></div>
+        </form>
+        <p class="small text-body-secondary mt-2 mb-0">Creates the sheet with the class's pre-filled skills. The step-by-step creation wizard comes later.</p>
+        {{end}}
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+          <h2 class="h5 card-title mb-0"><i class="bi bi-clock-history"></i> Recent changes</h2>
+          <a class="small" href="/c/{{$c.ID}}/log">Full log</a>
+        </div>
+        {{template "events" $d.Events}}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-4">
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h5 card-title mb-0"><i class="bi bi-pie-chart"></i> Clocks</h2>
+          <a class="small" href="/c/{{$c.ID}}/clocks">All</a>
+        </div>
+        {{range $d.Clocks}}{{if eq .Status "Running"}}
+        <div class="d-flex align-items-center gap-2 mb-1">
+          {{clock .Filled .Segments 28}}
+          <span class="small">{{if isSeerVis .Visibility}}<i class="bi bi-eye-slash text-warning" title="Seer only"></i> {{end}}{{.Name}} <span class="text-body-secondary">{{.Filled}}/{{.Segments}}</span></span>
+        </div>
+        {{end}}{{else}}<p class="small text-body-secondary mb-0">No clocks running.</p>{{end}}
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h5 card-title mb-0"><i class="bi bi-incognito"></i> Adversaries</h2>
+          <a class="small" href="/c/{{$c.ID}}/adversaries">All</a>
+        </div>
+        {{range $d.Adversaries}}
+        <div class="mb-2">
+          <div class="small d-flex justify-content-between"><span>{{if .Hidden}}<i class="bi bi-eye-slash text-warning"></i> {{end}}{{.Name}}</span><span class="text-body-secondary">{{.Status}}</span></div>
+          {{if .TrackLength}}<div class="progress" style="height: 6px" role="progressbar" aria-valuenow="{{.Progress}}" aria-valuemin="0" aria-valuemax="{{.TrackLength}}"><div class="progress-bar bg-danger" style="width: {{pct .Progress .TrackLength}}%"></div></div>{{end}}
+        </div>
+        {{else}}<p class="small text-body-secondary mb-0">None on the sheet yet.</p>{{end}}
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-body">
+        <h2 class="h5 card-title"><i class="bi bi-journal-text"></i> Recaps</h2>
+        {{range $d.Recaps}}{{if .Published}}
+        <details class="mb-2"><summary>{{.Title}} <span class="small text-body-secondary">{{date .CreatedAt}}</span></summary><div class="hi-prose small mt-1">{{.Body}}</div></details>
+        {{end}}{{else}}<p class="small text-body-secondary mb-0">No recaps published yet.</p>{{end}}
+      </div>
+    </div>
+  </div>
+</div>
+{{end}}

@@ -6,3 +6,39 @@
 .htmx-indicator { display: none; }
 .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { display: inline-block; }
 .btn-check + .btn { min-height: 3rem; }
+
+/* Pips: a row of small round buttons; click sets the value (click the top one to lower it). */
+.hi-pips { display: inline-flex; gap: 3px; vertical-align: middle; }
+.hi-pip {
+  width: 1rem; height: 1rem; padding: 0; border-radius: 50%;
+  border: 1px solid var(--bs-secondary-color); background: transparent;
+}
+.hi-pip.on { background: var(--hi-accent); border-color: var(--hi-accent); }
+.hi-pip:hover:not(:disabled) { outline: 2px solid var(--bs-focus-ring-color); }
+.hi-pip:disabled { cursor: default; }
+@media (pointer: coarse) { .hi-pip { width: 1.35rem; height: 1.35rem; } .hi-pips { gap: 5px; } }
+
+/* Clocks (SVG pies). */
+.hi-clock { flex: none; }
+.hi-clock .seg { fill: transparent; stroke: var(--bs-secondary-color); stroke-width: 1.5; }
+.hi-clock .seg.filled { fill: var(--hi-accent); }
+
+/* Adversary progress track. */
+.hi-track { display: flex; gap: 2px; flex-wrap: wrap; }
+.hi-track span { flex: 1 1 0; min-width: 8px; height: 10px; border: 1px solid var(--bs-danger-border-subtle); border-radius: 2px; }
+.hi-track span.on { background: var(--bs-danger); }
+
+.hi-harm { width: 3.6rem; padding-right: 1.6rem; }
+.hi-harm.has-harm { border-color: var(--bs-danger); color: var(--bs-danger-text-emphasis); }
+.hi-suit-Swords { color: #8fb3ff; } .hi-suit-Wands { color: #ff9f7a; }
+.hi-suit-Cups { color: #7ad7ff; } .hi-suit-Pentacles { color: #b5d67a; }
+.hi-prose { white-space: pre-wrap; }
+.hi-tabs .nav-link { white-space: nowrap; padding: .25rem .6rem; }
+.hi-agent-card:hover { border-color: var(--hi-accent); }
+fieldset:disabled .btn, fieldset:disabled .form-control, fieldset:disabled .form-select { opacity: .75; }
+
+@media print {
+  body { background: #fff !important; color: #000 !important; }
+  .hi-print, .hi-print * { color: #000 !important; }
+  .hi-print .border { border-color: #999 !important; }
+}

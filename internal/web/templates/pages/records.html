@@ -1,0 +1,233 @@
+{{define "content"}}
+{{$d := .Data}}{{$c := .Nav.Campaign}}{{$snap := .Nav.Snap}}{{$seer := .User.IsSeer}}{{$back := printf "/c/%d/%s" $c.ID .Nav.Section}}
+<h1 class="h4 mb-3">{{.Title}}</h1>
+{{if $seer}}{{template "why" $}}{{end}}
+<div hx-include="#why">
+
+{{/* ======================= clocks */}}
+{{if eq $d.Kind "clock"}}
+<p class="small text-body-secondary">Name a clock for what happens when it fills. 3, 4, 6 or 8 segments; tug-of-war clocks start half full (p. 86).</p>
+<div class="row g-3">
+  {{range $d.Records}}{{$u := printf "/r/clock/%d" .ID}}
+  <div class="col-12 col-md-6 col-xl-4">
+    <div class="card h-100 {{if isSeerVis .Visibility}}border-warning-subtle{{end}}">
+      <div class="card-body">
+        <form method="post" action="{{$u}}" class="d-flex align-items-center gap-3">
+          <input type="hidden" name="back" value="{{$back}}">
+          {{clock .Filled .Segments 64}}
+          <div class="flex-grow-1">
+            <div class="fw-semibold">{{if isSeerVis .Visibility}}<i class="bi bi-eye-slash text-warning" title="Seer only"></i> {{end}}{{.Name}}</div>
+            <div class="small text-body-secondary">{{.Filled}}/{{.Segments}} · {{.Status}}{{with .Scope}} · {{.}}{{end}}{{with .LinkedTo}} · {{.}}{{end}}</div>
+            <div class="mt-1 d-flex gap-1">
+              <button class="btn btn-sm btn-outline-light" type="submit" name="inc.filled" value="-1" aria-label="Unfill a segment">−</button>
+              <button class="btn btn-sm btn-outline-light" type="submit" name="inc.filled" value="1" aria-label="Fill a segment">+</button>
+            </div>
+          </div>
+        </form>
+        {{if $seer}}
+        <details class="small mt-2"><summary class="text-body-secondary">Edit</summary>
+          <form method="post" action="{{$u}}" class="row g-1 mt-1">
+            <input type="hidden" name="back" value="{{$back}}">
+            <div class="col-12"><input class="form-control form-control-sm" name="set.name" value="{{.Name}}" aria-label="Name"></div>
+            <div class="col-4"><select class="form-select form-select-sm" name="set.segments" aria-label="Segments">{{$n := .Segments}}{{range $snap.Limits.Clock.Segments}}<option {{if eq . $n}}selected{{end}}>{{.}}</option>{{end}}</select></div>
+            <div class="col-8"><select class="form-select form-select-sm" name="set.status" aria-label="Status">{{$st := .Status}}{{range $snap.Campaign.ClockStatus}}<option {{if eq . $st}}selected{{end}}>{{.}}</option>{{end}}</select></div>
+            <div class="col-6"><select class="form-select form-select-sm" name="set.scope" aria-label="Scope"><option value="">Scope…</option>{{$sc := .Scope}}{{range $snap.Campaign.ClockScope}}<option {{if eq . $sc}}selected{{end}}>{{.}}</option>{{end}}</select></div>
+            <div class="col-6"><select class="form-select form-select-sm" name="set.agent_id" aria-label="Agent"><option value="">No Agent</option>{{$ag := uintv .AgentID}}{{range $d.Agents}}<option value="{{.ID}}" {{if eq .ID $ag}}selected{{end}}>{{.Name}}</option>{{end}}</select></div>
+            <div class="col-12"><input class="form-control form-control-sm" name="set.linked_to" value="{{.LinkedTo}}" placeholder="Linked to (territory, adversary, ritual…)" aria-label="Linked to"></div>
+            <div class="col-12"><select class="form-select form-select-sm" name="set.visibility" aria-label="Visibility"><option value="party" {{if not (isSeerVis .Visibility)}}selected{{end}}>Players can see it</option><option value="seer" {{if isSeerVis .Visibility}}selected{{end}}>Seer only</option></select></div>
+            <div class="col-12 d-flex justify-content-between"><button class="btn btn-sm btn-outline-light" type="submit">Save</button>
+              <button class="btn btn-sm btn-outline-danger" type="submit" formaction="{{$u}}/delete" hx-post="{{$u}}/delete" hx-confirm="Delete {{.Name}}? (Undo from the log.)">Delete</button></div>
+          </form>
+        </details>
+        {{end}}
+      </div>
+    </div>
+  </div>
+  {{else}}<div class="col-12"><p class="text-body-secondary">No clocks yet.</p></div>{{end}}
+</div>
+{{if $seer}}
+<form method="post" action="/c/{{$c.ID}}/r/clock" class="card card-body mt-3">
+  <input type="hidden" name="back" value="{{$back}}">
+  <h2 class="h6">New clock</h2>
+  <div class="row g-2">
+    <div class="col-12 col-md-5"><input class="form-control" name="set.name" placeholder="What happens when it fills" required aria-label="Name"></div>
+    <div class="col-4 col-md-2"><select class="form-select" name="set.segments" aria-label="Segments">{{range $snap.Limits.Clock.Segments}}<option {{if eq . 4}}selected{{end}}>{{.}}</option>{{end}}</select></div>
+    <div class="col-8 col-md-3"><select class="form-select" name="set.scope" aria-label="Scope">{{range $snap.Campaign.ClockScope}}<option>{{.}}</option>{{end}}</select></div>
+    <div class="col-6 col-md-2"><select class="form-select" name="set.visibility" aria-label="Visibility"><option value="party">Public</option><option value="seer">Seer only</option></select></div>
+    <div class="col-6 col-md-4"><select class="form-select" name="set.agent_id" aria-label="Agent"><option value="">Not an Agent's clock</option>{{range $d.Agents}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></div>
+    <div class="col-6 col-md-4"><input class="form-control" type="number" min="0" name="set.filled" value="0" aria-label="Filled"></div>
+    <div class="col-6 col-md-4"><button class="btn btn-primary w-100" type="submit"><i class="bi bi-plus-lg"></i> Add clock</button></div>
+  </div>
+</form>
+{{end}}
+{{end}}
+
+{{/* ======================= adversaries */}}
+{{if eq $d.Kind "adversary"}}
+<p class="small text-body-secondary">The Adversary Sheet: players can read it any time (p. 28). Progress +1 steady, +2 rapid, −1 setback (p. 81). The track has three sections: identity revealed, final phase, plan in motion.</p>
+<div class="row g-3">
+  {{range $d.Records}}{{$u := printf "/r/adversary/%d" .ID}}
+  <div class="col-12 col-lg-6">
+    <div class="card h-100 {{if .Hidden}}border-warning-subtle{{end}}">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <h2 class="h5 mb-0">{{if .Hidden}}<i class="bi bi-eye-slash text-warning" title="Not on the sheet yet"></i> {{end}}{{.Name}}{{if .Major}} <span class="badge text-bg-danger">major</span>{{end}}</h2>
+            <div class="small text-body-secondary">{{.Status}}{{with .Leader}} · led by {{.}}{{end}}</div>
+          </div>
+          <form method="post" action="{{$u}}" class="d-flex gap-1">
+            <input type="hidden" name="back" value="{{$back}}">
+            {{if $seer}}
+            <button class="btn btn-sm btn-outline-light" type="submit" name="inc.progress" value="-1" title="Setback">−1</button>
+            <button class="btn btn-sm btn-outline-light" type="submit" name="inc.progress" value="1" title="Steady">+1</button>
+            <button class="btn btn-sm btn-outline-light" type="submit" name="inc.progress" value="2" title="Rapid">+2</button>
+            {{end}}
+          </form>
+        </div>
+        {{if .TrackLength}}
+        <div class="hi-track my-2" aria-label="progress {{.Progress}} of {{.TrackLength}}">
+          {{$p := .Progress}}{{range $i := seq 1 .TrackLength}}<span class="{{if le $i $p}}on{{end}}"></span>{{end}}
+        </div>
+        <div class="small text-body-secondary">{{.Progress}}/{{.TrackLength}}</div>
+        {{else if $seer}}<div class="small text-warning my-1">Set the track length from the printed Adversary Sheet (Ref p. 8).</div>{{end}}
+        {{with .Plot}}<p class="small mb-1"><strong>Plot:</strong> {{.}}</p>{{end}}
+        {{with .Motivation}}<p class="small mb-1"><strong>Motivation:</strong> {{.}}</p>{{end}}
+        {{with .Members}}<p class="small mb-1 hi-prose"><strong>Members:</strong> {{.}}</p>{{end}}
+        {{if and $seer .Secrets}}<div class="small border border-warning-subtle rounded p-2 mt-2 hi-prose"><strong class="text-warning"><i class="bi bi-eye-slash"></i> Secrets:</strong> {{.Secrets}}</div>{{end}}
+        {{if $seer}}
+        <details class="small mt-2"><summary class="text-body-secondary">Edit</summary>
+          <form method="post" action="{{$u}}" class="row g-1 mt-1">
+            <input type="hidden" name="back" value="{{$back}}">
+            <div class="col-8"><input class="form-control form-control-sm" name="set.name" value="{{.Name}}" aria-label="Name"></div>
+            <div class="col-4"><input class="form-control form-control-sm" type="number" min="0" name="set.track_length" value="{{.TrackLength}}" aria-label="Track length" title="Track length"></div>
+            <div class="col-6"><input class="form-control form-control-sm" name="set.leader" value="{{.Leader}}" placeholder="Leader" aria-label="Leader"></div>
+            <div class="col-6"><select class="form-select form-select-sm" name="set.status" aria-label="Status">{{$st := .Status}}{{range $snap.Campaign.AdversaryStatus}}<option {{if eq . $st}}selected{{end}}>{{.}}</option>{{end}}</select></div>
+            <div class="col-12"><input class="form-control form-control-sm" name="set.plot" value="{{.Plot}}" placeholder="Plot" aria-label="Plot"></div>
+            <div class="col-12"><input class="form-control form-control-sm" name="set.motivation" value="{{.Motivation}}" placeholder="Motivation" aria-label="Motivation"></div>
+            <div class="col-12"><textarea class="form-control form-control-sm" name="set.members" rows="2" placeholder="Members (up to 4, with motivations)" aria-label="Members">{{.Members}}</textarea></div>
+            <div class="col-12"><textarea class="form-control form-control-sm border-warning-subtle" name="set.secrets" rows="2" placeholder="Seer-only secrets" aria-label="Secrets">{{.Secrets}}</textarea></div>
+            <div class="col-6"><input type="hidden" name="set.major" value=""><div class="form-check"><input class="form-check-input" type="checkbox" name="set.major" id="maj-{{.ID}}" {{if .Major}}checked{{end}}><label class="form-check-label" for="maj-{{.ID}}">Major</label></div></div>
+            <div class="col-6"><input type="hidden" name="set.hidden" value=""><div class="form-check"><input class="form-check-input" type="checkbox" name="set.hidden" id="hid-{{.ID}}" {{if .Hidden}}checked{{end}}><label class="form-check-label" for="hid-{{.ID}}">Hidden from players</label></div></div>
+            <div class="col-12 d-flex justify-content-between"><button class="btn btn-sm btn-outline-light" type="submit">Save</button>
+              <button class="btn btn-sm btn-outline-danger" type="submit" formaction="{{$u}}/delete" hx-post="{{$u}}/delete" hx-confirm="Delete {{.Name}}? (Undo from the log.)">Delete</button></div>
+          </form>
+        </details>
+        {{end}}
+      </div>
+    </div>
+  </div>
+  {{else}}<div class="col-12"><p class="text-body-secondary">No adversaries on the sheet yet.</p></div>{{end}}
+</div>
+{{if $seer}}
+<form method="post" action="/c/{{$c.ID}}/r/adversary" class="card card-body mt-3">
+  <input type="hidden" name="back" value="{{$back}}">
+  <h2 class="h6">New adversary</h2>
+  <div class="row g-2">
+    <div class="col-12 col-md-5"><input class="form-control" name="set.name" placeholder="Name (a rumor is enough)" required aria-label="Name"></div>
+    <div class="col-6 col-md-2"><input class="form-control" type="number" min="0" name="set.track_length" placeholder="Track" aria-label="Track length"></div>
+    <div class="col-6 col-md-3 d-flex align-items-center"><div class="form-check mb-0"><input class="form-check-input" type="checkbox" name="set.hidden" id="new-hidden"><label class="form-check-label small" for="new-hidden">Hidden (prep)</label></div></div>
+    <div class="col-12 col-md-2"><button class="btn btn-primary w-100" type="submit"><i class="bi bi-plus-lg"></i> Add</button></div>
+  </div>
+</form>
+{{end}}
+{{end}}
+
+{{/* ======================= territories */}}
+{{if eq $d.Kind "territory"}}
+<p class="small text-body-secondary">The Territory Sheet, updated in “the world changes” (p. 82).</p>
+<div class="row g-3">
+  {{range $d.Records}}{{$u := printf "/r/territory/%d" .ID}}
+  <div class="col-12 col-md-6">
+    <div class="card h-100"><div class="card-body">
+      <h2 class="h5">{{.Name}}</h2>
+      {{if $seer}}
+      <form method="post" action="{{$u}}" class="row g-1">
+        <input type="hidden" name="back" value="{{$back}}">
+        <div class="col-12"><label class="small text-body-secondary" for="ev-{{.ID}}">Events</label><textarea class="form-control form-control-sm" id="ev-{{.ID}}" name="set.events" rows="3">{{.Events}}</textarea></div>
+        <div class="col-12"><label class="small text-body-secondary" for="co-{{.ID}}">Contacts</label><textarea class="form-control form-control-sm" id="co-{{.ID}}" name="set.contacts" rows="2">{{.Contacts}}</textarea></div>
+        <div class="col-12"><label class="small text-body-secondary" for="no-{{.ID}}">Notes</label><textarea class="form-control form-control-sm" id="no-{{.ID}}" name="set.notes" rows="2">{{.Notes}}</textarea></div>
+        <div class="col-12"><button class="btn btn-sm btn-outline-light" type="submit">Save</button></div>
+      </form>
+      {{else}}
+      {{with .Events}}<p class="small hi-prose mb-1"><strong>Events:</strong> {{.}}</p>{{end}}
+      {{with .Contacts}}<p class="small hi-prose mb-1"><strong>Contacts:</strong> {{.}}</p>{{end}}
+      {{with .Notes}}<p class="small hi-prose mb-0">{{.}}</p>{{end}}
+      {{end}}
+    </div></div>
+  </div>
+  {{end}}
+</div>
+{{if $seer}}
+<form method="post" action="/c/{{$c.ID}}/r/territory" class="input-group mt-3" style="max-width: 32rem">
+  <input type="hidden" name="back" value="{{$back}}">
+  <input class="form-control" name="set.name" placeholder="New territory" required aria-label="New territory">
+  <button class="btn btn-primary" type="submit">Add</button>
+</form>
+{{end}}
+{{end}}
+
+{{/* ======================= sessions */}}
+{{if eq $d.Kind "session"}}
+<div class="list-group mb-3">
+  {{range $d.Records}}
+  <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" href="/c/{{$c.ID}}/sessions/{{.ID}}">
+    <span><strong>{{.Number}}. {{.Title}}</strong>{{with adventureTitle $snap .Adventure}} · <span class="text-body-secondary">{{.}}</span>{{end}}<br><span class="small text-body-secondary">{{.Summary}}</span></span>
+    <span class="text-nowrap small">{{date .Date}} <span class="badge {{if eq .Status "Played"}}text-bg-success{{else}}text-bg-warning{{end}}">{{.Status}}</span></span>
+  </a>
+  {{else}}<p class="text-body-secondary">No sessions yet.</p>{{end}}
+</div>
+{{if $seer}}
+<form method="post" action="/c/{{$c.ID}}/r/session" class="card card-body">
+  <input type="hidden" name="back" value="{{$back}}">
+  <h2 class="h6">New session</h2>
+  <div class="row g-2">
+    <div class="col-12 col-md-5"><input class="form-control" name="set.title" placeholder="Title" required aria-label="Title"></div>
+    <div class="col-6 col-md-3"><input class="form-control" type="date" name="set.date" aria-label="Date"></div>
+    <div class="col-6 col-md-4"><select class="form-select" name="set.adventure" aria-label="Adventure"><option value="">Original scenario</option>{{range $snap.Adventures.Adventures}}<option value="{{.ID}}">{{.Title}}</option>{{end}}</select></div>
+    <div class="col-12"><button class="btn btn-primary" type="submit"><i class="bi bi-plus-lg"></i> Add session</button></div>
+  </div>
+</form>
+{{end}}
+{{end}}
+
+{{/* ======================= Seer notes */}}
+{{if eq $d.Kind "seer_note"}}
+<div class="alert alert-warning py-2 small"><i class="bi bi-eye-slash"></i> SEER ONLY. Never quote these in recaps, handouts or read-aloud text.</div>
+{{range $d.Records}}{{$u := printf "/r/seer_note/%d" .ID}}
+<form method="post" action="{{$u}}" class="card card-body mb-3">
+  <input type="hidden" name="back" value="{{$back}}">
+  <input class="form-control fw-semibold mb-2" name="set.title" value="{{.Title}}" aria-label="Title">
+  <textarea class="form-control mb-2" name="set.body" rows="6" aria-label="Note">{{.Body}}</textarea>
+  <div class="d-flex justify-content-between"><button class="btn btn-sm btn-outline-light" type="submit">Save</button>
+    <button class="btn btn-sm btn-outline-danger" type="submit" formaction="{{$u}}/delete" hx-post="{{$u}}/delete" hx-confirm="Delete this note? (Undo from the log.)">Delete</button></div>
+</form>
+{{end}}
+<form method="post" action="/c/{{$c.ID}}/r/seer_note" class="input-group" style="max-width: 32rem">
+  <input type="hidden" name="back" value="{{$back}}">
+  <input class="form-control" name="set.title" placeholder="New note, e.g. Twists and reveals" required aria-label="New note">
+  <button class="btn btn-primary" type="submit">Add</button>
+</form>
+{{end}}
+
+{{/* ======================= house rulings */}}
+{{if eq $d.Kind "house_ruling"}}
+<p class="small text-body-secondary">The Seer's rulings for this table, including every time a rules limit was overridden.</p>
+<ul class="list-group mb-3">
+  {{range $d.Records}}{{$u := printf "/r/house_ruling/%d" .ID}}
+  <li class="list-group-item d-flex justify-content-between gap-2">
+    <span><span class="small text-body-secondary">{{date .CreatedAt}}</span> {{.Ruling}}{{with .Page}} <span class="text-body-secondary">({{.}})</span>{{end}}</span>
+    {{if $seer}}<form method="post" action="{{$u}}/delete"><input type="hidden" name="back" value="{{$back}}"><button class="btn btn-sm btn-link text-danger p-0" type="submit" aria-label="Delete ruling" hx-confirm="Delete this ruling?"><i class="bi bi-x-lg"></i></button></form>{{end}}
+  </li>
+  {{else}}<li class="list-group-item text-body-secondary">No house rulings yet.</li>{{end}}
+</ul>
+{{if $seer}}
+<form method="post" action="/c/{{$c.ID}}/r/house_ruling" class="row g-2">
+  <input type="hidden" name="back" value="{{$back}}">
+  <div class="col-12 col-md-8"><input class="form-control" name="set.ruling" placeholder="The ruling" required aria-label="Ruling"></div>
+  <div class="col-6 col-md-2"><input class="form-control" name="set.page" placeholder="p. 23" aria-label="Page it interprets"></div>
+  <div class="col-6 col-md-2"><button class="btn btn-primary w-100" type="submit">Add</button></div>
+</form>
+{{end}}
+{{end}}
+</div>
+{{end}}

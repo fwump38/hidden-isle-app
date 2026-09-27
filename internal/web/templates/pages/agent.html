@@ -1,0 +1,362 @@
+{{define "content"}}
+{{$d := .Data}}{{$a := $d.Agent}}{{$snap := .Nav.Snap}}{{$act := printf "/agents/%d" $a.ID}}
+<datalist id="vision-cards">{{with $snap}}{{range .Cards.Vision}}<option value="{{.Name}}">{{end}}{{end}}</datalist>
+
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+  <div>
+    <h1 class="h3 mb-0">{{$a.Name}}</h1>
+    <div class="text-body-secondary">
+      {{with $d.Class}}{{.Name}} · {{.Guild}}{{else}}{{$a.Class}}{{end}}
+      · <span class="badge {{if eq $a.Status "Active"}}text-bg-success{{else}}text-bg-secondary{{end}}">{{$a.Status}}</span>
+      {{with $d.Owner}} · played by {{.}}{{end}}
+    </div>
+    {{with $d.Class}}<div class="small fst-italic text-body-secondary mt-1">“{{.Motto}}”</div>{{end}}
+  </div>
+  <div class="d-flex gap-2 d-print-none">
+    <a class="btn btn-sm btn-outline-light" href="{{$act}}/print" hx-boost="false"><i class="bi bi-printer"></i> Print</a>
+  </div>
+</div>
+
+{{if not $d.CanEdit}}<div class="alert alert-secondary py-2 small"><i class="bi bi-lock"></i> You can read this sheet; only its player and the Seer can change it.</div>{{end}}
+
+<div id="sheet" hx-include="#why">
+{{if $d.CanEdit}}{{template "why" $}}{{end}}
+<fieldset {{if not $d.CanEdit}}disabled{{end}}>
+
+{{if $.User.IsSeer}}
+<form class="card card-body py-2 mb-3 border-warning-subtle" method="post" action="{{$act}}">
+  <div class="row g-2 align-items-center small">
+    <div class="col-auto text-warning"><i class="bi bi-eye"></i> Seer</div>
+    <div class="col-6 col-md-3"><select class="form-select form-select-sm" name="set.status" aria-label="Status">
+      {{with $snap}}{{range .Campaign.AgentStatus}}<option {{if eq . $a.Status}}selected{{end}}>{{.}}</option>{{end}}{{end}}
+    </select></div>
+    <div class="col-6 col-md-3"><select class="form-select form-select-sm" name="set.owner_id" aria-label="Player">
+      <option value="">Played by the Seer</option>
+      {{range $d.Players}}<option value="{{.ID}}" {{if eq .ID (uintv $a.OwnerID)}}selected{{end}}>{{.Name}}</option>{{end}}
+    </select></div>
+    <div class="col-6 col-md-3"><select class="form-select form-select-sm" name="set.class" aria-label="Class">
+      {{with $snap}}{{range .Classes.Classes}}<option value="{{.ID}}" {{if eq .ID $a.Class}}selected{{end}}>{{.Name}}</option>{{end}}{{end}}
+    </select></div>
+    <div class="col-auto"><button class="btn btn-sm btn-outline-warning" type="submit">Save</button></div>
+  </div>
+</form>
+{{end}}
+
+<div class="row g-3">
+  {{/* ---------------- skills, XP, harm */}}
+  <div class="col-12 col-lg-7">
+    <div class="card h-100">
+      <div class="card-body">
+        <h2 class="h5 card-title">Skills</h2>
+        {{range $d.Suits}}{{$suit := .}}
+        <div class="hi-suit mb-3">
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom pb-1 mb-1">
+            <strong class="hi-suit-{{.Suit}}">{{.Suit}}</strong>
+            <form method="post" action="{{$act}}" class="d-flex align-items-center gap-1 small">
+              <span class="text-body-secondary">XP</span>{{template "pips" dict "name" (printf "set.%s" .XPKey) "value" .XP "max" 7}}
+            </form>
+            <form method="post" action="{{$act}}" hx-trigger="change" class="d-flex align-items-center gap-1 small">
+              <span class="text-body-secondary">Harm</span>
+              <input type="hidden" name="back" value="{{$act}}">
+              {{range $i, $m := .Harm}}
+              <select class="form-select form-select-sm hi-harm {{if $m}}has-harm{{end}}" name="harm.{{$suit.Suit}}.{{$i}}" aria-label="{{$suit.Suit}} harm box {{add $i 1}}">
+                <option value="" {{if eq $m ""}}selected{{end}}>—</option>
+                <option value="P" {{if eq $m "P"}}selected{{end}}>P</option>
+                <option value="S" {{if eq $m "S"}}selected{{end}}>S</option>
+                <option value="T" {{if eq $m "T"}}selected{{end}}>T</option>
+              </select>
+              {{end}}
+              <noscript><button class="btn btn-sm btn-outline-light" type="submit">Save</button></noscript>
+            </form>
+          </div>
+          {{if index .Harm 1}}<div class="small text-danger mb-1"><i class="bi bi-exclamation-triangle"></i> 2 harm: draw 1 fewer card with {{.Suit}} skills (p. 23).</div>{{end}}
+          <form method="post" action="{{$act}}">
+            {{range .Skills}}
+            <div class="d-flex justify-content-between align-items-center">
+              <span>{{.Name}}</span>
+              {{if .Unlocked}}{{template "pips" dict "name" (printf "skill.%s" .Name) "value" .Points "max" 4}}{{else}}{{template "pips" dict "name" (printf "skill.%s" .Name) "value" .Points "max" 3}}{{end}}
+            </div>
+            {{end}}
+          </form>
+        </div>
+        {{end}}
+        <details class="small">
+          <summary class="text-body-secondary">Unlocked 4th pips</summary>
+          <form method="post" action="{{$act}}" class="mt-2">
+            <input type="hidden" name="fourth_present" value="1">
+            <div class="d-flex flex-wrap gap-2">
+              {{range $d.Suits}}{{range .Skills}}
+              <div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="fourth" value="{{.Name}}" id="f-{{.Name}}" {{if .Unlocked}}checked{{end}}><label class="form-check-label" for="f-{{.Name}}">{{.Name}}</label></div>
+              {{end}}{{end}}
+            </div>
+            <button class="btn btn-sm btn-outline-light mt-1" type="submit">Save</button>
+          </form>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  {{/* ---------------- burden, ideal, traits, core self */}}
+  <div class="col-12 col-lg-5">
+    <div class="card mb-3">
+      <div class="card-body">
+        <h2 class="h5 card-title">Burden &amp; ideal</h2>
+        <form method="post" action="{{$act}}" class="mb-2">
+          <div class="d-flex justify-content-between align-items-center"><span class="small text-body-secondary">Burden track (+1 card)</span>{{template "pips" dict "name" "set.burden_track" "value" $a.BurdenTrack "max" 7}}</div>
+          <div class="d-flex justify-content-between align-items-center"><span class="small text-body-secondary">Ideal track (−1 card, +3)</span>{{template "pips" dict "name" "set.ideal_track" "value" $a.IdealTrack "max" 7}}</div>
+        </form>
+        <form method="post" action="{{$act}}" class="row g-2">
+          <div class="col-6"><label class="form-label small mb-0" for="burden">Burden</label><input class="form-control form-control-sm" id="burden" name="set.burden" value="{{$a.Burden}}"></div>
+          <div class="col-6"><label class="form-label small mb-0" for="burden_card">Card</label><input class="form-control form-control-sm" id="burden_card" name="set.burden_card" value="{{$a.BurdenCard}}" list="vision-cards"></div>
+          <div class="col-6"><label class="form-label small mb-0" for="ideal">Ideal</label><input class="form-control form-control-sm" id="ideal" name="set.ideal" value="{{$a.Ideal}}"></div>
+          <div class="col-6"><label class="form-label small mb-0" for="ideal_card">Card</label><input class="form-control form-control-sm" id="ideal_card" name="set.ideal_card" value="{{$a.IdealCard}}" list="vision-cards"></div>
+          <div class="col-4"><label class="form-label small mb-0" for="vices">Vices (+1 card)</label><textarea class="form-control form-control-sm" id="vices" name="set.vices" rows="2">{{lines $a.Vices}}</textarea></div>
+          <div class="col-4"><label class="form-label small mb-0" for="virtues">Virtues (+3)</label><textarea class="form-control form-control-sm" id="virtues" name="set.virtues" rows="2">{{lines $a.Virtues}}</textarea></div>
+          <div class="col-4"><label class="form-label small mb-0" for="fulfilled">Fulfilled</label><textarea class="form-control form-control-sm" id="fulfilled" name="set.fulfilled_virtues" rows="2">{{lines $a.FulfilledVirtues}}</textarea></div>
+          <div class="col-12"><button class="btn btn-sm btn-outline-light" type="submit">Save traits</button> <span class="small text-body-secondary">One per line. Max 3 virtues (p. 14).</span></div>
+        </form>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <h2 class="h5 card-title">Core self</h2>
+        <form method="post" action="{{$act}}" class="row g-2">
+          <div class="col-12"><label class="form-label small mb-0" for="child">As a child, I solved problems by…</label>
+            <div class="input-group input-group-sm"><input class="form-control" id="child" name="set.child_phrase" value="{{$a.ChildPhrase}}"><input class="form-control" style="max-width: 11rem" name="set.child_card" value="{{$a.ChildCard}}" placeholder="card" list="vision-cards" aria-label="Childhood card"></div></div>
+          <div class="col-12"><label class="form-label small mb-0" for="adult">As an adult, I
+              <select class="form-select form-select-sm d-inline-block w-auto py-0" name="set.adult_verb" aria-label="survived or flourished">
+                <option value="" {{if eq $a.AdultVerb ""}}selected{{end}}>…</option>
+                <option {{if eq $a.AdultVerb "survived"}}selected{{end}}>survived</option>
+                <option {{if eq $a.AdultVerb "flourished"}}selected{{end}}>flourished</option>
+              </select> by…</label>
+            <div class="input-group input-group-sm"><input class="form-control" id="adult" name="set.adult_phrase" value="{{$a.AdultPhrase}}"><input class="form-control" style="max-width: 11rem" name="set.adult_card" value="{{$a.AdultCard}}" placeholder="card" list="vision-cards" aria-label="Adulthood card"></div></div>
+          <div class="col-12"><button class="btn btn-sm btn-outline-light" type="submit">Save</button></div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  {{/* ---------------- abilities */}}
+  <div class="col-12 col-lg-7">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+          <h2 class="h5 card-title mb-0">Abilities{{with $d.Class}} <span class="small text-body-secondary">· {{.AbilityXPTrack}}</span>{{end}}</h2>
+          <form method="post" action="{{$act}}" class="d-flex align-items-center gap-1 small"><span class="text-body-secondary">XP</span>{{template "pips" dict "name" "set.xp_ability" "value" $a.XPAbility "max" 7}}</form>
+        </div>
+        {{range $d.Abil}}
+        <div class="border rounded px-2 py-1 mb-2">
+          <div class="d-flex justify-content-between align-items-center gap-2">
+            <button class="btn btn-link p-0 fw-semibold text-start text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#ab-{{.Index}}" aria-expanded="false" aria-controls="ab-{{.Index}}">
+              <i class="bi bi-chevron-down small"></i> {{.Name}}{{with .ClassOfOrigin}} <span class="small text-body-secondary">({{.}})</span>{{end}}
+            </button>
+            <span class="d-flex align-items-center gap-2 small text-body-secondary">
+              {{if .Page}}p. {{.Page}}{{else if .Custom}}{{.Source}}{{end}}
+              <form method="post" action="{{$act}}"><button class="btn btn-sm btn-link text-danger p-0" type="submit" name="ability.remove" value="{{.Index}}" title="Remove" aria-label="Remove {{.Name}}" hx-confirm="Remove {{.Name}}?"><i class="bi bi-x-lg"></i></button></form>
+            </span>
+          </div>
+          <div class="collapse" id="ab-{{.Index}}">
+            <p class="small mb-1">{{.Text}}</p>
+            {{with .Sheet}}<p class="small text-warning mb-1"><i class="bi bi-exclamation-diamond"></i> Character Sheets 1.3 words it: “{{.}}” (the Rulebook wins unless the Seer rules otherwise)</p>{{end}}
+          </div>
+        </div>
+        {{else}}<p class="small text-body-secondary">No abilities yet. Choose 2 at creation (p. 41).</p>{{end}}
+        <form method="post" action="{{$act}}" class="input-group input-group-sm mt-2">
+          <select class="form-select" name="ability.add" aria-label="Add a class ability">
+            <option value="">Add an ability…</option>
+            {{with $d.Class}}<optgroup label="{{.Name}}">{{range $d.Unused}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</optgroup>{{end}}
+            {{with $snap}}{{range .Classes.Classes}}{{if ne .ID $a.Class}}<optgroup label="{{.Name}} (taught by a max-affection contact)">{{range .Abilities}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</optgroup>{{end}}{{end}}{{end}}
+          </select>
+          <button class="btn btn-outline-light" type="submit">Add</button>
+        </form>
+        <details class="small mt-2">
+          <summary class="text-body-secondary">Custom ability (ritual, house rule…)</summary>
+          <form method="post" action="{{$act}}" class="row g-2 mt-1">
+            <div class="col-8"><input class="form-control form-control-sm" name="ability.custom_name" placeholder="Name" aria-label="Custom ability name"></div>
+            <div class="col-4"><select class="form-select form-select-sm" name="ability.source" aria-label="Source"><option>ritual</option><option>contact</option><option>other</option></select></div>
+            <div class="col-12"><textarea class="form-control form-control-sm" name="ability.custom_text" rows="2" placeholder="What it does" aria-label="Custom ability text"></textarea></div>
+            <div class="col-12"><button class="btn btn-sm btn-outline-light" type="submit">Add</button></div>
+          </form>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  {{/* ---------------- magic */}}
+  <div class="col-12 col-lg-5">
+    <div class="card h-100">
+      <div class="card-body">
+        <h2 class="h5 card-title">Magic</h2>
+        {{range $i, $p := $a.Proficiencies}}
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+          {{clock $p.Segments 6 26}}
+          <strong class="small">{{$p.School}}</strong>
+          <form method="post" action="{{$act}}" class="d-flex align-items-center gap-1 ms-auto">
+            <select class="form-select form-select-sm w-auto" name="prof.{{$i}}.rank" aria-label="Rank" hx-trigger="change" hx-post="{{$act}}">
+              {{range $r := (list "Novice" "Adept" "Master")}}<option {{if eq $r $p.Rank}}selected{{end}}>{{$r}}</option>{{end}}
+            </select>
+            <button class="btn btn-sm btn-outline-light" type="submit" name="prof.{{$i}}.inc" value="-1" aria-label="Remove a segment">−</button>
+            <button class="btn btn-sm btn-outline-light" type="submit" name="prof.{{$i}}.inc" value="1" aria-label="Fill a segment">+</button>
+            <button class="btn btn-sm btn-link text-danger p-0" type="submit" name="prof.remove" value="{{$i}}" aria-label="Remove proficiency" hx-confirm="Remove {{$p.School}}?"><i class="bi bi-x-lg"></i></button>
+          </form>
+        </div>
+        {{else}}<p class="small text-body-secondary">No proficiencies. Magical classes start with one at Adept (p. 41).</p>{{end}}
+        <form method="post" action="{{$act}}" class="input-group input-group-sm mb-3">
+          <input class="form-control" name="prof.add" list="schools" placeholder="Add a proficiency" aria-label="Proficiency">
+          <datalist id="schools">{{range $d.Schools}}<option value="{{.}}">{{end}}</datalist>
+          <select class="form-select" style="max-width: 7rem" name="prof.rank" aria-label="Rank"><option>Novice</option><option>Adept</option><option>Master</option></select>
+          <button class="btn btn-outline-light" type="submit">Add</button>
+        </form>
+        <form method="post" action="{{$act}}">
+          <label class="form-label small mb-0" for="sources">Magical sources (one per line)</label>
+          <textarea class="form-control form-control-sm mb-1" id="sources" name="set.magical_sources" rows="2">{{lines $a.MagicalSources}}</textarea>
+          <button class="btn btn-sm btn-outline-light" type="submit">Save</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  {{/* ---------------- contacts */}}
+  <div class="col-12 col-lg-7">
+    <div class="card h-100">
+      <div class="card-body">
+        <h2 class="h5 card-title">Contacts</h2>
+        {{range $d.Contacts}}{{$cu := printf "/r/contact/%d" .ID}}
+        <div class="border rounded px-2 py-1 mb-2">
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <button class="btn btn-link p-0 fw-semibold text-start text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#ct-{{.ID}}"><i class="bi bi-chevron-down small"></i> {{.Name}}</button>
+            <span class="small text-body-secondary">{{.Kind}}{{with .Card}} · {{.}}{{end}}{{with .Land}} · {{.}}{{end}}</span>
+          </div>
+          <form method="post" action="{{$cu}}" class="d-flex flex-wrap gap-3 small">
+            <input type="hidden" name="back" value="{{$act}}">
+            <span class="d-flex align-items-center gap-1"><span class="text-body-secondary">Affection</span>{{template "pips" dict "name" "set.affection" "value" .Affection "max" 6}}</span>
+            <span class="d-flex align-items-center gap-1"><span class="text-body-secondary">Distance</span>{{template "pips" dict "name" "set.distance" "value" .Distance "max" 3}}</span>
+          </form>
+          <div class="collapse" id="ct-{{.ID}}">
+            {{with .Description}}<p class="small mb-1">{{.}}</p>{{end}}
+            <form method="post" action="{{$cu}}" class="row g-1 small">
+              <input type="hidden" name="back" value="{{$act}}">
+              <div class="col-6"><input class="form-control form-control-sm" name="set.name" value="{{.Name}}" aria-label="Name"></div>
+              <div class="col-6"><select class="form-select form-select-sm" name="set.kind" aria-label="Kind">{{$k := .Kind}}{{with $snap}}{{range .Campaign.ContactKind}}<option {{if eq . $k}}selected{{end}}>{{.}}</option>{{end}}{{end}}</select></div>
+              <div class="col-6"><input class="form-control form-control-sm" name="set.card" value="{{.Card}}" list="vision-cards" placeholder="card" aria-label="Card"></div>
+              <div class="col-6"><input class="form-control form-control-sm" name="set.land" value="{{.Land}}" placeholder="land" aria-label="Land"></div>
+              <div class="col-12"><textarea class="form-control form-control-sm" name="set.description" rows="2" aria-label="Description">{{.Description}}</textarea></div>
+              <div class="col-12 d-flex justify-content-between"><button class="btn btn-sm btn-outline-light" type="submit">Save</button>
+                <button class="btn btn-sm btn-outline-danger" type="submit" formaction="{{$cu}}/delete" hx-post="{{$cu}}/delete" hx-confirm="Remove {{.Name}}? (You can undo it from the log.)">Remove</button></div>
+            </form>
+          </div>
+        </div>
+        {{else}}<p class="small text-body-secondary">No contacts yet: a homeland contact and a Dioscorian contact at creation (p. 41).</p>{{end}}
+        <details class="small">
+          <summary class="text-body-secondary">Add a contact</summary>
+          <form method="post" action="{{$act}}/contacts" class="row g-1 mt-1">
+            <div class="col-6"><input class="form-control form-control-sm" name="set.name" placeholder="Name" required aria-label="Name"></div>
+            <div class="col-6"><select class="form-select form-select-sm" name="set.kind" aria-label="Kind">{{with $snap}}{{range .Campaign.ContactKind}}<option>{{.}}</option>{{end}}{{end}}</select></div>
+            <div class="col-6"><input class="form-control form-control-sm" name="set.card" list="vision-cards" placeholder="Card" aria-label="Card"></div>
+            <div class="col-6"><input class="form-control form-control-sm" name="set.land" placeholder="Land" aria-label="Land"></div>
+            <div class="col-12"><textarea class="form-control form-control-sm" name="set.description" rows="2" placeholder="Who they are" aria-label="Description"></textarea></div>
+            <div class="col-6"><label class="small text-body-secondary" for="new-aff">Affection</label>
+              <select class="form-select form-select-sm" id="new-aff" name="set.affection"><option value="1">1 (new Dioscorian contact)</option><option value="2">2 acquaintance</option><option value="4">4 friend</option><option value="6">6 very close</option></select></div>
+            <div class="col-6 d-flex align-items-end"><button class="btn btn-sm btn-outline-light w-100" type="submit">Add contact</button></div>
+          </form>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  {{/* ---------------- inventory */}}
+  <div class="col-12 col-lg-5">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h5 card-title mb-0">Inventory</h2>
+          <form method="post" action="{{$act}}" class="d-flex align-items-center gap-1 small"><span class="text-body-secondary">Load</span>{{template "pips" dict "name" "set.load_used" "value" $a.LoadUsed "max" 5}}</form>
+        </div>
+        <p class="small text-body-secondary mb-2">Tap an item when you pull it out (1 load each, p. 27). <em>Italic</em> items are single-use.</p>
+        <form method="post" action="{{$act}}" class="d-flex flex-wrap gap-1 mb-2">
+          {{$used := $a.Items}}
+          {{range $d.Items}}{{$name := .Name}}{{$on := false}}{{range $used}}{{if eq .Name $name}}{{$on = true}}{{end}}{{end}}
+          <button class="btn btn-sm {{if $on}}btn-warning{{else}}btn-outline-secondary{{end}} {{if .SingleUse}}fst-italic{{end}}" type="submit" name="item.toggle" value="{{.Name}}" {{with .Description}}title="{{.}}"{{end}}>{{.Name}}</button>
+          {{end}}
+          {{range $a.Items}}{{$name := .Name}}{{$known := false}}{{range $d.Items}}{{if eq .Name $name}}{{$known = true}}{{end}}{{end}}{{if not $known}}
+          <button class="btn btn-sm btn-warning" type="submit" name="item.toggle" value="{{.Name}}">{{.Name}}</button>
+          {{end}}{{end}}
+        </form>
+        <form method="post" action="{{$act}}" class="input-group input-group-sm mb-2">
+          <input class="form-control" name="item.custom" placeholder="Something else…" aria-label="Other item">
+          <button class="btn btn-outline-light" type="submit">Pull</button>
+        </form>
+        <form method="post" action="{{$act}}"><button class="btn btn-sm btn-outline-secondary" type="submit" name="items.reset" value="1" hx-confirm="Clear pulled items and load for a new scenario?"><i class="bi bi-arrow-counterclockwise"></i> New scenario</button></form>
+      </div>
+    </div>
+  </div>
+
+  {{/* ---------------- identity, notes, clocks */}}
+  <div class="col-12 col-lg-7">
+    <div class="card h-100">
+      <div class="card-body">
+        <h2 class="h5 card-title">Who they are</h2>
+        <form method="post" action="{{$act}}" class="row g-2">
+          <div class="col-12 col-md-6"><label class="form-label small mb-0" for="name">Name</label><input class="form-control form-control-sm" id="name" name="set.name" value="{{$a.Name}}"></div>
+          <div class="col-4 col-md-2"><label class="form-label small mb-0" for="age">Age</label><input class="form-control form-control-sm" id="age" name="set.age" value="{{$a.Age}}"></div>
+          <div class="col-8 col-md-4"><label class="form-label small mb-0" for="culture">Culture</label><input class="form-control form-control-sm" id="culture" name="set.culture" value="{{$a.Culture}}"></div>
+          <div class="col-12"><label class="form-label small mb-0" for="look">Look</label><input class="form-control form-control-sm" id="look" name="set.look" value="{{$a.Look}}"></div>
+          <div class="col-12"><label class="form-label small mb-0" for="whyd">Why I came to Dioscoria</label><input class="form-control form-control-sm" id="whyd" name="set.why" value="{{$a.Why}}"></div>
+          <div class="col-12"><label class="form-label small mb-0" for="notes">Notes</label><textarea class="form-control form-control-sm" id="notes" name="set.notes" rows="3">{{$a.Notes}}</textarea></div>
+          <div class="col-12"><button class="btn btn-sm btn-outline-light" type="submit">Save</button></div>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-lg-5">
+    <div class="card h-100">
+      <div class="card-body">
+        <h2 class="h5 card-title">Clocks</h2>
+        {{range $d.Clocks}}
+        <form method="post" action="/r/clock/{{.ID}}" class="d-flex align-items-center gap-2 mb-2">
+          <input type="hidden" name="back" value="{{$act}}">
+          {{clock .Filled .Segments 30}}
+          <span class="small flex-grow-1">{{.Name}} <span class="text-body-secondary">{{.Filled}}/{{.Segments}}</span></span>
+          <button class="btn btn-sm btn-outline-light" type="submit" name="inc.filled" value="-1" aria-label="Unfill a segment">−</button>
+          <button class="btn btn-sm btn-outline-light" type="submit" name="inc.filled" value="1" aria-label="Fill a segment">+</button>
+        </form>
+        {{else}}<p class="small text-body-secondary mb-0">No clocks on this Agent. Abilities with clocks (e.g. Evil Eye) get one from the Seer on the Clocks page.</p>{{end}}
+      </div>
+    </div>
+  </div>
+</div>
+</fieldset>
+</div>
+
+{{/* ---------------- history */}}
+<div class="row g-3 mt-0">
+  <div class="col-12 col-lg-6">
+    <div class="card h-100">
+      <div class="card-body">
+        <h2 class="h5 card-title"><i class="bi bi-feather"></i> History</h2>
+        {{range $d.History}}
+        <div class="mb-2"><div class="small text-body-secondary">{{date .CreatedAt}} · {{.Title}}</div><div class="hi-prose small">{{.Body}}</div></div>
+        {{else}}<p class="small text-body-secondary">The story so far, in your own words.</p>{{end}}
+        {{if $d.CanEdit}}
+        <form method="post" action="/c/{{$a.CampaignID}}/entries" class="mt-2">
+          <input type="hidden" name="kind" value="history"><input type="hidden" name="agent_id" value="{{$a.ID}}">
+          <input type="hidden" name="visibility" value="party"><input type="hidden" name="published" value="on">
+          <input type="hidden" name="back" value="{{$act}}">
+          <input class="form-control form-control-sm mb-1" name="title" placeholder="Title, e.g. Session 4: the harbor" aria-label="Title">
+          <textarea class="form-control form-control-sm mb-1" name="body" rows="3" placeholder="What happened, and why it mattered" required aria-label="History entry"></textarea>
+          <button class="btn btn-sm btn-outline-light" type="submit">Add to history</button>
+        </form>
+        {{end}}
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-lg-6">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center"><h2 class="h5 card-title mb-0"><i class="bi bi-clock-history"></i> Changes</h2><a class="small" href="/c/{{$a.CampaignID}}/log?type=agent">Log · undo</a></div>
+        {{template "events" $d.Events}}
+      </div>
+    </div>
+  </div>
+</div>
+{{end}}

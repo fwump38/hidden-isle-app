@@ -1,0 +1,75 @@
+{{define "content"}}
+{{$d := .Data}}{{$s := $d.Session}}{{$c := .Nav.Campaign}}{{$snap := .Nav.Snap}}{{$seer := .User.IsSeer}}{{$u := printf "/r/session/%d" $s.ID}}{{$back := printf "/c/%d/sessions/%d" $c.ID $s.ID}}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+  <h1 class="h4 mb-0">{{$s.Number}}. {{$s.Title}} <span class="badge {{if eq $s.Status "Played"}}text-bg-success{{else}}text-bg-warning{{end}}">{{$s.Status}}</span></h1>
+  <a class="small" href="/c/{{$c.ID}}/sessions">All sessions</a>
+</div>
+{{if $seer}}{{template "why" $}}{{end}}
+<div class="row g-3" hx-include="#why">
+  <div class="col-12 col-lg-6">
+    <div class="card h-100"><div class="card-body">
+      <h2 class="h5 card-title">For the table</h2>
+      {{if $seer}}
+      <form method="post" action="{{$u}}" class="row g-2">
+        <input type="hidden" name="back" value="{{$back}}">
+        <div class="col-12"><input class="form-control" name="set.title" value="{{$s.Title}}" aria-label="Title"></div>
+        <div class="col-6"><input class="form-control" type="date" name="set.date" value="{{date $s.Date}}" aria-label="Date"></div>
+        <div class="col-6"><select class="form-select" name="set.status" aria-label="Status">{{range $snap.Campaign.SessionStatus}}<option {{if eq . $s.Status}}selected{{end}}>{{.}}</option>{{end}}</select></div>
+        <div class="col-12"><select class="form-select" name="set.adventure" aria-label="Adventure"><option value="">Original scenario</option>{{range $snap.Adventures.Adventures}}<option value="{{.ID}}" {{if eq .ID $s.Adventure}}selected{{end}}>{{.Title}} ({{.Book}})</option>{{end}}</select></div>
+        <div class="col-6"><input class="form-control" name="set.mission_type" value="{{$s.MissionType}}" placeholder="Mission type" aria-label="Mission type"></div>
+        <div class="col-6"><input class="form-control" name="set.territory" value="{{$s.Territory}}" placeholder="Territory" aria-label="Territory"></div>
+        <div class="col-12"><label class="small text-body-secondary" for="summary">Summary as read to the players (player-safe)</label><textarea class="form-control" id="summary" name="set.summary" rows="2">{{$s.Summary}}</textarea></div>
+        <div class="col-12"><button class="btn btn-sm btn-outline-light" type="submit">Save</button></div>
+      </form>
+      {{else}}
+      <p class="small text-body-secondary mb-1">{{date $s.Date}}{{with adventureTitle $snap $s.Adventure}} · {{.}}{{end}}{{with $s.MissionType}} · {{.}}{{end}}{{with $s.Territory}} · {{.}}{{end}}</p>
+      <p class="hi-prose">{{$s.Summary}}</p>
+      {{end}}
+    </div></div>
+  </div>
+  {{if $seer}}
+  <div class="col-12 col-lg-6">
+    <div class="card h-100 border-warning-subtle"><div class="card-body">
+      <h2 class="h5 card-title text-warning"><i class="bi bi-eye-slash"></i> Seer only</h2>
+      <form method="post" action="{{$u}}" class="row g-2">
+        <input type="hidden" name="back" value="{{$back}}">
+        <div class="col-12"><label class="small text-body-secondary" for="prep">Prep: cast, locations, clocks, likely challenges, twists</label><textarea class="form-control" id="prep" name="set.prep" rows="5">{{$s.Prep}}</textarea></div>
+        <div class="col-12"><label class="small text-body-secondary" for="div">Divination: adversary / stakes / goal / lead, visions given and kept</label><textarea class="form-control" id="div" name="set.divination" rows="3">{{$s.Divination}}</textarea></div>
+        <div class="col-12"><label class="small text-body-secondary" for="next">Notes for next time</label><textarea class="form-control" id="next" name="set.next_time" rows="3">{{$s.NextTime}}</textarea></div>
+        <div class="col-12"><button class="btn btn-sm btn-outline-warning" type="submit">Save</button></div>
+      </form>
+    </div></div>
+  </div>
+  {{end}}
+  <div class="col-12 col-lg-6">
+    <div class="card h-100"><div class="card-body">
+      <h2 class="h5 card-title"><i class="bi bi-feather"></i> What happened</h2>
+      {{range $d.Logs}}
+      <div class="mb-3">
+        <div class="small text-body-secondary">{{.Kind}}{{if not .Published}} · draft{{end}}{{if eq .Visibility "seer"}} · <span class="text-warning">Seer only</span>{{end}}</div>
+        <div class="fw-semibold">{{.Title}}</div>
+        <div class="hi-prose small">{{.Body}}</div>
+      </div>
+      {{else}}<p class="small text-body-secondary">Nothing written yet.</p>{{end}}
+      <form method="post" action="/c/{{$c.ID}}/entries" class="row g-2">
+        <input type="hidden" name="session_id" value="{{$s.ID}}"><input type="hidden" name="back" value="{{$back}}">
+        <div class="col-12 col-md-4"><select class="form-select form-select-sm" name="kind" aria-label="Kind">
+          {{if $seer}}<option value="session_log">Session log</option><option value="recap">Player-safe recap</option>{{end}}
+          <option value="note">Note</option><option value="journal">Journal</option></select></div>
+        <div class="col-12 col-md-8"><input class="form-control form-control-sm" name="title" placeholder="Title" aria-label="Title"></div>
+        <div class="col-12"><textarea class="form-control form-control-sm" name="body" rows="4" placeholder="In your own words" required aria-label="Text"></textarea></div>
+        <div class="col-8"><select class="form-select form-select-sm" name="visibility" aria-label="Who can read it">
+          <option value="party">Everyone in the campaign</option><option value="owner" selected>Me and the Seer</option><option value="private">Only me</option>{{if $seer}}<option value="seer">Seer only</option>{{end}}</select></div>
+        <div class="col-4 d-flex align-items-center"><div class="form-check mb-0"><input class="form-check-input" type="checkbox" name="published" id="pub"><label class="form-check-label small" for="pub">Publish</label></div></div>
+        <div class="col-12"><button class="btn btn-sm btn-outline-light" type="submit">Save</button></div>
+      </form>
+    </div></div>
+  </div>
+  <div class="col-12 col-lg-6">
+    <div class="card h-100"><div class="card-body">
+      <h2 class="h5 card-title"><i class="bi bi-clock-history"></i> Changes during this session</h2>
+      {{template "events" $d.Events}}
+    </div></div>
+  </div>
+</div>
+{{end}}

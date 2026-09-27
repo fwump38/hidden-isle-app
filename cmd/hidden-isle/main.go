@@ -20,6 +20,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/fwump38/hidden-isle-app/internal/auth"
+	"github.com/fwump38/hidden-isle-app/internal/campaign"
 	"github.com/fwump38/hidden-isle-app/internal/config"
 	"github.com/fwump38/hidden-isle-app/internal/db"
 	"github.com/fwump38/hidden-isle-app/internal/gamedata"
@@ -75,7 +76,8 @@ func run() error {
 	go data.Run(ctx, cfg.GameDataInterval)
 	go db.RunBackups(ctx, g, filepath.Join(cfg.DataDir, "backup", "hidden-isle.db"), cfg.BackupInterval)
 
-	ui, err := web.New(g, cfg, authn, data, build)
+	svc := campaign.New(g, data)
+	ui, err := web.New(g, cfg, authn, data, svc, build)
 	if err != nil {
 		return err
 	}

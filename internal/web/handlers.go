@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -60,11 +61,24 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------- home
 
 type homeData struct {
-	Snapshot *gamedata.Snapshot
+	Snapshot  *gamedata.Snapshot
+	Campaigns []db.Campaign
+	Modes     []string
 }
 
 func (s *Server) home(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, "home", http.StatusOK, pageData{Title: "The Hidden Isle", Data: homeData{Snapshot: s.Data.Current()}})
+	a := s.actor(r)
+	d := homeData{Snapshot: s.Data.Current()}
+	d.Campaigns, _ = s.Svc.Campaigns(a)
+	// A player with one campaign goes straight to it.
+	if !a.IsSeer() && len(d.Campaigns) == 1 {
+		http.Redirect(w, r, fmt.Sprintf("/c/%d", d.Campaigns[0].ID), http.StatusSeeOther)
+		return
+	}
+	if d.Snapshot != nil {
+		d.Modes = d.Snapshot.Campaign.CampaignMode
+	}
+	s.render(w, r, "home", http.StatusOK, pageData{Title: "The Hidden Isle", Error: takeFlash(w, r), Data: d})
 }
 
 // ---------------------------------------------------------------- admin

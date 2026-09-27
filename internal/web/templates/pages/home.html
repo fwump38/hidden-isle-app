@@ -1,15 +1,42 @@
 {{define "content"}}
 <h1 class="h3 mb-3">Welcome, {{.User.Name}}</h1>
 <div class="row g-3">
-  <div class="col-12 col-md-6 col-xl-4">
+  <div class="col-12 col-lg-8">
     <div class="card h-100">
       <div class="card-body">
-        <h2 class="h5 card-title"><i class="bi bi-person-badge"></i> {{if .User.IsSeer}}Agents{{else}}Your Agent{{end}}</h2>
-        <p class="card-text text-body-secondary">Character sheets arrive in the next phase.</p>
+        <h2 class="h5 card-title"><i class="bi bi-map"></i> Campaigns</h2>
+        {{if .Data.Campaigns}}
+        <div class="list-group list-group-flush mb-3">
+          {{range .Data.Campaigns}}
+          <a class="list-group-item list-group-item-action px-0 d-flex justify-content-between align-items-center" href="/c/{{.ID}}">
+            <span><strong>{{.Name}}</strong>{{with .HandName}} · {{.}}{{end}}</span>
+            <span class="small text-body-secondary">{{.Mode}} · season {{.Season}}{{if .Archived}} · archived{{end}}</span>
+          </a>
+          {{end}}
+        </div>
+        {{else if .User.IsSeer}}
+        <p class="text-body-secondary">No campaigns yet. Start one below.</p>
+        {{else}}
+        <p class="text-body-secondary">You haven't been added to a campaign yet. Ask the Seer.</p>
+        {{end}}
+        {{if .User.IsSeer}}
+        <form class="row g-2" method="post" action="/campaigns">
+          <div class="col-12 col-md-5"><input class="form-control" name="name" placeholder="Campaign name" required aria-label="Campaign name"></div>
+          <div class="col-6 col-md-3">
+            <select class="form-select" name="mode" aria-label="Mode">
+              {{range .Data.Modes}}<option value="{{.}}">{{.}}</option>{{end}}
+            </select>
+          </div>
+          <div class="col-6 col-md-2 d-flex align-items-center">
+            <div class="form-check mb-0"><input class="form-check-input" type="checkbox" name="merciful" id="merciful"><label class="form-check-label small" for="merciful">Merciful Mode</label></div>
+          </div>
+          <div class="col-12 col-md-2"><button class="btn btn-primary w-100" type="submit"><i class="bi bi-plus-lg"></i> Start</button></div>
+        </form>
+        {{end}}
       </div>
     </div>
   </div>
-  <div class="col-12 col-md-6 col-xl-4">
+  <div class="col-12 col-lg-4">
     <div class="card h-100">
       <div class="card-body">
         <h2 class="h5 card-title"><i class="bi bi-book"></i> Rules data</h2>
@@ -22,17 +49,5 @@
       </div>
     </div>
   </div>
-  {{with .Data.Snapshot}}
-  <div class="col-12 col-xl-4">
-    <div class="card h-100">
-      <div class="card-body">
-        <h2 class="h5 card-title"><i class="bi bi-shield"></i> Classes</h2>
-        <div class="d-flex flex-wrap gap-2">
-          {{range .Classes.Classes}}<span class="badge text-bg-secondary" title="{{.Guild}}">{{.Name}}</span>{{end}}
-        </div>
-      </div>
-    </div>
-  </div>
-  {{end}}
 </div>
 {{end}}

@@ -146,6 +146,7 @@ type Snapshot struct {
 	Classes    Classes
 	Campaign   Campaign
 	Adventures Adventures
+	Limits     Limits
 	// Tables the app doesn't type yet (limits, setting, oracle, downtime), keyed by manifest name.
 	Raw map[string]map[string]any
 }

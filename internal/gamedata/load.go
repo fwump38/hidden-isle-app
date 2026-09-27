@@ -23,7 +23,7 @@ func Load(dir, id string) (*Snapshot, error) {
 	if !slices.Contains(SupportedSchemas, s.Manifest.SchemaVersion) {
 		return nil, fmt.Errorf("manifest schema_version %d is not supported by this app (supports %v); update the app", s.Manifest.SchemaVersion, SupportedSchemas)
 	}
-	typed := map[string]any{"cards": &s.Cards, "skills": &s.Skills, "classes": &s.Classes, "campaign": &s.Campaign, "adventures": &s.Adventures}
+	typed := map[string]any{"cards": &s.Cards, "skills": &s.Skills, "classes": &s.Classes, "campaign": &s.Campaign, "adventures": &s.Adventures, "limits": &s.Limits}
 	var errs []error
 	for key, rel := range s.Manifest.files() {
 		path, err := within(dir, rel)
@@ -101,6 +101,12 @@ func (s *Snapshot) validate() error {
 		}
 	}
 	check(len(s.Campaign.Territories) > 0, "campaign: no territories")
+	l := s.Limits
+	check(l.Agent.Skill.Max > 0 && l.Agent.Skill.MaxUnlocked >= l.Agent.Skill.Max, "limits: agent.skill missing")
+	check(l.Agent.HarmPerSuit.Max > 0 && len(l.Agent.HarmPerSuit.Types) > 0, "limits: agent.harm_per_suit missing")
+	check(l.Agent.BurdenTrack.Max > 0 && l.Agent.SuitXP.Max > 0 && l.Agent.LoadUsed.Max > 0, "limits: agent tracks missing")
+	check(l.Contact.Affection.Max > 0 && l.Contact.Distance.Max > 0, "limits: contact missing")
+	check(len(l.Clock.Segments) > 0, "limits: clock.segments missing")
 	for _, t := range s.Manifest.Text {
 		check(t.Audience == "party" || t.Audience == "seer", "manifest: text %s has bad audience %q", t.Path, t.Audience)
 		_, err := os.Stat(filepath.Join(s.Dir, t.Path))

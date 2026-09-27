@@ -9,7 +9,15 @@ It runs as a single Go binary in one container, with its state in SQLite.
 
 This repo holds **no game text**. The rules data (classes, abilities, cards, tables, limits) comes from a separate rules repository, which the app syncs on a timer through that repo's `hidden-isle-data.yaml` manifest.
 
-> **Status: Phase 1 (skeleton).** Working: sign-in (SSO and LAN PIN), the Seer's admin page, rules-data sync, and the MCP endpoint with `whoami`, `get_class` and `draw_cards`. Character sheets and campaign tracking are next.
+> **Status: Phase 2 (campaign tracking).** Working:
+> - campaigns with player membership;
+> - live character sheets that players edit themselves (skills, harm, tracks, XP, abilities with exact text, magic, inventory, contacts);
+> - clocks, adversaries (with Seer-only secrets), territories, sessions (with Seer-only prep), house rulings and Seer notes;
+> - a change log of every change, with undo;
+> - journals and recaps written by people;
+> - Markdown/JSON export and a printable sheet.
+>
+> Every write is checked against the rules data's limits (the Seer can override, which records a house ruling). Next: the MCP tools for all of this, then the table tools (challenge helper, oracle, live push, TV view).
 
 ## How it's put together
 

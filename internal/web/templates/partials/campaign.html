@@ -1,0 +1,60 @@
+{{define "campaignnav"}}
+{{$c := .Nav.Campaign}}{{$sec := .Nav.Section}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3 d-print-none">
+  <a class="h4 mb-0 me-2 text-decoration-none text-body" href="/c/{{$c.ID}}">{{$c.Name}}</a>
+  <ul class="nav nav-pills small flex-nowrap overflow-auto hi-tabs">
+    <li class="nav-item"><a class="nav-link {{if eq $sec "overview" "agents"}}active{{end}}" href="/c/{{$c.ID}}">Overview</a></li>
+    <li class="nav-item"><a class="nav-link {{if eq $sec "clocks"}}active{{end}}" href="/c/{{$c.ID}}/clocks">Clocks</a></li>
+    <li class="nav-item"><a class="nav-link {{if eq $sec "adversaries"}}active{{end}}" href="/c/{{$c.ID}}/adversaries">Adversaries</a></li>
+    <li class="nav-item"><a class="nav-link {{if eq $sec "territories"}}active{{end}}" href="/c/{{$c.ID}}/territories">Territories</a></li>
+    <li class="nav-item"><a class="nav-link {{if eq $sec "sessions"}}active{{end}}" href="/c/{{$c.ID}}/sessions">Sessions</a></li>
+    <li class="nav-item"><a class="nav-link {{if eq $sec "journal"}}active{{end}}" href="/c/{{$c.ID}}/journal">Journal</a></li>
+    <li class="nav-item"><a class="nav-link {{if eq $sec "rulings"}}active{{end}}" href="/c/{{$c.ID}}/rulings">Rulings</a></li>
+    <li class="nav-item"><a class="nav-link {{if eq $sec "log"}}active{{end}}" href="/c/{{$c.ID}}/log">Log</a></li>
+    {{if $.User.IsSeer}}
+    <li class="nav-item"><a class="nav-link text-warning {{if eq $sec "notes"}}active{{end}}" href="/c/{{$c.ID}}/notes"><i class="bi bi-eye-slash"></i> Notes</a></li>
+    <li class="nav-item"><a class="nav-link {{if eq $sec "settings"}}active{{end}}" href="/c/{{$c.ID}}/settings"><i class="bi bi-sliders"></i></a></li>
+    {{end}}
+  </ul>
+</div>
+{{end}}
+
+{{/* The shared "why" box. Forms inside an element with hx-include="#why" send it along. */}}
+{{define "why"}}
+<div class="card mb-3 border-secondary-subtle d-print-none" id="why">
+  <div class="card-body py-2 d-flex flex-wrap align-items-center gap-2">
+    <label class="small text-body-secondary" for="why-input"><i class="bi bi-chat-left-text"></i> Why (goes in the log with your next change):</label>
+    <input class="form-control form-control-sm flex-grow-1" style="min-width: 12rem; max-width: 40rem" name="why" id="why-input" placeholder="e.g. failed Slip vs the harbor guard" autocomplete="off">
+    {{if .User.IsSeer}}
+    <div class="form-check form-check-inline mb-0 small" title="Break a rules limit on purpose. Needs a why; recorded as a house ruling.">
+      <input class="form-check-input" type="checkbox" name="override" id="override">
+      <label class="form-check-label" for="override">Override limits</label>
+    </div>
+    {{end}}
+  </div>
+</div>
+{{end}}
+
+{{define "events"}}
+{{if .}}
+<ul class="list-group list-group-flush small">
+  {{range .}}
+  <li class="list-group-item px-0 {{if .RevertedBy}}text-decoration-line-through text-body-secondary{{end}}">
+    <div class="d-flex justify-content-between gap-2">
+      <span>{{if isSeerVis .Visibility}}<i class="bi bi-eye-slash text-warning" title="Seer only"></i> {{end}}{{.Summary}}</span>
+      <span class="text-body-secondary text-nowrap">{{when .CreatedAt}}</span>
+    </div>
+    <div class="text-body-secondary">{{.ActorName}}{{with .Reason}}: <em>{{.}}</em>{{end}}{{if .Override}} <span class="badge text-bg-warning">override</span>{{end}}</div>
+  </li>
+  {{end}}
+</ul>
+{{else}}<p class="small text-body-secondary mb-0">Nothing yet.</p>{{end}}
+{{end}}
+
+{{define "pips"}}{{/* args: dict "name" field "value" n "max" m */}}
+<span class="hi-pips" role="group">
+  {{range $i := seq 1 .max}}
+  <button type="submit" class="hi-pip {{if le $i $.value}}on{{end}}" name="{{$.name}}" value="{{if eq $i $.value}}{{sub $i 1}}{{else}}{{$i}}{{end}}" title="{{$i}}" aria-label="set to {{if eq $i $.value}}{{sub $i 1}}{{else}}{{$i}}{{end}}"></button>
+  {{end}}
+</span>
+{{end}}

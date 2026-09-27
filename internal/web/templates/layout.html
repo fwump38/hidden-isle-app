@@ -13,7 +13,7 @@
   <script src="/static/app.js" defer></script>
 </head>
 <body>
-  <nav class="navbar navbar-expand-md border-bottom mb-3">
+  <nav class="navbar navbar-expand-md border-bottom mb-3 d-print-none">
     <div class="container">
       <a class="navbar-brand d-flex align-items-center gap-2" href="/"><i class="bi bi-moon-stars"></i> The Hidden Isle</a>
       {{if .User}}
@@ -37,10 +37,11 @@
       {{end}}
     </div>
   </nav>
-  <main class="container pb-5" id="main">
+  <main class="container pb-5" id="main" hx-boost="true" hx-target="#main" hx-select="#main" hx-swap="outerHTML show:none">
+    {{with .Nav}}{{template "campaignnav" $}}{{end}}
     {{template "flash" .}}
     {{template "content" .}}
   </main>
-  <footer class="container text-body-secondary small pb-4">Build {{.Build}}</footer>
+  <footer class="container text-body-secondary small pb-4 d-print-none">Build {{.Build}}</footer>
 </body>
 </html>{{end}}

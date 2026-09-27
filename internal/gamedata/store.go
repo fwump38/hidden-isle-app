@@ -361,3 +361,10 @@ func redact(u string) string {
 	}
 	return u
 }
+
+// StaticStore returns a store that always serves snap (for tests and tools).
+func StaticStore(snap *Snapshot) *Store {
+	s := &Store{}
+	s.cur.Store(snap)
+	return s
+}
