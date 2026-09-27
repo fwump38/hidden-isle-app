@@ -1,0 +1,38 @@
+{{define "content"}}
+<h1 class="h3 mb-3">Welcome, {{.User.Name}}</h1>
+<div class="row g-3">
+  <div class="col-12 col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h2 class="h5 card-title"><i class="bi bi-person-badge"></i> {{if .User.IsSeer}}Agents{{else}}Your Agent{{end}}</h2>
+        <p class="card-text text-body-secondary">Character sheets arrive in the next phase.</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h2 class="h5 card-title"><i class="bi bi-book"></i> Rules data</h2>
+        {{with .Data.Snapshot}}
+        <p class="card-text mb-1">{{len .Classes.Classes}} classes, {{len .Cards.Vision}} vision cards, {{len .Cards.Pips}} pips.</p>
+        <p class="card-text small text-body-secondary">Snapshot <code>{{.Short}}</code>, loaded {{since .LoadedAt}}.</p>
+        {{else}}
+        <p class="card-text text-warning">Rules data hasn't loaded yet.{{if $.User.IsSeer}} Check <a href="/admin">Admin</a>.{{end}}</p>
+        {{end}}
+      </div>
+    </div>
+  </div>
+  {{with .Data.Snapshot}}
+  <div class="col-12 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h2 class="h5 card-title"><i class="bi bi-shield"></i> Classes</h2>
+        <div class="d-flex flex-wrap gap-2">
+          {{range .Classes.Classes}}<span class="badge text-bg-secondary" title="{{.Guild}}">{{.Name}}</span>{{end}}
+        </div>
+      </div>
+    </div>
+  </div>
+  {{end}}
+</div>
+{{end}}

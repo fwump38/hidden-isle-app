@@ -1,0 +1,30 @@
+{{define "content"}}
+<div class="row justify-content-center">
+  <div class="col-12 col-sm-10 col-md-7 col-lg-5">
+    <h1 class="h3 mb-3">Who's at the table?</h1>
+    {{if .Data.PINAllowed}}
+      {{if .Data.Users}}
+      <form method="post" action="/login" id="login-form" autocomplete="off">
+        <div class="d-grid gap-2 mb-3" role="radiogroup" aria-label="Your name">
+          {{range .Data.Users}}
+          <input type="radio" class="btn-check" name="user_id" id="u{{.ID}}" value="{{.ID}}" data-seer="{{.IsSeer}}" required>
+          <label class="btn btn-outline-light btn-lg text-start" for="u{{.ID}}">
+            {{if .IsSeer}}<i class="bi bi-eye"></i>{{else}}<i class="bi bi-person"></i>{{end}} {{.Name}}
+          </label>
+          {{end}}
+        </div>
+        <div class="mb-3" id="secret-group" hidden>
+          <label class="form-label" for="secret" id="secret-label">PIN</label>
+          <input class="form-control form-control-lg" type="password" name="secret" id="secret" inputmode="numeric" autocomplete="off" required>
+        </div>
+        <button class="btn btn-primary btn-lg w-100" type="submit"><i class="bi bi-door-open"></i> Enter</button>
+      </form>
+      {{else}}
+      <p class="text-body-secondary">Nobody has been added yet. The Seer sets up the first account with <code>HI_SEER_PASSWORD</code> (see the README).</p>
+      {{end}}
+    {{else}}
+      <p>PIN sign-in only works on the home network. From outside, sign in through Cloudflare Access or Authentik.</p>
+    {{end}}
+  </div>
+</div>
+{{end}}

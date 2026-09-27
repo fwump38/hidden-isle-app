@@ -1,0 +1,46 @@
+{{define "layout"}}<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>{{.Title}} · The Hidden Isle</title>
+  <link rel="stylesheet" href="/static/vendor/bootstrap.min.css">
+  <link rel="stylesheet" href="/static/vendor/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/vendor/htmx.min.js" defer></script>
+  <script src="/static/vendor/bootstrap.bundle.min.js" defer></script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <nav class="navbar navbar-expand-md border-bottom mb-3">
+    <div class="container">
+      <a class="navbar-brand d-flex align-items-center gap-2" href="/"><i class="bi bi-moon-stars"></i> The Hidden Isle</a>
+      {{if .User}}
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav" aria-controls="nav" aria-expanded="false" aria-label="Menu">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="nav">
+        <ul class="navbar-nav me-auto">
+          <li class="nav-item"><a class="nav-link" href="/"><i class="bi bi-house"></i> Home</a></li>
+          {{if .User.IsSeer}}<li class="nav-item"><a class="nav-link" href="/admin"><i class="bi bi-gear"></i> Admin</a></li>{{end}}
+        </ul>
+        <div class="d-flex align-items-center gap-2">
+          <span class="navbar-text small">
+            {{if .User.IsSeer}}<span class="badge text-bg-warning">Seer</span>{{end}} {{.User.Name}}
+          </span>
+          {{if eq .Info.Via "cookie"}}
+          <form method="post" action="/logout"><button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi bi-box-arrow-right"></i> Sign out</button></form>
+          {{end}}
+        </div>
+      </div>
+      {{end}}
+    </div>
+  </nav>
+  <main class="container pb-5" id="main">
+    {{template "flash" .}}
+    {{template "content" .}}
+  </main>
+  <footer class="container text-body-secondary small pb-4">Build {{.Build}}</footer>
+</body>
+</html>{{end}}

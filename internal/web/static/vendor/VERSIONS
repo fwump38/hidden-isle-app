@@ -1,0 +1,5 @@
+bootstrap 5.3.8 (MIT)
+bootstrap-icons 1.13.1 (MIT)
+htmx.org 2.0.11 (0BSD)
+htmx-ext-sse 2.2.4 (0BSD)
+Fetched from cdn.jsdelivr.net/npm. Update with scripts/vendor.sh.

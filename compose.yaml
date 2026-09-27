@@ -1,0 +1,36 @@
+# Portainer stack (or `docker compose up -d`). One container; state lives in the hidden-isle-data volume.
+services:
+  hidden-isle:
+    image: ghcr.io/fwump38/hidden-isle-app:latest
+    container_name: hidden-isle
+    restart: unless-stopped
+    # If you bind-mount a NAS folder instead of the named volume, make it writable by this user,
+    # or set user: to the folder's UID:GID.
+    # user: "1026:100"
+    ports:
+      - "8080:8080"            # LAN: PIN login. Don't forward this port to the internet.
+      - "127.0.0.1:8081:8081"  # Tunnel: point cloudflared here (SSO required). Drop this line if cloudflared runs on the same Docker network.
+    volumes:
+      - hidden-isle-data:/data
+    environment:
+      HI_PUBLIC_URL: https://isle.example.com       # the tunnel hostname
+      HI_SEER_NAME: Seer
+      HI_SEER_EMAIL: you@example.com                # your SSO email
+      HI_SEER_PASSWORD: ${HI_SEER_PASSWORD}          # LAN password for the Seer (8+ characters)
+      # HI_LAN_CIDR: 192.168.1.0/24                 # PIN login only from these ranges (default: private ranges)
+      # Cloudflare Access (verify the JWT on every tunnel request):
+      HI_CF_TEAM_DOMAIN: yourteam.cloudflareaccess.com
+      HI_CF_AUD: ${HI_CF_AUD}
+      # Authentik forward auth: trust X-authentik-email only from these peers (your proxy's IP):
+      # HI_AUTHENTIK_PROXY_IPS: 172.18.0.10
+      # MCP OAuth for claude.ai (Authentik OAuth2 provider):
+      HI_OAUTH_ISSUER: https://auth.example.com/application/o/hidden-isle/
+      HI_OAUTH_AUDIENCE: ${HI_OAUTH_CLIENT_ID}
+      # Rules data (private repo needs a fine-grained PAT with Contents: read-only on that repo):
+      GAMEDATA_REPO: https://github.com/fwump38/The-Hidden-Isle.git
+      GAMEDATA_REF: main
+      GAMEDATA_TOKEN: ${GAMEDATA_TOKEN}
+      GAMEDATA_INTERVAL: 1h
+
+volumes:
+  hidden-isle-data:

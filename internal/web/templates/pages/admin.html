@@ -1,0 +1,108 @@
+{{define "content"}}
+<h1 class="h3 mb-3">Admin</h1>
+
+{{with .Data.NewToken}}
+<div class="alert alert-warning">
+  <p class="mb-2"><strong>New API token</strong> (shown once):</p>
+  <div class="input-group mb-2">
+    <input class="form-control font-monospace" readonly value="{{.}}" id="new-token">
+    <button class="btn btn-outline-light" type="button" data-copy="#new-token"><i class="bi bi-clipboard"></i> Copy</button>
+  </div>
+  <p class="small mb-1">Claude Code:</p>
+  <code class="small d-block text-break">claude mcp add --transport http hidden-isle {{$.Data.MCPURL}} --header "Authorization: Bearer {{.}}"</code>
+</div>
+{{end}}
+
+<div class="row g-3">
+  <div class="col-12 col-lg-6">{{template "gamedata" .Data}}</div>
+
+  <div class="col-12 col-lg-6">
+    <div class="card h-100">
+      <div class="card-body">
+        <h2 class="h5 card-title"><i class="bi bi-plug"></i> MCP (for Claude)</h2>
+        <p class="small text-body-secondary mb-2">Endpoint: <code>{{.Data.MCPURL}}</code>. claude.ai connects with OAuth (Authentik); Claude Code can use an API token.</p>
+        <form class="row g-2 mb-3" method="post" action="/admin/tokens">
+          <div class="col"><input class="form-control" name="name" placeholder="Token name, e.g. Claude Code laptop" aria-label="Token name"></div>
+          <div class="col-auto"><button class="btn btn-primary" type="submit"><i class="bi bi-key"></i> New token</button></div>
+        </form>
+        {{if .Data.Tokens}}
+        <ul class="list-group list-group-flush">
+          {{range .Data.Tokens}}
+          <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+            <span><strong>{{.Name}}</strong> <code class="small">{{.Prefix}}…</code><br><span class="small text-body-secondary">last used {{if .LastUsedAt}}{{since .LastUsedAt}}{{else}}never{{end}}</span></span>
+            <form method="post" action="/admin/tokens/{{.ID}}/revoke"><button class="btn btn-sm btn-outline-danger" type="submit">Revoke</button></form>
+          </li>
+          {{end}}
+        </ul>
+        {{else}}<p class="small text-body-secondary mb-0">No API tokens.</p>{{end}}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body">
+        <h2 class="h5 card-title"><i class="bi bi-people"></i> People</h2>
+        <p class="small text-body-secondary">Players sign in on the home network with their PIN, or anywhere through SSO with their email. The Seer signs in with SSO or, at home, a password.</p>
+        <div class="table-responsive">
+          <table class="table align-middle">
+            <thead><tr><th>Name</th><th>SSO email</th><th>PIN / password</th><th>Status</th></tr></thead>
+            <tbody>
+            {{range .Data.Users}}
+              <tr>
+                <td>{{if .IsSeer}}<span class="badge text-bg-warning">Seer</span> {{end}}{{.Name}}</td>
+                <td>
+                  <form class="input-group input-group-sm" method="post" action="/admin/users/{{.ID}}">
+                    <input type="hidden" name="action" value="email">
+                    <input class="form-control" type="email" name="email" value="{{deref .Email}}" placeholder="none" aria-label="Email for {{.Name}}">
+                    <button class="btn btn-outline-light" type="submit">Save</button>
+                  </form>
+                </td>
+                <td>
+                  <form class="input-group input-group-sm" method="post" action="/admin/users/{{.ID}}">
+                    <input type="hidden" name="action" value="pin">
+                    <input class="form-control" type="password" name="pin" {{if not .IsSeer}}inputmode="numeric"{{end}} autocomplete="new-password"
+                      placeholder="{{if .IsSeer}}{{if .PasswordHash}}change password{{else}}set password{{end}}{{else}}{{if .PINHash}}change PIN{{else}}set PIN{{end}}{{end}}" aria-label="New PIN for {{.Name}}">
+                    <button class="btn btn-outline-light" type="submit">Set</button>
+                  </form>
+                </td>
+                <td>
+                  <form method="post" action="/admin/users/{{.ID}}">
+                    <input type="hidden" name="action" value="toggle">
+                    <button class="btn btn-sm {{if .Active}}btn-outline-success{{else}}btn-outline-secondary{{end}}" type="submit">{{if .Active}}Active{{else}}Inactive{{end}}</button>
+                  </form>
+                </td>
+              </tr>
+            {{end}}
+            </tbody>
+          </table>
+        </div>
+        <h3 class="h6 mt-3">Add a player</h3>
+        <form class="row g-2" method="post" action="/admin/users">
+          <div class="col-12 col-md-4"><input class="form-control" name="name" placeholder="Name" required aria-label="Name"></div>
+          <div class="col-12 col-md-4"><input class="form-control" type="email" name="email" placeholder="SSO email (optional)" aria-label="SSO email"></div>
+          <div class="col-8 col-md-2"><input class="form-control" type="password" name="pin" inputmode="numeric" placeholder="PIN" autocomplete="new-password" aria-label="PIN"></div>
+          <div class="col-4 col-md-2"><button class="btn btn-primary w-100" type="submit"><i class="bi bi-person-plus"></i> Add</button></div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{{end}}
+
+{{define "gamedata"}}
+<div class="card h-100" id="gamedata">
+  <div class="card-body">
+    <h2 class="h5 card-title"><i class="bi bi-arrow-repeat"></i> Rules data</h2>
+    <dl class="row small mb-2">
+      <dt class="col-4">Source</dt><dd class="col-8 text-break"><code>{{.Status.Source}}</code> @ {{.Status.Ref}}</dd>
+      <dt class="col-4">In use</dt><dd class="col-8">{{with .Snapshot}}<code>{{short .ID}}</code>, loaded {{since .LoadedAt}}{{else}}<span class="text-warning">nothing loaded</span>{{end}}</dd>
+      <dt class="col-4">Last check</dt><dd class="col-8">{{since .Status.LastAttempt}}</dd>
+    </dl>
+    {{with .Status.LastError}}<div class="alert alert-danger small py-2"><strong>Last sync failed; still using the snapshot above.</strong><pre class="mb-0 mt-1 text-wrap">{{.}}</pre></div>{{end}}
+    <button class="btn btn-outline-light" hx-post="/admin/gamedata/sync" hx-target="#gamedata" hx-swap="outerHTML" hx-disabled-elt="this">
+      <i class="bi bi-cloud-download"></i> Sync now <span class="htmx-indicator spinner-border spinner-border-sm"></span>
+    </button>
+  </div>
+</div>
+{{end}}

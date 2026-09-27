@@ -1,0 +1,4 @@
+{{define "flash"}}
+{{if .Flash}}<div class="alert alert-success alert-dismissible fade show" role="status">{{.Flash}}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>{{end}}
+{{if .Error}}<div class="alert alert-danger" role="alert"><i class="bi bi-exclamation-triangle"></i> {{.Error}}</div>{{end}}
+{{end}}
