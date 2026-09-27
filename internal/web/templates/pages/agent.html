@@ -23,24 +23,50 @@
 {{if $d.CanEdit}}{{template "why" $}}{{end}}
 <fieldset {{if not $d.CanEdit}}disabled{{end}}>
 
-{{if $.User.IsSeer}}
-<form class="card card-body py-2 mb-3 border-warning-subtle" method="post" action="{{$act}}">
-  <div class="row g-2 align-items-center small">
-    <div class="col-auto text-warning"><i class="bi bi-eye"></i> Seer</div>
-    <div class="col-6 col-md-3"><select class="form-select form-select-sm" name="set.status" aria-label="Status">
-      {{with $snap}}{{range .Campaign.AgentStatus}}<option {{if eq . $a.Status}}selected{{end}}>{{.}}</option>{{end}}{{end}}
-    </select></div>
-    <div class="col-6 col-md-3"><select class="form-select form-select-sm" name="set.owner_id" aria-label="Player">
-      <option value="">Played by the Seer</option>
-      {{range $d.Players}}<option value="{{.ID}}" {{if eq .ID (uintv $a.OwnerID)}}selected{{end}}>{{.Name}}</option>{{end}}
-    </select></div>
-    <div class="col-6 col-md-3"><select class="form-select form-select-sm" name="set.class" aria-label="Class">
-      {{with $snap}}{{range .Classes.Classes}}<option value="{{.ID}}" {{if eq .ID $a.Class}}selected{{end}}>{{.Name}}</option>{{end}}{{end}}
-    </select></div>
-    <div class="col-auto"><button class="btn btn-sm btn-outline-warning" type="submit">Save</button></div>
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <div class="row g-2 align-items-center small">
+      <div class="col-12 col-md-5">
+        <i class="bi bi-map"></i>
+        {{with $d.Campaign}}In <a href="/c/{{.ID}}">{{.Name}}</a>{{else}}<span class="text-body-secondary">Not in a campaign</span> {{help "Only its player (and the Seer) can see an Agent that isn't in a campaign."}}{{end}}
+      </div>
+      {{if $d.CanEdit}}
+      <div class="col-12 col-md-7">
+        <form method="post" action="{{$act}}/campaign" class="input-group input-group-sm">
+          <select class="form-select" name="campaign_id" aria-label="Campaign">
+            <option value="0" {{if eq $a.CampaignID 0}}selected{{end}}>No campaign</option>
+            {{range $d.Campaigns}}<option value="{{.ID}}" {{if eq .ID $a.CampaignID}}selected{{end}}>{{.Name}}</option>{{end}}
+          </select>
+          <button class="btn btn-outline-light" type="submit">Move</button>
+        </form>
+      </div>
+      <div class="col-12 col-md-5">
+        <form method="post" action="{{$act}}" class="input-group input-group-sm" hx-trigger="change">
+          <label class="input-group-text" for="status">Status</label>
+          <select class="form-select" id="status" name="set.status">
+            {{with $snap}}{{range .Campaign.AgentStatus}}<option {{if eq . $a.Status}}selected{{end}}>{{.}}</option>{{end}}{{end}}
+          </select>
+          <noscript><button class="btn btn-outline-light" type="submit">Save</button></noscript>
+        </form>
+      </div>
+      <div class="col-12 col-md-7 form-text mt-0">Active: in play. Resting: sitting out for now. Retired, Captured, Broken or Dead: out of play; the sheet and its history are kept.</div>
+      {{end}}
+    </div>
+    {{if $.User.IsSeer}}
+    <form class="row g-2 align-items-center small mt-1 pt-2 border-top border-warning-subtle" method="post" action="{{$act}}">
+      <div class="col-auto text-warning"><i class="bi bi-eye"></i> Seer</div>
+      <div class="col-6 col-md-4"><select class="form-select form-select-sm" name="set.owner_id" aria-label="Played by">
+        <option value="">Played by the Seer</option>
+        {{range $d.Players}}<option value="{{.ID}}" {{if eq .ID (uintv $a.OwnerID)}}selected{{end}}>{{.Name}}</option>{{end}}
+      </select></div>
+      <div class="col-6 col-md-3"><select class="form-select form-select-sm" name="set.class" aria-label="Class">
+        {{with $snap}}{{range .Classes.Classes}}<option value="{{.ID}}" {{if eq .ID $a.Class}}selected{{end}}>{{.Name}}</option>{{end}}{{end}}
+      </select></div>
+      <div class="col-auto"><button class="btn btn-sm btn-outline-warning" type="submit">Save</button></div>
+    </form>
+    {{end}}
   </div>
-</form>
-{{end}}
+</div>
 
 <div class="row g-3">
   {{/* ---------------- skills, XP, harm */}}
@@ -51,7 +77,7 @@
         {{range $d.Suits}}{{$suit := .}}
         <div class="hi-suit mb-3">
           <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom pb-1 mb-1">
-            <strong class="hi-suit-{{.Suit}}">{{.Suit}}</strong>
+            <strong class="hi-suit-{{.Suit}}">{{.Suit}}</strong>{{if eq .Suit "Swords"}} {{help "Tap a dot to set a value; tap the highest filled dot to lower it. Harm boxes: P physical, S spiritual, T trauma (p. 23). XP: a full track of 7 gives +1 skill point in that suit (p. 25)."}}{{end}}
             <form method="post" action="{{$act}}" class="d-flex align-items-center gap-1 small">
               <span class="text-body-secondary">XP</span>{{template "pips" dict "name" (printf "set.%s" .XPKey) "value" .XP "max" 7}}
             </form>
@@ -102,8 +128,8 @@
       <div class="card-body">
         <h2 class="h5 card-title">Burden &amp; ideal</h2>
         <form method="post" action="{{$act}}" class="mb-2">
-          <div class="d-flex justify-content-between align-items-center"><span class="small text-body-secondary">Burden track (+1 card)</span>{{template "pips" dict "name" "set.burden_track" "value" $a.BurdenTrack "max" 7}}</div>
-          <div class="d-flex justify-content-between align-items-center"><span class="small text-body-secondary">Ideal track (−1 card, +3)</span>{{template "pips" dict "name" "set.ideal_track" "value" $a.IdealTrack "max" 7}}</div>
+          <div class="d-flex justify-content-between align-items-center"><span class="small text-body-secondary">Burden track {{help "Mark it each time you use your burden for +1 card (p. 20). When it fills (7), the burden becomes a vice in downtime (pp. 66-67)."}}</span>{{template "pips" dict "name" "set.burden_track" "value" $a.BurdenTrack "max" 7}}</div>
+          <div class="d-flex justify-content-between align-items-center"><span class="small text-body-secondary">Ideal track {{help "Mark it each time you use your ideal: -1 card but +3 to every card's number (p. 20). When it fills (7), the ideal becomes a virtue in downtime (pp. 66-67)."}}</span>{{template "pips" dict "name" "set.ideal_track" "value" $a.IdealTrack "max" 7}}</div>
         </form>
         <form method="post" action="{{$act}}" class="row g-2">
           <div class="col-6"><label class="form-label small mb-0" for="burden">Burden</label><input class="form-control form-control-sm" id="burden" name="set.burden" value="{{$a.Burden}}"></div>
@@ -312,6 +338,7 @@
     <div class="card h-100">
       <div class="card-body">
         <h2 class="h5 card-title">Clocks</h2>
+        {{if not $d.Campaign}}<p class="small text-body-secondary mb-0">Clocks belong to a campaign; bring this Agent into one to track its ability clocks.</p>{{else}}
         {{range $d.Clocks}}
         <form method="post" action="/r/clock/{{.ID}}" class="d-flex align-items-center gap-2 mb-2">
           <input type="hidden" name="back" value="{{$act}}">
@@ -320,7 +347,7 @@
           <button class="btn btn-sm btn-outline-light" type="submit" name="inc.filled" value="-1" aria-label="Unfill a segment">−</button>
           <button class="btn btn-sm btn-outline-light" type="submit" name="inc.filled" value="1" aria-label="Fill a segment">+</button>
         </form>
-        {{else}}<p class="small text-body-secondary mb-0">No clocks on this Agent. Abilities with clocks (e.g. Evil Eye) get one from the Seer on the Clocks page.</p>{{end}}
+        {{else}}<p class="small text-body-secondary mb-0">No clocks on this Agent. Abilities with clocks (e.g. Evil Eye) get one from the Seer on the Clocks page.</p>{{end}}{{end}}
       </div>
     </div>
   </div>
@@ -353,10 +380,18 @@
   <div class="col-12 col-lg-6">
     <div class="card h-100">
       <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center"><h2 class="h5 card-title mb-0"><i class="bi bi-clock-history"></i> Changes</h2><a class="small" href="/c/{{$a.CampaignID}}/log?type=agent">Log · undo</a></div>
+        <div class="d-flex justify-content-between align-items-center"><h2 class="h5 card-title mb-0"><i class="bi bi-clock-history"></i> Changes</h2>{{if $d.Campaign}}<a class="small" href="/c/{{$a.CampaignID}}/log?type=agent">Log · undo</a>{{end}}</div>
         {{template "events" $d.Events}}
       </div>
     </div>
   </div>
 </div>
+{{if $d.CanEdit}}
+<div class="card border-danger-subtle mt-3">
+  <div class="card-body py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <span class="small text-body-secondary"><i class="bi bi-exclamation-triangle text-danger"></i> Deleting removes the sheet and its contacts.{{if $.User.IsSeer}} You can restore it from the campaign's log.{{else}} To keep it but stop playing it, set its status to Retired instead.{{end}}</span>
+    <form method="post" action="{{$act}}/delete"><button class="btn btn-sm btn-outline-danger" type="submit" hx-confirm="Delete {{$a.Name}}? This removes the sheet and its contacts."><i class="bi bi-trash"></i> Delete Agent</button></form>
+  </div>
+</div>
+{{end}}
 {{end}}

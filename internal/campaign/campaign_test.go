@@ -124,8 +124,11 @@ func TestPlayersEditOnlyTheirOwnAgent(t *testing.T) {
 	if _, err := w.s.Update(w.ana, "agent", w.anaAgent.ID, patch(t, map[string]any{"owner_id": w.bram.User.ID}), Opts{}); !IsForbidden(err) {
 		t.Errorf("player changed owner: %v", err)
 	}
-	if _, err := w.s.Update(w.ana, "agent", w.anaAgent.ID, patch(t, map[string]any{"status": "Dead"}), Opts{}); !IsForbidden(err) {
-		t.Errorf("player changed status: %v", err)
+	if _, err := w.s.Update(w.ana, "agent", w.anaAgent.ID, patch(t, map[string]any{"status": "Dead"}), Opts{}); err != nil {
+		t.Errorf("owner should be able to set status: %v", err)
+	}
+	if _, err := w.s.Update(w.bram, "agent", w.anaAgent.ID, patch(t, map[string]any{"status": "Active"}), Opts{}); !IsForbidden(err) {
+		t.Errorf("another player changed status: %v", err)
 	}
 	if _, err := w.s.Update(w.eve, "agent", w.anaAgent.ID, patch(t, map[string]any{"notes": "x"}), Opts{}); !IsForbidden(err) {
 		t.Errorf("non-member edited: %v", err)
@@ -133,8 +136,11 @@ func TestPlayersEditOnlyTheirOwnAgent(t *testing.T) {
 	if _, err := w.s.Update(w.seer, "agent", w.bramAgent.ID, patch(t, map[string]any{"status": "Dead"}), Opts{}); err != nil {
 		t.Errorf("Seer edit: %v", err)
 	}
-	if err := w.s.Delete(w.ana, "agent", w.anaAgent.ID, Opts{}); !IsForbidden(err) {
-		t.Errorf("player deleted an Agent: %v", err)
+	if err := w.s.Delete(w.bram, "agent", w.anaAgent.ID, Opts{}); !IsForbidden(err) {
+		t.Errorf("player deleted another player's Agent: %v", err)
+	}
+	if err := w.s.Delete(w.ana, "agent", w.anaAgent.ID, Opts{}); err != nil {
+		t.Errorf("owner delete: %v", err)
 	}
 }
 
@@ -372,5 +378,111 @@ func TestDescribe(t *testing.T) {
 		if got := describe(tc.c); got != tc.want {
 			t.Errorf("describe(%s) = %q, want %q", tc.c.Field, got, tc.want)
 		}
+	}
+}
+
+func TestPrivateAgentsAndCampaigns(t *testing.T) {
+	w := setup(t)
+	solo, err := w.s.NewAgent(w.eve, 0, "Wanderer", "hunter", nil, Opts{})
+	must(t, err)
+	if _, err := w.s.Agent(w.ana, solo.ID); !IsNotFound(err) {
+		t.Errorf("another player can see a private Agent: %v", err)
+	}
+	if _, err := w.s.Agent(w.seer, solo.ID); err != nil {
+		t.Errorf("Seer can't see a private Agent: %v", err)
+	}
+	if _, err := w.s.Update(w.eve, "agent", solo.ID, patch(t, map[string]any{"burden_track": 1}), Opts{}); err != nil {
+		t.Errorf("owner edit of a private Agent: %v", err)
+	}
+	must(t, w.s.Create(w.eve, "contact", &db.Contact{AgentID: solo.ID, Name: "Old friend", Kind: "Homeland"}, Opts{}))
+	mine, _ := w.s.MyAgents(w.eve)
+	if len(mine) != 1 {
+		t.Fatalf("MyAgents = %d", len(mine))
+	}
+	// Eve isn't in the campaign: she can't bring the Agent there.
+	if err := w.s.AssignAgent(w.eve, solo.ID, w.camp.ID, Opts{}); !IsForbidden(err) {
+		t.Errorf("non-member joined a campaign: %v", err)
+	}
+	if err := w.s.AssignAgent(w.ana, solo.ID, w.camp.ID, Opts{}); !IsNotFound(err) {
+		t.Errorf("another player moved Eve's Agent: %v", err)
+	}
+	// The Seer moves it in, which makes Eve a member; its contact follows.
+	must(t, w.s.AssignAgent(w.seer, solo.ID, w.camp.ID, Opts{}))
+	if _, err := w.s.Campaign(w.eve, w.camp.ID); err != nil {
+		t.Errorf("owner should now be a member: %v", err)
+	}
+	if ag, err := w.s.Agent(w.ana, solo.ID); err != nil || ag.CampaignID != w.camp.ID {
+		t.Errorf("campaign members should see it now: %v", err)
+	}
+	cs, _ := w.s.Contacts(w.eve, solo.ID)
+	if len(cs) != 1 || cs[0].CampaignID != w.camp.ID {
+		t.Errorf("contact didn't follow its Agent: %+v", cs)
+	}
+	evs, _ := w.s.AgentEvents(w.eve, solo.ID, 50)
+	if len(evs) < 3 {
+		t.Errorf("Agent log should include changes from before it joined: %d events", len(evs))
+	}
+	// The owner can take it out again.
+	must(t, w.s.AssignAgent(w.eve, solo.ID, 0, Opts{}))
+	if _, err := w.s.Agent(w.ana, solo.ID); !IsNotFound(err) {
+		t.Errorf("Agent should be private again: %v", err)
+	}
+	// The Seer creating an Agent for a player adds them to the campaign.
+	camp2 := &db.Campaign{Name: "Second"}
+	must(t, w.s.CreateCampaign(w.seer, camp2, Opts{}))
+	_, err = w.s.NewAgent(w.seer, camp2.ID, "Pregen", "hunter", &w.eve.User.ID, Opts{})
+	must(t, err)
+	if _, err := w.s.Campaign(w.eve, camp2.ID); err != nil {
+		t.Errorf("player not added to the campaign: %v", err)
+	}
+}
+
+func TestDeleteCampaignAndUser(t *testing.T) {
+	w := setup(t)
+	npc, err := w.s.NewAgent(w.seer, w.camp.ID, "NPC Agent", "hunter", nil, Opts{})
+	must(t, err)
+	must(t, w.s.Create(w.seer, "clock", &db.Clock{CampaignID: w.camp.ID, Name: "Doom", Segments: 4, Status: "Running", Visibility: db.VisParty}, Opts{}))
+	if err := w.s.DeleteCampaign(w.ana, w.camp.ID, w.camp.Name); !IsForbidden(err) {
+		t.Errorf("player deleted a campaign: %v", err)
+	}
+	if err := w.s.DeleteCampaign(w.seer, w.camp.ID, "wrong name"); err == nil {
+		t.Error("deleted without the right confirmation")
+	}
+	must(t, w.s.DeleteCampaign(w.seer, w.camp.ID, w.camp.Name))
+	if ag, err := w.s.Agent(w.ana, w.anaAgent.ID); err != nil || ag.CampaignID != 0 {
+		t.Errorf("player's Agent should survive outside any campaign: %v %+v", err, ag)
+	}
+	if _, err := w.s.Agent(w.seer, npc.ID); !IsNotFound(err) {
+		t.Errorf("Seer-run Agent should be deleted with the campaign: %v", err)
+	}
+	var n int64
+	w.s.DB.Model(&db.Clock{}).Count(&n)
+	if n != 0 {
+		t.Errorf("%d clocks left behind", n)
+	}
+	w.s.DB.Model(&db.Event{}).Where("campaign_id = ?", w.camp.ID).Count(&n)
+	if n != 0 {
+		t.Errorf("%d events left behind", n)
+	}
+
+	// Deleting a player: campaign Agents go to the Seer, private ones are deleted.
+	camp := &db.Campaign{Name: "Again"}
+	must(t, w.s.CreateCampaign(w.seer, camp, Opts{}))
+	must(t, w.s.AssignAgent(w.seer, w.bramAgent.ID, camp.ID, Opts{}))
+	private, _ := w.s.NewAgent(w.bram, 0, "Secret", "hunter", nil, Opts{})
+	must(t, w.s.WriteEntry(w.bram, &db.Entry{CampaignID: camp.ID, Kind: "journal", Title: "diary", Visibility: db.VisPrivate}))
+	if err := w.s.DeleteUser(w.seer, w.seer.User.ID); err == nil {
+		t.Error("deleted the Seer")
+	}
+	must(t, w.s.DeleteUser(w.seer, w.bram.User.ID))
+	if ag, err := w.s.Agent(w.seer, w.bramAgent.ID); err != nil || ag.OwnerID != nil {
+		t.Errorf("campaign Agent should now be the Seer's: %v %+v", err, ag)
+	}
+	if _, err := w.s.Agent(w.seer, private.ID); !IsNotFound(err) {
+		t.Errorf("private Agent should be deleted: %v", err)
+	}
+	w.s.DB.Model(&db.Entry{}).Where("title = ?", "diary").Count(&n)
+	if n != 0 {
+		t.Error("private journal should be deleted")
 	}
 }

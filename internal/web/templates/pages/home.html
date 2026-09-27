@@ -1,13 +1,53 @@
 {{define "content"}}
+{{$d := .Data}}
 <h1 class="h3 mb-3">Welcome, {{.User.Name}}</h1>
 <div class="row g-3">
-  <div class="col-12 col-lg-8">
+  {{if not .User.IsSeer}}
+  <div class="col-12 col-lg-7">
+    <div class="card h-100">
+      <div class="card-body">
+        <h2 class="h5 card-title"><i class="bi bi-person-badge"></i> My Agents</h2>
+        {{if $d.Agents}}
+        <div class="list-group list-group-flush mb-3">
+          {{range $d.Agents}}
+          <a class="list-group-item list-group-item-action px-0 d-flex justify-content-between align-items-center" href="/agents/{{.ID}}">
+            <span><strong>{{.Name}}</strong> <span class="text-body-secondary small">{{className $d.Snapshot .Class}}{{if ne .Status "Active"}} · {{.Status}}{{end}}</span></span>
+            <span class="small">{{with index $d.CampNames .CampaignID}}<i class="bi bi-map"></i> {{.}}{{else}}<span class="text-body-secondary">not in a campaign</span>{{end}}</span>
+          </a>
+          {{end}}
+        </div>
+        {{else}}
+        <p class="text-body-secondary">You don't have an Agent yet. Make one below; you can bring it into a campaign now or later.</p>
+        {{end}}
+        <form class="row g-2" method="post" action="/agents">
+          <div class="col-12 col-md-5"><input class="form-control" name="name" placeholder="New Agent's name" required aria-label="Agent name"></div>
+          <div class="col-6 col-md-3">
+            <select class="form-select" name="class" required aria-label="Class">
+              <option value="">Class…</option>
+              {{with $d.Snapshot}}{{range .Classes.Classes}}<option value="{{.ID}}">{{.Name}}</option>{{end}}{{end}}
+            </select>
+          </div>
+          <div class="col-6 col-md-4">
+            <select class="form-select" name="campaign_id" aria-label="Campaign">
+              <option value="0">No campaign yet</option>
+              {{range $d.Campaigns}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+            </select>
+          </div>
+          <div class="col-12"><button class="btn btn-primary" type="submit"><i class="bi bi-person-plus"></i> Create Agent</button>
+            <span class="form-text ms-2">Only you can see an Agent until it joins a campaign; then everyone there can read it, but only you can play it.</span></div>
+        </form>
+      </div>
+    </div>
+  </div>
+  {{end}}
+
+  <div class="col-12 {{if .User.IsSeer}}col-lg-8{{else}}col-lg-5{{end}}">
     <div class="card h-100">
       <div class="card-body">
         <h2 class="h5 card-title"><i class="bi bi-map"></i> Campaigns</h2>
-        {{if .Data.Campaigns}}
+        {{if $d.Campaigns}}
         <div class="list-group list-group-flush mb-3">
-          {{range .Data.Campaigns}}
+          {{range $d.Campaigns}}
           <a class="list-group-item list-group-item-action px-0 d-flex justify-content-between align-items-center" href="/c/{{.ID}}">
             <span><strong>{{.Name}}</strong>{{with .HandName}} · {{.}}{{end}}</span>
             <span class="small text-body-secondary">{{.Mode}} · season {{.Season}}{{if .Archived}} · archived{{end}}</span>
@@ -17,33 +57,40 @@
         {{else if .User.IsSeer}}
         <p class="text-body-secondary">No campaigns yet. Start one below.</p>
         {{else}}
-        <p class="text-body-secondary">You haven't been added to a campaign yet. Ask the Seer.</p>
+        <p class="text-body-secondary">You're not in a campaign yet. The Seer adds you from the campaign's page.</p>
         {{end}}
         {{if .User.IsSeer}}
         <form class="row g-2" method="post" action="/campaigns">
           <div class="col-12 col-md-5"><input class="form-control" name="name" placeholder="Campaign name" required aria-label="Campaign name"></div>
-          <div class="col-6 col-md-3">
+          <div class="col-12 col-md-4">
             <select class="form-select" name="mode" aria-label="Mode">
-              {{range .Data.Modes}}<option value="{{.}}">{{.}}</option>{{end}}
+              <option value="group">Group: a Seer and players</option>
+              <option value="solitaire">Solitaire: one player, no Seer (pp. 96-105)</option>
+              <option value="Seer-less">Seer-less: players share the Seer role (p. 92)</option>
             </select>
           </div>
-          <div class="col-6 col-md-2 d-flex align-items-center">
-            <div class="form-check mb-0"><input class="form-check-input" type="checkbox" name="merciful" id="merciful"><label class="form-check-label small" for="merciful">Merciful Mode</label></div>
+          <div class="col-12 col-md-3"><button class="btn btn-primary w-100" type="submit"><i class="bi bi-plus-lg"></i> Start</button></div>
+          <div class="col-12">
+            <div class="form-check mb-0">
+              <input class="form-check-input" type="checkbox" name="merciful" id="merciful">
+              <label class="form-check-label" for="merciful">Merciful Mode</label>
+            </div>
+            <div class="form-text">Optional rule (pp. 93-94): after a scenario in which the Agents killed anyone, each one who killed faces a Soothe challenge at the Pool of Mourning. You can change it later in the campaign's settings.</div>
           </div>
-          <div class="col-12 col-md-2"><button class="btn btn-primary w-100" type="submit"><i class="bi bi-plus-lg"></i> Start</button></div>
         </form>
         {{end}}
       </div>
     </div>
   </div>
+
   <div class="col-12 col-lg-4">
     <div class="card h-100">
       <div class="card-body">
         <h2 class="h5 card-title"><i class="bi bi-book"></i> Rules data</h2>
-        {{with .Data.Snapshot}}
+        {{with $d.Snapshot}}
         <p class="card-text mb-1"><strong>{{.Label}}</strong>: {{len .Classes.Classes}} classes, {{len .Cards.Vision}} vision cards, {{len .Cards.Pips}} pips.</p>
         <p class="card-text small text-body-secondary">Loaded {{since .LoadedAt}}.</p>
-        {{with $.Data.Updates}}<p class="card-text small"><i class="bi bi-stars text-info"></i> {{index . 0}} is available. <a href="/admin">Update in Admin</a></p>{{end}}
+        {{with $d.Updates}}<p class="card-text small"><i class="bi bi-stars text-info"></i> {{index . 0}} is available. <a href="/admin">Update in Admin</a></p>{{end}}
         {{else}}
         <p class="card-text text-warning">Rules data hasn't loaded yet.{{if $.User.IsSeer}} Check <a href="/admin">Admin</a>.{{end}}</p>
         {{end}}

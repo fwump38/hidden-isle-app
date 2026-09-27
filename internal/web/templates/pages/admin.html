@@ -74,10 +74,10 @@
     <div class="card">
       <div class="card-body">
         <h2 class="h5 card-title"><i class="bi bi-people"></i> People</h2>
-        <p class="small text-body-secondary">Players sign in on the home network with their PIN, or anywhere through SSO with their email. The Seer signs in with SSO or, at home, a password.</p>
+        <p class="small text-body-secondary">Players sign in at home with their name and PIN; no email needed. An SSO email (optional) lets someone use Sign in with Authentik away from home too. Add players to campaigns from each campaign's overview.</p>
         <div class="table-responsive">
           <table class="table align-middle">
-            <thead><tr><th>Name</th><th>SSO email</th><th>PIN / password</th><th>Status</th></tr></thead>
+            <thead><tr><th>Name</th><th>SSO email</th><th>PIN / password</th><th>Status {{help "Inactive: can't sign in, nothing deleted. The bin deletes the person (their campaign Agents stay, played by you)."}}</th></tr></thead>
             <tbody>
             {{range .Data.Users}}
               <tr>
@@ -97,11 +97,16 @@
                     <button class="btn btn-outline-light" type="submit">Set</button>
                   </form>
                 </td>
-                <td>
-                  <form method="post" action="/admin/users/{{.ID}}">
+                <td class="text-nowrap">
+                  <form method="post" action="/admin/users/{{.ID}}" class="d-inline">
                     <input type="hidden" name="action" value="toggle">
-                    <button class="btn btn-sm {{if .Active}}btn-outline-success{{else}}btn-outline-secondary{{end}}" type="submit">{{if .Active}}Active{{else}}Inactive{{end}}</button>
+                    <button class="btn btn-sm {{if .Active}}btn-outline-success{{else}}btn-outline-secondary{{end}}" type="submit" title="Inactive people can't sign in; nothing is deleted">{{if .Active}}Active{{else}}Inactive{{end}}</button>
                   </form>
+                  {{if not .IsSeer}}
+                  <form method="post" action="/admin/users/{{.ID}}/delete" class="d-inline">
+                    <button class="btn btn-sm btn-outline-danger" type="submit" aria-label="Delete {{.Name}}" hx-confirm="Delete {{.Name}}? Their Agents in campaigns stay (played by you); their Agents outside any campaign and their private journals are deleted. This can't be undone."><i class="bi bi-trash"></i></button>
+                  </form>
+                  {{end}}
                 </td>
               </tr>
             {{end}}

@@ -42,3 +42,10 @@ fieldset:disabled .btn, fieldset:disabled .form-control, fieldset:disabled .form
   .hi-print, .hi-print * { color: #000 !important; }
   .hi-print .border { border-color: #999 !important; }
 }
+
+/* Chrome's scroll anchoring jumps to the bottom when #main is swapped in place; app.js restores
+   the position instead. */
+body, main { overflow-anchor: none; }
+.hi-help { color: var(--bs-secondary-color); cursor: help; font-size: .85em; margin-left: .2em; }
+.hi-help:focus { outline: 2px solid var(--bs-focus-ring-color); border-radius: 50%; }
+.form-text { font-size: .8em; }

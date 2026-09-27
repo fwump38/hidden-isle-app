@@ -48,13 +48,13 @@
 {{if $seer}}
 <form method="post" action="/c/{{$c.ID}}/r/clock" class="card card-body mt-3">
   <input type="hidden" name="back" value="{{$back}}">
-  <h2 class="h6">New clock</h2>
+  <h2 class="h6">New clock {{help "Public clocks show to players; Seer-only ones don't. A clock tied to an Agent (ability or proficiency clocks) can be ticked by that Agent's player."}}</h2>
   <div class="row g-2">
     <div class="col-12 col-md-5"><input class="form-control" name="set.name" placeholder="What happens when it fills" required aria-label="Name"></div>
     <div class="col-4 col-md-2"><select class="form-select" name="set.segments" aria-label="Segments">{{range $snap.Limits.Clock.Segments}}<option {{if eq . 4}}selected{{end}}>{{.}}</option>{{end}}</select></div>
     <div class="col-8 col-md-3"><select class="form-select" name="set.scope" aria-label="Scope">{{range $snap.Campaign.ClockScope}}<option>{{.}}</option>{{end}}</select></div>
-    <div class="col-6 col-md-2"><select class="form-select" name="set.visibility" aria-label="Visibility"><option value="party">Public</option><option value="seer">Seer only</option></select></div>
-    <div class="col-6 col-md-4"><select class="form-select" name="set.agent_id" aria-label="Agent"><option value="">Not an Agent's clock</option>{{range $d.Agents}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></div>
+    <div class="col-6 col-md-2"><select class="form-select" name="set.visibility" aria-label="Visibility" title="Seer-only clocks are hidden from players until you make them public"><option value="party">Public</option><option value="seer">Seer only</option></select></div>
+    <div class="col-6 col-md-4"><select class="form-select" name="set.agent_id" aria-label="Agent" title="Tie ability or proficiency clocks to an Agent: its player can then tick it from their sheet"><option value="">Not an Agent's clock</option>{{range $d.Agents}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></div>
     <div class="col-6 col-md-4"><input class="form-control" type="number" min="0" name="set.filled" value="0" aria-label="Filled"></div>
     <div class="col-6 col-md-4"><button class="btn btn-primary w-100" type="submit"><i class="bi bi-plus-lg"></i> Add clock</button></div>
   </div>
@@ -125,7 +125,7 @@
   <div class="row g-2">
     <div class="col-12 col-md-5"><input class="form-control" name="set.name" placeholder="Name (a rumor is enough)" required aria-label="Name"></div>
     <div class="col-6 col-md-2"><input class="form-control" type="number" min="0" name="set.track_length" placeholder="Track" aria-label="Track length"></div>
-    <div class="col-6 col-md-3 d-flex align-items-center"><div class="form-check mb-0"><input class="form-check-input" type="checkbox" name="set.hidden" id="new-hidden"><label class="form-check-label small" for="new-hidden">Hidden (prep)</label></div></div>
+    <div class="col-6 col-md-3 d-flex align-items-center"><div class="form-check mb-0"><input class="form-check-input" type="checkbox" name="set.hidden" id="new-hidden"><label class="form-check-label small" for="new-hidden">Hidden {{help "Hidden adversaries are your prep: players don't see them until you untick Hidden. Secrets are always Seer-only."}}</label></div></div>
     <div class="col-12 col-md-2"><button class="btn btn-primary w-100" type="submit"><i class="bi bi-plus-lg"></i> Add</button></div>
   </div>
 </form>

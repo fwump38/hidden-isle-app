@@ -84,18 +84,30 @@ func (s *Service) SetMember(a Actor, campaignID, userID uint, member bool) error
 
 // ---------------------------------------------------------------- agents
 
-// NewAgent creates an Agent with the class's pre-filled skills. Players may only create
-// Agents they own, in campaigns they belong to.
+// NewAgent creates an Agent with the class's pre-filled skills. campaignID 0 creates it outside
+// any campaign (private to its player). Players always own what they create and may only put it
+// in campaigns they belong to. When the Seer creates an Agent for a player in a campaign, the
+// player is added to the campaign.
 func (s *Service) NewAgent(a Actor, campaignID uint, name, class string, ownerID *uint, o Opts) (*db.Agent, error) {
 	snap, err := s.snap()
 	if err != nil {
 		return nil, err
 	}
+	if a.User == nil {
+		return nil, ErrForbidden
+	}
 	if !a.IsSeer() {
-		if a.User == nil {
-			return nil, ErrForbidden
-		}
 		ownerID = &a.User.ID
+	}
+	if campaignID != 0 {
+		if err := s.canView(s.DB, a, campaignID); err != nil {
+			return nil, err
+		}
+		if a.IsSeer() && ownerID != nil {
+			if err := s.SetMember(a, campaignID, *ownerID, true); err != nil {
+				return nil, err
+			}
+		}
 	}
 	ag := &db.Agent{CampaignID: campaignID, OwnerID: ownerID, Name: name, Class: class, Status: "Active",
 		Skills: map[string]int{}, Harm: map[string][]string{}}
@@ -111,6 +123,15 @@ func (s *Service) NewAgent(a Actor, campaignID uint, name, class string, ownerID
 	return ag, s.Create(a, "agent", ag, o)
 }
 
+// MyAgents lists the actor's own Agents, in every campaign and none.
+func (s *Service) MyAgents(a Actor) ([]db.Agent, error) {
+	if a.User == nil {
+		return nil, ErrForbidden
+	}
+	var out []db.Agent
+	return out, s.DB.Where("owner_id = ?", a.User.ID).Order("status = 'Active' desc, name").Find(&out).Error
+}
+
 func (s *Service) Agents(a Actor, campaignID uint) ([]db.Agent, error) {
 	if err := s.canView(s.DB, a, campaignID); err != nil {
 		return nil, err
@@ -124,15 +145,44 @@ func (s *Service) Agent(a Actor, id uint) (*db.Agent, error) {
 	if err := s.DB.First(&ag, id).Error; err != nil {
 		return nil, notFound(err)
 	}
-	if err := s.canView(s.DB, a, ag.CampaignID); err != nil {
+	if err := s.agentAccess(s.DB, a, &ag); err != nil {
 		return nil, err
 	}
 	return &ag, nil
 }
 
 // CanEditAgent reports whether the actor may change this Agent's sheet.
-func (s *Service) CanEditAgent(a Actor, ag *db.Agent) bool {
-	return a.IsSeer() || (a.User != nil && ag.OwnerID != nil && *ag.OwnerID == a.User.ID)
+func (s *Service) CanEditAgent(a Actor, ag *db.Agent) bool { return ownsAgent(a, ag) }
+
+// AgentEvents is one Agent's change log, wherever it happened (in campaigns or outside any).
+func (s *Service) AgentEvents(a Actor, agentID uint, limit int) ([]db.Event, error) {
+	ag, err := s.Agent(a, agentID)
+	if err != nil {
+		return nil, err
+	}
+	q := s.DB.Where("entity_type = ? AND entity_id = ?", "agent", ag.ID).Order("id desc")
+	if !a.IsSeer() {
+		q = q.Where("visibility = ? OR (visibility = ? AND owner_id = ?)", db.VisParty, db.VisOwner, a.User.ID)
+	}
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	var out []db.Event
+	return out, q.Limit(limit).Find(&out).Error
+}
+
+// AgentHistory lists the history entries written for one Agent.
+func (s *Service) AgentHistory(a Actor, agentID uint) ([]db.Entry, error) {
+	ag, err := s.Agent(a, agentID)
+	if err != nil {
+		return nil, err
+	}
+	q := s.DB.Where("kind = ? AND agent_id = ?", "history", ag.ID).Order("created_at desc")
+	if !ownsAgent(a, ag) {
+		q = q.Where("visibility = ? AND published = ?", db.VisParty, true)
+	}
+	var out []db.Entry
+	return out, q.Find(&out).Error
 }
 
 func (s *Service) Contacts(a Actor, agentID uint) ([]db.Contact, error) {
@@ -260,7 +310,13 @@ func (s *Service) WriteEntry(a Actor, e *db.Entry) error {
 	if !entryKinds[e.Kind] {
 		return fmt.Errorf("unknown entry kind %q", e.Kind)
 	}
-	if err := s.canView(s.DB, a, e.CampaignID); err != nil {
+	if e.Kind == "history" {
+		ag, err := s.Agent(a, derefU(e.AgentID))
+		if err != nil || !ownsAgent(a, ag) {
+			return ErrForbidden
+		}
+		e.CampaignID = ag.CampaignID
+	} else if err := s.canView(s.DB, a, e.CampaignID); err != nil {
 		return err
 	}
 	if !a.IsSeer() {
@@ -292,7 +348,7 @@ func (s *Service) WriteEntry(a Actor, e *db.Entry) error {
 	if err := s.DB.First(&old, e.ID).Error; err != nil {
 		return notFound(err)
 	}
-	if old.CampaignID != e.CampaignID || (!a.IsSeer() && old.AuthorID != a.User.ID) {
+	if (old.CampaignID != e.CampaignID && old.Kind != "history") || (!a.IsSeer() && old.AuthorID != a.User.ID) {
 		return ErrForbidden
 	}
 	e.AuthorID, e.CreatedAt = old.AuthorID, old.CreatedAt
@@ -327,11 +383,13 @@ func (s *Service) DeleteEntry(a Actor, id uint) error {
 	if err := s.DB.First(&e, id).Error; err != nil {
 		return notFound(err)
 	}
-	if err := s.canView(s.DB, a, e.CampaignID); err != nil {
-		return err
-	}
 	if !a.IsSeer() && e.AuthorID != a.User.ID {
 		return ErrForbidden
+	}
+	if !a.IsSeer() && e.CampaignID != 0 {
+		if err := s.canView(s.DB, a, e.CampaignID); err != nil {
+			return err
+		}
 	}
 	return s.DB.Delete(&e).Error
 }

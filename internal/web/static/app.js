@@ -56,3 +56,29 @@ document.addEventListener("click", async (e) => {
     btn.innerHTML = '<i class="bi bi-cursor-text"></i> Press Ctrl/Cmd+C';
   }
 });
+
+// Keep the scroll position when a form re-renders the same page (htmx swaps #main in place);
+// go to the top when a link opens a different page.
+let hiScroll = null;
+document.addEventListener("htmx:beforeRequest", () => { hiScroll = { x: window.scrollX, y: window.scrollY, path: location.pathname }; });
+document.addEventListener("htmx:afterSettle", (e) => {
+  const url = e.detail.xhr && e.detail.xhr.responseURL ? new URL(e.detail.xhr.responseURL) : null;
+  if (hiScroll && url && url.pathname === hiScroll.path) {
+    window.scrollTo(hiScroll.x, hiScroll.y);
+  } else if (url && e.detail.target && e.detail.target.id === "main") {
+    window.scrollTo(0, 0);
+  }
+  hiScroll = null;
+  initTooltips(document.getElementById("main") || document);
+});
+// Close tooltips on elements about to be replaced, so none are left floating.
+document.addEventListener("htmx:beforeSwap", () => {
+  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((el) => bootstrap.Tooltip.getInstance(el)?.dispose());
+});
+
+// Bootstrap tooltips for the "?" help icons (tap to show on phones).
+function initTooltips(root) {
+  if (!window.bootstrap) return;
+  root.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((el) => bootstrap.Tooltip.getOrCreateInstance(el, { trigger: "hover focus" }));
+}
+document.addEventListener("DOMContentLoaded", () => initTooltips(document));

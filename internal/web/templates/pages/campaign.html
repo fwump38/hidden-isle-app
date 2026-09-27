@@ -1,5 +1,5 @@
 {{define "content"}}
-{{$c := .Nav.Campaign}}{{$snap := .Nav.Snap}}{{$d := .Data}}
+{{$c := .Nav.Campaign}}{{$snap := .Nav.Snap}}{{$d := .Data}}{{$seer := .User.IsSeer}}
 <div class="row g-3">
   <div class="col-12 col-xl-8">
     <div class="card mb-3">
@@ -23,29 +23,42 @@
           </div>
           {{end}}
         </div>
-        {{else}}<p class="text-body-secondary">No Agents yet.</p>{{end}}
+        {{else}}<p class="text-body-secondary">No Agents in this campaign yet.</p>{{end}}
 
-        {{if or $.User.IsSeer (eq $d.MyAgents 0)}}
-        <form class="row g-2 mt-2" method="post" action="/c/{{$c.ID}}/agents">
-          <div class="col-12 col-md-4"><input class="form-control" name="name" placeholder="New Agent's name" required aria-label="Agent name"></div>
-          <div class="col-6 col-md-3">
-            <select class="form-select" name="class" required aria-label="Class">
-              <option value="">Class…</option>
-              {{with $snap}}{{range .Classes.Classes}}<option value="{{.ID}}">{{.Name}}</option>{{end}}{{end}}
+        {{if and (not $seer) $d.MyOther}}
+        <form class="row g-2 mt-2" method="post" action="/c/{{$c.ID}}/bring">
+          <div class="col-8 col-md-6">
+            <select class="form-select" name="agent_id" required aria-label="Your Agent">
+              {{range $d.MyOther}}<option value="{{.ID}}">{{.Name}} ({{className $snap .Class}})</option>{{end}}
             </select>
           </div>
-          {{if $.User.IsSeer}}
-          <div class="col-6 col-md-3">
-            <select class="form-select" name="owner_id" aria-label="Player">
-              <option value="">Played by… (Seer)</option>
-              {{range $d.Players}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
-            </select>
-          </div>
-          {{end}}
-          <div class="col-12 col-md-2"><button class="btn btn-primary w-100" type="submit"><i class="bi bi-person-plus"></i> Create</button></div>
+          <div class="col-4 col-md-3"><button class="btn btn-outline-light w-100" type="submit"><i class="bi bi-box-arrow-in-right"></i> Bring in</button></div>
+          <div class="col-12 form-text mt-0">Bring one of your existing Agents into this campaign. An Agent is in one campaign at a time.</div>
         </form>
-        <p class="small text-body-secondary mt-2 mb-0">Creates the sheet with the class's pre-filled skills. The step-by-step creation wizard comes later.</p>
         {{end}}
+
+        <details class="mt-3" {{if not $d.Agents}}open{{end}}>
+          <summary class="small text-body-secondary">{{if $seer}}Create an Agent for a player{{else}}Create a new Agent here{{end}}</summary>
+          <form class="row g-2 mt-1" method="post" action="/c/{{$c.ID}}/agents">
+            <div class="col-12 col-md-4"><input class="form-control" name="name" placeholder="Name" required aria-label="Agent name"></div>
+            <div class="col-6 col-md-3">
+              <select class="form-select" name="class" required aria-label="Class">
+                <option value="">Class…</option>
+                {{with $snap}}{{range .Classes.Classes}}<option value="{{.ID}}">{{.Name}}</option>{{end}}{{end}}
+              </select>
+            </div>
+            {{if $seer}}
+            <div class="col-6 col-md-3">
+              <select class="form-select" name="owner_id" aria-label="Played by">
+                <option value="">Played by the Seer</option>
+                {{range $d.AllPlayers}}<option value="{{.ID}}">{{.Name}}{{if not (index $d.Members .ID)}} (adds them){{end}}</option>{{end}}
+              </select>
+            </div>
+            {{end}}
+            <div class="col-12 col-md-2"><button class="btn btn-primary w-100" type="submit"><i class="bi bi-person-plus"></i> Create</button></div>
+            <div class="col-12 form-text mt-0">Starts the sheet with the class's pre-filled skills (p. 40).{{if $seer}} Choosing a player who isn't in this campaign adds them.{{end}}</div>
+          </form>
+        </details>
       </div>
     </div>
 
@@ -61,6 +74,35 @@
   </div>
 
   <div class="col-12 col-xl-4">
+    <div class="card mb-3">
+      <div class="card-body">
+        <h2 class="h5 card-title"><i class="bi bi-person-lines-fill"></i> Players {{help "Players in a campaign can open it, read its Agents, adversaries and territories, and bring their own Agents in. Only the Seer adds or removes players."}}</h2>
+        {{range $d.Players}}
+        <div class="d-flex justify-content-between align-items-center border-bottom py-1">
+          <span>{{.Name}}</span>
+          {{if $seer}}
+          <form method="post" action="/c/{{$c.ID}}/members">
+            <input type="hidden" name="user_id" value="{{.ID}}"><input type="hidden" name="member" value="off"><input type="hidden" name="back" value="/c/{{$c.ID}}">
+            <button class="btn btn-sm btn-link text-danger p-0" type="submit" title="Remove from campaign" aria-label="Remove {{.Name}} from the campaign" hx-confirm="Remove {{.Name}} from {{$c.Name}}? Their Agents stay in the campaign."><i class="bi bi-person-dash"></i></button>
+          </form>
+          {{end}}
+        </div>
+        {{else}}<p class="small text-body-secondary mb-2">No players yet.</p>{{end}}
+        {{if $seer}}
+        {{$any := false}}{{range $d.AllPlayers}}{{if not (index $d.Members .ID)}}{{$any = true}}{{end}}{{end}}
+        {{if $any}}
+        <form class="input-group input-group-sm mt-2" method="post" action="/c/{{$c.ID}}/members">
+          <input type="hidden" name="member" value="on"><input type="hidden" name="back" value="/c/{{$c.ID}}">
+          <select class="form-select" name="user_id" aria-label="Player to add">
+            {{range $d.AllPlayers}}{{if not (index $d.Members .ID)}}<option value="{{.ID}}">{{.Name}}</option>{{end}}{{end}}
+          </select>
+          <button class="btn btn-outline-light" type="submit"><i class="bi bi-person-add"></i> Add</button>
+        </form>
+        {{else if not $d.AllPlayers}}<p class="small text-body-secondary mt-2 mb-0">Create players in <a href="/admin">Admin</a> first.</p>{{end}}
+        {{end}}
+      </div>
+    </div>
+
     <div class="card mb-3">
       <div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-2">

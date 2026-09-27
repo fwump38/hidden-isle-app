@@ -23,7 +23,9 @@ type kind struct {
 	seerDel   bool                                 // only the Seer may delete
 	canWrite  func(s *Service, tx *gorm.DB, a Actor, obj any) error
 	canRead   func(a Actor, obj any) bool
-	validate  func(snap *gamedata.Snapshot, obj any) []string
+	// access decides whether the actor may see the record at all. Default: campaign membership.
+	access   func(s *Service, tx *gorm.DB, a Actor, obj any) error
+	validate func(snap *gamedata.Snapshot, obj any) []string
 }
 
 // Fields nobody may patch.
@@ -67,10 +69,18 @@ func init() {
 		name: "agent", new: func() any { return &db.Agent{} },
 		campaign: func(o any) uint { return o.(*db.Agent).CampaignID },
 		display:  func(o any) string { return o.(*db.Agent).Name },
-		vis:      party, seerOnly: []string{"owner_id", "status", "class"}, seerDel: true, canRead: always,
-		canWrite: func(s *Service, tx *gorm.DB, a Actor, o any) error {
+		// An Agent outside any campaign is private to its player; in a campaign everyone there may read it (p. 28).
+		vis: func(o any) (db.Visibility, *uint) {
 			ag := o.(*db.Agent)
-			if a.IsSeer() || (ag.OwnerID != nil && *ag.OwnerID == a.User.ID) {
+			if ag.CampaignID == 0 {
+				return db.VisOwner, ag.OwnerID
+			}
+			return db.VisParty, nil
+		},
+		seerOnly: []string{"owner_id", "class"}, canRead: always,
+		access: func(s *Service, tx *gorm.DB, a Actor, o any) error { return s.agentAccess(tx, a, o.(*db.Agent)) },
+		canWrite: func(s *Service, tx *gorm.DB, a Actor, o any) error {
+			if ownsAgent(a, o.(*db.Agent)) {
 				return nil
 			}
 			return ErrForbidden
@@ -82,14 +92,28 @@ func init() {
 		name: "contact", new: func() any { return &db.Contact{} },
 		campaign: func(o any) uint { return o.(*db.Contact).CampaignID },
 		display:  func(o any) string { return o.(*db.Contact).Name },
-		vis:      party, seerOnly: []string{"agent_id"}, canRead: always,
+		vis: func(o any) (db.Visibility, *uint) {
+			if o.(*db.Contact).CampaignID == 0 {
+				return db.VisOwner, nil // set from the Agent in record()
+			}
+			return db.VisParty, nil
+		},
+		seerOnly: []string{"agent_id"}, canRead: always,
+		access: func(s *Service, tx *gorm.DB, a Actor, o any) error {
+			var ag db.Agent
+			if err := tx.First(&ag, o.(*db.Contact).AgentID).Error; err != nil {
+				return ErrNotFound
+			}
+			return s.agentAccess(tx, a, &ag)
+		},
 		canWrite: func(s *Service, tx *gorm.DB, a Actor, o any) error {
 			c := o.(*db.Contact)
 			var ag db.Agent
-			if err := tx.First(&ag, c.AgentID).Error; err != nil || ag.CampaignID != c.CampaignID {
-				return fmt.Errorf("contact's Agent isn't in this campaign")
+			if err := tx.First(&ag, c.AgentID).Error; err != nil {
+				return ErrNotFound
 			}
-			if a.IsSeer() || (ag.OwnerID != nil && *ag.OwnerID == a.User.ID) {
+			c.CampaignID = ag.CampaignID // contacts follow their Agent
+			if ownsAgent(a, &ag) {
 				return nil
 			}
 			return ErrForbidden
@@ -245,6 +269,24 @@ func init() {
 			return nil
 		},
 	})
+}
+
+func ownsAgent(a Actor, ag *db.Agent) bool {
+	return a.IsSeer() || (a.User != nil && ag.OwnerID != nil && *ag.OwnerID == a.User.ID)
+}
+
+// agentAccess: the Seer and the owner always; campaign members for an Agent in their campaign.
+func (s *Service) agentAccess(tx *gorm.DB, a Actor, ag *db.Agent) error {
+	if a.User == nil {
+		return ErrForbidden
+	}
+	if ownsAgent(a, ag) {
+		return nil
+	}
+	if ag.CampaignID == 0 {
+		return ErrNotFound // someone else's private Agent: don't reveal it exists
+	}
+	return s.canView(tx, a, ag.CampaignID)
 }
 
 func validateAgent(snap *gamedata.Snapshot, a *db.Agent) []string {

@@ -54,7 +54,12 @@ func templateFuncs() template.FuncMap {
 			}
 			return m, nil
 		},
-		"list":     func(s ...string) []string { return s },
+		"list": func(s ...string) []string { return s },
+		// help renders a small "?" that shows text on hover, focus or tap.
+		"help": func(text string) template.HTML {
+			return template.HTML(`<i class="bi bi-question-circle hi-help" tabindex="0" role="button" data-bs-toggle="tooltip" data-bs-title="` +
+				template.HTMLEscapeString(text) + `" aria-label="` + template.HTMLEscapeString(text) + `"></i>`)
+		},
 		"add":      func(a, b int) int { return a + b },
 		"sub":      func(a, b int) int { return a - b },
 		"contains": func(list []string, s string) bool { return slices.Contains(list, s) },

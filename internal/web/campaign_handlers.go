@@ -37,6 +37,11 @@ func (s *Server) registerCampaign(mux *http.ServeMux) {
 	mux.Handle("POST /r/{kind}/{id}/delete", u(s.deleteRecord))
 	mux.Handle("POST /events/{id}/undo", u(s.undoEvent))
 
+	mux.Handle("POST /agents", u(s.createAgent))
+	mux.Handle("POST /agents/{id}/campaign", u(s.assignAgent))
+	mux.Handle("POST /c/{cid}/bring", u(s.bringAgent))
+	mux.Handle("POST /agents/{id}/delete", u(s.deleteAgent))
+	mux.Handle("POST /c/{cid}/delete", u(s.deleteCampaign))
 	mux.Handle("GET /agents/{id}", u(s.agentPage))
 	mux.Handle("GET /agents/{id}/print", u(s.agentPrint))
 	mux.Handle("POST /agents/{id}", u(s.updateAgent))
@@ -113,6 +118,7 @@ type campaignNav struct {
 	Snap     *gamedata.Snapshot
 }
 
+// page renders a page; c may be nil (an Agent outside any campaign).
 func (s *Server) page(w http.ResponseWriter, r *http.Request, name, title string, c *db.Campaign, section string, data any) {
 	s.render(w, r, name, http.StatusOK, pageData{Title: title, Error: takeFlash(w, r), Data: data,
 		Nav: &campaignNav{Campaign: c, Section: section, Snap: s.Data.Current()}})
@@ -131,6 +137,9 @@ func (s *Server) createCampaign(w http.ResponseWriter, r *http.Request) {
 }
 
 type dashboardData struct {
+	AllPlayers  []db.User // Seer: every active player (for "add a player" and "played by")
+	Members     map[uint]bool
+	MyOther     []db.Agent // the player's Agents not in this campaign
 	Agents      []db.Agent
 	Clocks      []db.Clock
 	Adversaries []db.Adversary
@@ -161,6 +170,19 @@ func (s *Server) campaignPage(w http.ResponseWriter, r *http.Request) {
 	d.Events, _ = s.Svc.Events(a, c.ID, campaign.EventFilter{Limit: 12})
 	d.Recaps, _ = s.Svc.Entries(a, c.ID, "recap", 0)
 	d.Players, _ = s.Svc.Members(a, c.ID)
+	d.Members = map[uint]bool{}
+	for _, m := range d.Players {
+		d.Members[m.ID] = true
+	}
+	if a.IsSeer() {
+		s.DB.Where("role = ? AND active = ?", db.RolePlayer, true).Order("name").Find(&d.AllPlayers)
+	}
+	mine, _ := s.Svc.MyAgents(a)
+	for _, ag := range mine {
+		if ag.CampaignID != c.ID {
+			d.MyOther = append(d.MyOther, ag)
+		}
+	}
 	s.page(w, r, "campaign", c.Name, c, "overview", d)
 }
 
@@ -200,34 +222,87 @@ func (s *Server) setMember(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 	cid := pathID(r, "cid")
+	if cid == 0 {
+		if n, err := strconv.ParseUint(r.FormValue("campaign_id"), 10, 64); err == nil {
+			cid = uint(n)
+		}
+	}
 	var owner *uint
 	if n, err := strconv.ParseUint(r.FormValue("owner_id"), 10, 64); err == nil && n > 0 {
 		o := uint(n)
 		owner = &o
 	}
+	back := "/"
+	if cid != 0 {
+		back = fmt.Sprintf("/c/%d", cid)
+	}
 	ag, err := s.Svc.NewAgent(s.actor(r), cid, strings.TrimSpace(r.FormValue("name")), r.FormValue("class"), owner, campaign.Opts{})
 	if err != nil {
-		s.done(w, r, err, fmt.Sprintf("/c/%d", cid))
+		s.done(w, r, err, back)
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/agents/%d", ag.ID), http.StatusSeeOther)
 }
 
+func (s *Server) assignAgent(w http.ResponseWriter, r *http.Request) {
+	id := pathID(r, "id")
+	cid, _ := strconv.ParseUint(r.FormValue("campaign_id"), 10, 64)
+	err := s.Svc.AssignAgent(s.actor(r), id, uint(cid), campaign.Opts{Reason: strings.TrimSpace(r.FormValue("why"))})
+	s.done(w, r, err, fmt.Sprintf("/agents/%d", id))
+}
+
+// bringAgent moves one of the player's Agents into this campaign.
+func (s *Server) bringAgent(w http.ResponseWriter, r *http.Request) {
+	cid := pathID(r, "cid")
+	id, _ := strconv.ParseUint(r.FormValue("agent_id"), 10, 64)
+	err := s.Svc.AssignAgent(s.actor(r), uint(id), cid, campaign.Opts{})
+	s.done(w, r, err, fmt.Sprintf("/c/%d", cid))
+}
+
+func (s *Server) deleteAgent(w http.ResponseWriter, r *http.Request) {
+	id := pathID(r, "id")
+	a := s.actor(r)
+	ag, err := s.Svc.Agent(a, id)
+	back := "/"
+	if err == nil {
+		if ag.CampaignID != 0 {
+			back = fmt.Sprintf("/c/%d", ag.CampaignID)
+		}
+		err = s.Svc.Delete(a, "agent", id, campaign.Opts{Reason: strings.TrimSpace(r.FormValue("why"))})
+	}
+	if err != nil {
+		s.done(w, r, err, fmt.Sprintf("/agents/%d", id))
+		return
+	}
+	http.Redirect(w, r, back, http.StatusSeeOther)
+}
+
+func (s *Server) deleteCampaign(w http.ResponseWriter, r *http.Request) {
+	cid := pathID(r, "cid")
+	if err := s.Svc.DeleteCampaign(s.actor(r), cid, r.FormValue("confirm")); err != nil {
+		s.done(w, r, err, fmt.Sprintf("/c/%d/settings", cid))
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
 type sheetData struct {
-	Agent    *db.Agent
-	Class    *gamedata.Class
-	CanEdit  bool
-	Owner    string
-	Contacts []db.Contact
-	Clocks   []db.Clock
-	Events   []db.Event
-	History  []db.Entry
-	Players  []db.User
-	Suits    []suitRow
-	Items    []gamedata.Item // common + class items, for the pull list
-	Abil     []abilityView   // the Agent's abilities with their text
-	Unused   []gamedata.Ability
-	Schools  []string
+	Campaign  *db.Campaign  // nil when the Agent isn't in a campaign
+	Campaigns []db.Campaign // where the owner may move it
+	Agent     *db.Agent
+	Class     *gamedata.Class
+	CanEdit   bool
+	Owner     string
+	Contacts  []db.Contact
+	Clocks    []db.Clock
+	Events    []db.Event
+	History   []db.Entry
+	Players   []db.User
+	Suits     []suitRow
+	Items     []gamedata.Item // common + class items, for the pull list
+	Abil      []abilityView   // the Agent's abilities with their text
+	Unused    []gamedata.Ability
+	Schools   []string
 }
 
 type suitRow struct {
@@ -257,33 +332,41 @@ func (s *Server) agentSheet(a campaign.Actor, id uint) (*sheetData, *db.Campaign
 	if err != nil {
 		return nil, nil, err
 	}
-	c, err := s.Svc.Campaign(a, ag.CampaignID)
-	if err != nil {
-		return nil, nil, err
+	var c *db.Campaign
+	if ag.CampaignID != 0 {
+		if c, err = s.Svc.Campaign(a, ag.CampaignID); err != nil && !a.IsSeer() {
+			// The owner left the campaign's membership but the Agent is still there.
+			c = nil
+		}
 	}
 	snap := s.Data.Current()
 	if snap == nil {
 		return nil, nil, campaign.ErrNoData
 	}
-	d := &sheetData{Agent: ag, Class: snap.Class(ag.Class), CanEdit: s.Svc.CanEditAgent(a, ag)}
+	d := &sheetData{Campaign: c, Agent: ag, Class: snap.Class(ag.Class), CanEdit: s.Svc.CanEditAgent(a, ag)}
 	if ag.OwnerID != nil {
 		var u db.User
 		if s.DB.First(&u, *ag.OwnerID).Error == nil {
 			d.Owner = u.Name
 		}
 	}
+	if d.CanEdit {
+		d.Campaigns, _ = s.Svc.Campaigns(a)
+	}
 	d.Contacts, _ = s.Svc.Contacts(a, ag.ID)
-	var clocks []db.Clock
-	_ = s.Svc.List(a, "clock", c.ID, &clocks, "name")
-	for _, cl := range clocks {
-		if cl.AgentID != nil && *cl.AgentID == ag.ID {
-			d.Clocks = append(d.Clocks, cl)
+	if c != nil {
+		var clocks []db.Clock
+		_ = s.Svc.List(a, "clock", c.ID, &clocks, "name")
+		for _, cl := range clocks {
+			if cl.AgentID != nil && *cl.AgentID == ag.ID {
+				d.Clocks = append(d.Clocks, cl)
+			}
 		}
 	}
-	d.Events, _ = s.Svc.Events(a, c.ID, campaign.EventFilter{EntityType: "agent", EntityID: ag.ID, Limit: 25})
-	d.History, _ = s.Svc.Entries(a, c.ID, "history", ag.ID)
+	d.Events, _ = s.Svc.AgentEvents(a, ag.ID, 25)
+	d.History, _ = s.Svc.AgentHistory(a, ag.ID)
 	if a.IsSeer() {
-		d.Players, _ = s.Svc.Members(a, c.ID)
+		s.DB.Where("role = ? AND active = ?", db.RolePlayer, true).Order("name").Find(&d.Players)
 	}
 	xp := map[string]struct {
 		v   int

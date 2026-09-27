@@ -23,12 +23,12 @@
 {{define "why"}}
 <div class="card mb-3 border-secondary-subtle d-print-none" id="why">
   <div class="card-body py-2 d-flex flex-wrap align-items-center gap-2">
-    <label class="small text-body-secondary" for="why-input"><i class="bi bi-chat-left-text"></i> Why (goes in the log with your next change):</label>
+    <label class="small text-body-secondary" for="why-input"><i class="bi bi-chat-left-text"></i> Why? <span class="d-none d-md-inline">(optional)</span> {{help "Whatever you type here is saved in the change log with your next change, so everyone can see why it happened. It clears after each change."}}</label>
     <input class="form-control form-control-sm flex-grow-1" style="min-width: 12rem; max-width: 40rem" name="why" id="why-input" placeholder="e.g. failed Slip vs the harbor guard" autocomplete="off">
     {{if .User.IsSeer}}
     <div class="form-check form-check-inline mb-0 small" title="Break a rules limit on purpose. Needs a why; recorded as a house ruling.">
       <input class="form-check-input" type="checkbox" name="override" id="override">
-      <label class="form-check-label" for="override">Override limits</label>
+      <label class="form-check-label" for="override">Override limits {{help "Lets your next change break a rules limit (e.g. a 6th load item). Needs a Why; it's recorded as a house ruling."}}</label>
     </div>
     {{end}}
   </div>

@@ -38,7 +38,7 @@
     </div>
   </nav>
   <main class="container pb-5" id="main" hx-boost="true" hx-target="#main" hx-select="#main" hx-swap="outerHTML show:none">
-    {{with .Nav}}{{template "campaignnav" $}}{{end}}
+    {{with .Nav}}{{if .Campaign}}{{template "campaignnav" $}}{{end}}{{end}}
     {{template "flash" .}}
     {{template "content" .}}
   </main>

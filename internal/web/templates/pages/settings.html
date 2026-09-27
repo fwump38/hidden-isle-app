@@ -8,18 +8,18 @@
       <input type="hidden" name="back" value="{{$back}}">
       <div class="row g-2">
         <div class="col-12 col-md-6"><label class="form-label small mb-0" for="cname">Name</label><input class="form-control" id="cname" name="set.name" value="{{$c.Name}}"></div>
-        <div class="col-6 col-md-3"><label class="form-label small mb-0" for="mode">Mode</label><select class="form-select" id="mode" name="set.mode">{{range $snap.Campaign.CampaignMode}}<option {{if eq . $c.Mode}}selected{{end}}>{{.}}</option>{{end}}</select></div>
-        <div class="col-6 col-md-3 d-flex align-items-end"><input type="hidden" name="set.merciful" value=""><div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="set.merciful" id="merc" {{if $c.Merciful}}checked{{end}}><label class="form-check-label" for="merc">Merciful Mode</label></div></div>
+        <div class="col-6 col-md-3"><label class="form-label small mb-0" for="mode">Mode {{help "Group: a Seer and players. Solitaire: one player with oracle draws instead of a Seer (pp. 96-105). Seer-less: everyone plays an Agent and shares the Seer role (p. 92)."}}</label><select class="form-select" id="mode" name="set.mode">{{range $snap.Campaign.CampaignMode}}<option {{if eq . $c.Mode}}selected{{end}}>{{.}}</option>{{end}}</select></div>
+        <div class="col-6 col-md-3 d-flex align-items-end"><input type="hidden" name="set.merciful" value=""><div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="set.merciful" id="merc" {{if $c.Merciful}}checked{{end}}><label class="form-check-label" for="merc">Merciful Mode {{help "Optional rule (pp. 93-94): after a scenario in which the Agents killed anyone, each one who killed faces a Soothe challenge at the Pool of Mourning; failure costs something (spiritual harm, ideal progress, a downtime action…)."}}</label></div></div>
         <div class="col-6 col-md-3"><label class="form-label small mb-0" for="season">Season</label><input class="form-control" type="number" min="1" id="season" name="set.season" value="{{$c.Season}}"></div>
         <div class="col-6 col-md-3"><label class="form-label small mb-0" for="played">Scenarios played</label><input class="form-control" type="number" min="0" id="played" name="set.scenarios_played" value="{{$c.ScenariosPlayed}}"></div>
-        <div class="col-6 col-md-3"><label class="form-label small mb-0" for="mascot">Hand mascot (p. 42)</label><input class="form-control" id="mascot" name="set.hand_mascot" value="{{$c.HandMascot}}"></div>
-        <div class="col-6 col-md-3"><label class="form-label small mb-0" for="hname">Hand name (p. 82)</label><input class="form-control" id="hname" name="set.hand_name" value="{{$c.HandName}}"></div>
+        <div class="col-6 col-md-3"><label class="form-label small mb-0" for="mascot">Hand mascot {{help "The party is a Hand of Dioscoria with an animal mascot, chosen from the list on p. 42."}}</label><input class="form-control" id="mascot" name="set.hand_mascot" value="{{$c.HandMascot}}"></div>
+        <div class="col-6 col-md-3"><label class="form-label small mb-0" for="hname">Hand name {{help "An adjective plus the mascot, chosen after several scenarios (p. 82)."}}</label><input class="form-control" id="hname" name="set.hand_name" value="{{$c.HandName}}"></div>
         <div class="col-12"><label class="form-label small mb-0" for="table">Table: sessions, lines and veils, tone</label><textarea class="form-control" id="table" name="set.table" rows="3">{{$c.Table}}</textarea></div>
         <div class="col-12"><label class="form-label small mb-0" for="opts">Options in use (downtime before session one, visions, narrative thresholds…)</label><textarea class="form-control" id="opts" name="set.options" rows="2">{{$c.Options}}</textarea></div>
         <div class="col-12"><label class="form-label small mb-0" for="threads">Open threads (players can see these)</label><textarea class="form-control" id="threads" name="set.open_threads" rows="3">{{$c.OpenThreads}}</textarea></div>
         <div class="col-12 d-flex justify-content-between align-items-center">
           <button class="btn btn-primary" type="submit">Save</button>
-          <span><input type="hidden" name="set.archived" value=""><span class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="set.archived" id="arch" {{if $c.Archived}}checked{{end}}><label class="form-check-label small" for="arch">Archived</label></span></span>
+          <span><input type="hidden" name="set.archived" value=""><span class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="set.archived" id="arch" {{if $c.Archived}}checked{{end}}><label class="form-check-label small" for="arch">Archived {{help "Moves the campaign to the bottom of the list. Nothing is deleted."}}</label></span></span>
         </div>
       </div>
     </form>
@@ -27,7 +27,7 @@
   <div class="col-12 col-lg-5">
     <div class="card mb-3"><div class="card-body">
       <h2 class="h6">Players in this campaign</h2>
-      <p class="small text-body-secondary">Only members can open the campaign. Add people in <a href="/admin">Admin</a> first.</p>
+      <p class="small text-body-secondary">Also on the campaign's overview. Only members can open the campaign. Create people in <a href="/admin">Admin</a> first.</p>
       {{range $d.Users}}
       <form method="post" action="/c/{{$c.ID}}/members" class="d-flex justify-content-between align-items-center border-bottom py-1">
         <input type="hidden" name="user_id" value="{{.ID}}"><input type="hidden" name="back" value="{{$back}}">
@@ -45,6 +45,17 @@
       <a class="btn btn-sm btn-outline-light" href="/c/{{$c.ID}}/export.md" hx-boost="false"><i class="bi bi-filetype-md"></i> Markdown</a>
       <a class="btn btn-sm btn-outline-light" href="/c/{{$c.ID}}/export.json" hx-boost="false"><i class="bi bi-filetype-json"></i> JSON</a>
       <p class="small text-body-secondary mt-2 mb-0">Includes Seer-only content (marked SEER ONLY). Don't share it with players as-is.</p>
+    </div></div>
+    <div class="card border-danger mt-3"><div class="card-body">
+      <h2 class="h6 text-danger"><i class="bi bi-exclamation-octagon"></i> Delete this campaign</h2>
+      <p class="small mb-2">Permanently deletes its sessions, clocks, adversaries, territories, rulings, Seer notes, journals and change log. <strong>This can't be undone.</strong> Players' Agents are kept and move out of the campaign; Agents played by the Seer are deleted. Export it first if you might want it back.</p>
+      <form method="post" action="/c/{{$c.ID}}/delete">
+        <label class="form-label small" for="confirm">Type <strong>{{$c.Name}}</strong> to confirm</label>
+        <div class="input-group input-group-sm">
+          <input class="form-control" id="confirm" name="confirm" autocomplete="off" required>
+          <button class="btn btn-danger" type="submit" hx-confirm="Delete {{$c.Name}} and everything in it? This can't be undone."><i class="bi bi-trash"></i> Delete campaign</button>
+        </div>
+      </form>
     </div></div>
   </div>
 </div>

@@ -138,9 +138,6 @@ func TestPagesRenderAndKeepSecrets(t *testing.T) {
 			if seerOnly[p] {
 				want = http.StatusForbidden
 			}
-			if p == "/" {
-				want = http.StatusSeeOther // straight to their only campaign
-			}
 			if code != want {
 				t.Errorf("%s %s: %d, want %d", who, p, code, want)
 			}
@@ -190,5 +187,81 @@ func TestUndoFromTheLog(t *testing.T) {
 	ag, _ := svc.Agent(campaign.Actor{User: &seer}, 1)
 	if ag.BurdenTrack != 0 {
 		t.Errorf("burden track = %d after undo", ag.BurdenTrack)
+	}
+}
+
+func TestPlayerAgentFlow(t *testing.T) {
+	st, svc := newSite(t)
+	ok := func(code int, flash string) {
+		t.Helper()
+		if code != http.StatusSeeOther || flash != "" {
+			t.Fatalf("post: %d %q", code, flash)
+		}
+	}
+	// A new player, in no campaign, sees My Agents and can create one.
+	if code, body := st.get("Ana", "/"); code != http.StatusOK || !strings.Contains(body, "My Agents") || !strings.Contains(body, "Create Agent") {
+		t.Fatalf("home for a player without a campaign: %d", code)
+	}
+	ok(st.post("Ana", "/agents", url.Values{"name": {"Ines"}, "class": {"prowler"}, "campaign_id": {"0"}}))
+	if code, body := st.get("Ana", "/agents/1"); code != http.StatusOK || !strings.Contains(body, "Not in a campaign") {
+		t.Fatalf("private sheet: %d", code)
+	}
+	if code, _ := st.get("Bram", "/agents/1"); code != http.StatusNotFound {
+		t.Errorf("another player opened a private Agent: %d", code)
+	}
+	ok(st.post("Ana", "/agents/1", url.Values{"skill.Slip": {"3"}}))
+
+	// The Seer makes a campaign and adds Ana from the overview.
+	ok(st.post("Seer", "/campaigns", url.Values{"name": {"Venice"}, "mode": {"group"}}))
+	_, overview := st.get("Seer", "/c/1")
+	if !strings.Contains(overview, "Players") || !strings.Contains(overview, ">Ana</option>") {
+		t.Fatal("Seer overview should offer to add Ana")
+	}
+	ok(st.post("Seer", "/c/1/members", url.Values{"user_id": {"2"}, "member": {"on"}, "back": {"/c/1"}}))
+
+	// Ana brings Ines in; Bram (not a member) still can't see her.
+	if _, body := st.get("Ana", "/c/1"); !strings.Contains(body, "Bring in") {
+		t.Fatal("Ana should be offered to bring her Agent in")
+	}
+	ok(st.post("Ana", "/c/1/bring", url.Values{"agent_id": {"1"}}))
+	if _, body := st.get("Ana", "/c/1"); !strings.Contains(body, "Ines") {
+		t.Error("Ines should be listed in the campaign")
+	}
+	if code, _ := st.get("Bram", "/agents/1"); code != http.StatusForbidden && code != http.StatusNotFound {
+		t.Errorf("non-member opened a campaign Agent: %d", code)
+	}
+	ok(st.post("Ana", "/agents/1", url.Values{"set.status": {"Resting"}}))
+
+	// The Seer creates an Agent for Bram, which adds him to the campaign.
+	ok(st.post("Seer", "/c/1/agents", url.Values{"name": {"Cyrus"}, "class": {"occultist"}, "owner_id": {"3"}}))
+	if code, _ := st.get("Bram", "/c/1"); code != http.StatusOK {
+		t.Errorf("Bram should now be in the campaign: %d", code)
+	}
+	if code, _ := st.post("Bram", "/agents/1", url.Values{"set.status": {"Active"}}); code != http.StatusSeeOther {
+		t.Fatal(code)
+	}
+	var seer db.User
+	svc.DB.First(&seer, 1)
+	ines, _ := svc.Agent(campaign.Actor{User: &seer}, 1)
+	if ines.Status != "Resting" {
+		t.Errorf("Bram changed Ana's Agent: status %s", ines.Status)
+	}
+
+	// Deleting: Ana deletes her Agent; the Seer deletes the campaign (with its name) and Bram.
+	ok(st.post("Ana", "/agents/1/delete", nil))
+	if _, flash := st.post("Seer", "/c/1/delete", url.Values{"confirm": {"wrong"}}); !strings.Contains(flash, "confirm") {
+		t.Errorf("campaign delete without confirmation: %q", flash)
+	}
+	ok(st.post("Seer", "/c/1/delete", url.Values{"confirm": {"Venice"}}))
+	if code, _ := st.get("Seer", "/c/1"); code != http.StatusNotFound {
+		t.Errorf("campaign still there: %d", code)
+	}
+	if code, _ := st.post("Seer", "/admin/users/3/delete", nil); code != http.StatusOK {
+		t.Errorf("delete player: %d", code)
+	}
+	var n int64
+	svc.DB.Model(&db.User{}).Where("id = ?", 3).Count(&n)
+	if n != 0 {
+		t.Error("Bram still exists")
 	}
 }

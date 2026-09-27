@@ -74,6 +74,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.Handle("POST /admin/gamedata/install", s.requireSeer(http.HandlerFunc(s.installGameData)))
 	mux.Handle("POST /admin/users", s.requireSeer(http.HandlerFunc(s.addUser)))
 	mux.Handle("POST /admin/users/{id}", s.requireSeer(http.HandlerFunc(s.updateUser)))
+	mux.Handle("POST /admin/users/{id}/delete", s.requireSeer(http.HandlerFunc(s.deleteUser)))
 	mux.Handle("POST /admin/tokens", s.requireSeer(http.HandlerFunc(s.createToken)))
 	mux.Handle("POST /admin/home", s.requireSeer(http.HandlerFunc(s.homeNetwork)))
 	mux.Handle("POST /admin/tokens/{id}/revoke", s.requireSeer(http.HandlerFunc(s.revokeToken)))

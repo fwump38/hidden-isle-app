@@ -40,9 +40,8 @@ func (s *Service) Create(a Actor, kindName string, obj any, o Opts) error {
 		return err
 	}
 	return s.DB.Transaction(func(tx *gorm.DB) error {
-		cid := k.campaign(obj)
 		if kindName != "campaign" {
-			if err := s.canView(tx, a, cid); err != nil {
+			if err := s.access(tx, k, a, obj); err != nil {
 				return err
 			}
 		}
@@ -76,7 +75,7 @@ func (s *Service) Update(a Actor, kindName string, id uint, patch Patch, o Opts)
 		if err := tx.First(obj, id).Error; err != nil {
 			return notFound(err)
 		}
-		if err := s.canView(tx, a, k.campaign(obj)); err != nil {
+		if err := s.access(tx, k, a, obj); err != nil {
 			return err
 		}
 		if !k.canRead(a, obj) {
@@ -133,7 +132,7 @@ func (s *Service) Delete(a Actor, kindName string, id uint, o Opts) error {
 		if err := tx.First(obj, id).Error; err != nil {
 			return notFound(err)
 		}
-		if err := s.canView(tx, a, k.campaign(obj)); err != nil {
+		if err := s.access(tx, k, a, obj); err != nil {
 			return err
 		}
 		if (k.seerDel || k.seerWrite) && !a.IsSeer() {
@@ -162,9 +161,6 @@ func (s *Service) Revert(a Actor, eventID uint, reason string) error {
 		if err := tx.First(&ev, eventID).Error; err != nil {
 			return notFound(err)
 		}
-		if err := s.canView(tx, a, ev.CampaignID); err != nil {
-			return err
-		}
 		if !a.IsSeer() && (ev.ActorID == nil || *ev.ActorID != a.User.ID) {
 			return ErrForbidden
 		}
@@ -185,6 +181,9 @@ func (s *Service) Revert(a Actor, eventID uint, reason string) error {
 		case "update", "revert":
 			if err := tx.First(obj, ev.EntityID).Error; err != nil {
 				return notFound(err)
+			}
+			if err := s.access(tx, k, a, obj); err != nil {
+				return err
 			}
 			if err := s.checkWrite(tx, k, a, obj); err != nil {
 				return err
@@ -216,6 +215,9 @@ func (s *Service) Revert(a Actor, eventID uint, reason string) error {
 			if err := tx.First(obj, ev.EntityID).Error; err != nil {
 				return notFound(err)
 			}
+			if err := s.access(tx, k, a, obj); err != nil {
+				return err
+			}
 			if err := s.checkWrite(tx, k, a, obj); err != nil {
 				return err
 			}
@@ -235,6 +237,9 @@ func (s *Service) Revert(a Actor, eventID uint, reason string) error {
 			}
 			if err := json.Unmarshal(ev.Snapshot, obj); err != nil {
 				return fmt.Errorf("can't restore: %w", err)
+			}
+			if err := s.access(tx, k, a, obj); err != nil {
+				return err
 			}
 			if err := s.checkWrite(tx, k, a, obj); err != nil {
 				return err
@@ -258,6 +263,14 @@ func (s *Service) Revert(a Actor, eventID uint, reason string) error {
 		return tx.Model(&db.Event{}).Where("id = ? OR (entity_type = ? AND entity_id = ? AND action = ? AND created_at = ? AND reverted_by IS NULL)",
 			ev.ID, ev.EntityType, ev.EntityID, ev.Action, ev.CreatedAt).Update("reverted_by", undo.ID).Error
 	})
+}
+
+// access checks the actor may see obj: the kind's own rule, or campaign membership.
+func (s *Service) access(tx *gorm.DB, k *kind, a Actor, obj any) error {
+	if k.access != nil {
+		return k.access(s, tx, a, obj)
+	}
+	return s.canView(tx, a, k.campaign(obj))
 }
 
 func (s *Service) checkWrite(tx *gorm.DB, k *kind, a Actor, obj any) error {
@@ -296,6 +309,12 @@ func (s *Service) checkValid(tx *gorm.DB, k *kind, a Actor, obj any, snap *gamed
 // visible only to the Seer. It returns the first event written.
 func (s *Service) record(tx *gorm.DB, a Actor, k *kind, obj any, action string, changes []db.Change, full json.RawMessage, o Opts) (*db.Event, error) {
 	vis, owner := k.vis(obj)
+	if c, ok := obj.(*db.Contact); ok && vis == db.VisOwner {
+		var ag db.Agent
+		if tx.First(&ag, c.AgentID).Error == nil {
+			owner = ag.OwnerID
+		}
+	}
 	base := db.Event{
 		CampaignID: k.campaign(obj), SessionID: o.SessionID, ActorID: a.id(), ActorName: a.name(), Via: a.Via,
 		EntityType: k.name, EntityID: entityID(obj), EntityName: k.display(obj), Action: action,

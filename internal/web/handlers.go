@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/netip"
 	"strconv"
@@ -89,16 +88,18 @@ type homeData struct {
 	Updates   []string
 	Campaigns []db.Campaign
 	Modes     []string
+	Agents    []db.Agent      // the player's own Agents
+	CampNames map[uint]string // campaign id → name
 }
 
 func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	a := s.actor(r)
 	d := homeData{Snapshot: s.Data.Current()}
 	d.Campaigns, _ = s.Svc.Campaigns(a)
-	// A player with one campaign goes straight to it.
-	if !a.IsSeer() && len(d.Campaigns) == 1 {
-		http.Redirect(w, r, fmt.Sprintf("/c/%d", d.Campaigns[0].ID), http.StatusSeeOther)
-		return
+	d.Agents, _ = s.Svc.MyAgents(a)
+	d.CampNames = map[uint]string{}
+	for _, c := range d.Campaigns {
+		d.CampNames[c.ID] = c.Name
 	}
 	if d.Snapshot != nil {
 		d.Modes = d.Snapshot.Campaign.CampaignMode
@@ -179,6 +180,17 @@ func (s *Server) homeNetwork(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.adminFlash(w, r, "Requests from "+p.String()+" now count as home.", "", s.adminDataFor(r))
+}
+
+func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseUint(r.PathValue("id"), 10, 64)
+	var u db.User
+	s.DB.First(&u, id)
+	if err := s.Svc.DeleteUser(s.actor(r), uint(id)); err != nil {
+		s.adminFlash(w, r, "", friendly(err), s.adminDataFor(r))
+		return
+	}
+	s.adminFlash(w, r, "Deleted "+u.Name+".", "", s.adminDataFor(r))
 }
 
 func (s *Server) syncGameData(w http.ResponseWriter, r *http.Request) {
