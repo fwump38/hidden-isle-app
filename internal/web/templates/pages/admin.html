@@ -99,6 +99,17 @@
       <dt class="col-4">In use</dt><dd class="col-8">{{with .Snapshot}}<code>{{short .ID}}</code>, loaded {{since .LoadedAt}}{{else}}<span class="text-warning">nothing loaded</span>{{end}}</dd>
       <dt class="col-4">Last check</dt><dd class="col-8">{{since .Status.LastAttempt}}</dd>
     </dl>
+    {{with .DeployKey}}
+    <details class="mb-2" {{if $.Status.LastError}}open{{end}}>
+      <summary class="small">Deploy key (read-only access to the rules repo)</summary>
+      <div class="input-group input-group-sm my-2">
+        <input class="form-control font-monospace" readonly value="{{.}}" id="deploy-key" aria-label="Deploy key">
+        <button class="btn btn-outline-light" type="button" data-copy="#deploy-key"><i class="bi bi-clipboard"></i> Copy</button>
+      </div>
+      <p class="small text-body-secondary mb-0">On GitHub: the rules repo → Settings → Deploy keys → Add deploy key. Paste this, leave <em>Allow write access</em> unticked, then press Sync now.</p>
+    </details>
+    {{end}}
+    {{with .KeyError}}<div class="alert alert-danger small py-2">Deploy key: {{.}}</div>{{end}}
     {{with .Status.LastError}}<div class="alert alert-danger small py-2"><strong>Last sync failed; still using the snapshot above.</strong><pre class="mb-0 mt-1 text-wrap">{{.}}</pre></div>{{end}}
     <button class="btn btn-outline-light" hx-post="/admin/gamedata/sync" hx-target="#gamedata" hx-swap="outerHTML" hx-disabled-elt="this">
       <i class="bi bi-cloud-download"></i> Sync now <span class="htmx-indicator spinner-border spinner-border-sm"></span>

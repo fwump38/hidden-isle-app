@@ -63,6 +63,12 @@ func run() error {
 	authn := auth.New(g, cfg, sessions)
 
 	data := gamedata.NewStore(cfg.DataDir, cfg.GameDataRepo, cfg.GameDataRef, cfg.GameDataToken)
+	data.SetKnownHosts(cfg.GameDataKnownHosts)
+	if pub, err := data.DeployPublicKey(); err != nil {
+		return fmt.Errorf("deploy key: %w", err)
+	} else if pub != "" {
+		slog.Info("rules repo deploy key (add it to the repo as a read-only deploy key)", "key", pub)
+	}
 	if err := data.LoadExisting(); err != nil && !errors.Is(err, os.ErrNotExist) {
 		slog.Warn("couldn't load the saved game data snapshot", "err", err)
 	}

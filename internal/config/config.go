@@ -30,30 +30,32 @@ type Config struct {
 	OAuthIssuer   string // HI_OAUTH_ISSUER: Authentik provider issuer, for MCP bearer tokens
 	OAuthAudience string // HI_OAUTH_AUDIENCE: expected aud (the Authentik client ID)
 
-	GameDataRepo     string        // GAMEDATA_REPO: git URL or local path
-	GameDataRef      string        // GAMEDATA_REF
-	GameDataToken    string        // GAMEDATA_TOKEN: GitHub fine-grained PAT (Contents: read-only)
-	GameDataInterval time.Duration // GAMEDATA_INTERVAL
+	GameDataRepo       string        // GAMEDATA_REPO: git URL or local path
+	GameDataRef        string        // GAMEDATA_REF
+	GameDataToken      string        // GAMEDATA_TOKEN: HTTPS token (not needed with an SSH URL + deploy key)
+	GameDataKnownHosts string        // GAMEDATA_KNOWN_HOSTS: known_hosts file for SSH hosts other than github.com
+	GameDataInterval   time.Duration // GAMEDATA_INTERVAL
 
 	BackupInterval time.Duration // HI_BACKUP_INTERVAL: consistent SQLite snapshot for the NAS backup (0 = off)
 }
 
 func Load() (*Config, error) {
 	c := &Config{
-		DataDir:       env("HI_DATA_DIR", "/data"),
-		LANAddr:       env("HI_LAN_ADDR", ":8080"),
-		TunnelAddr:    env("HI_TUNNEL_ADDR", ":8081"),
-		PublicURL:     strings.TrimRight(os.Getenv("HI_PUBLIC_URL"), "/"),
-		SeerEmail:     strings.ToLower(strings.TrimSpace(os.Getenv("HI_SEER_EMAIL"))),
-		SeerName:      env("HI_SEER_NAME", "Seer"),
-		SeerPassword:  os.Getenv("HI_SEER_PASSWORD"),
-		CFTeamDomain:  strings.TrimSuffix(strings.TrimPrefix(os.Getenv("HI_CF_TEAM_DOMAIN"), "https://"), "/"),
-		CFAudience:    os.Getenv("HI_CF_AUD"),
-		OAuthIssuer:   os.Getenv("HI_OAUTH_ISSUER"),
-		OAuthAudience: os.Getenv("HI_OAUTH_AUDIENCE"),
-		GameDataRepo:  os.Getenv("GAMEDATA_REPO"),
-		GameDataRef:   env("GAMEDATA_REF", "main"),
-		GameDataToken: os.Getenv("GAMEDATA_TOKEN"),
+		DataDir:            env("HI_DATA_DIR", "/data"),
+		LANAddr:            env("HI_LAN_ADDR", ":8080"),
+		TunnelAddr:         env("HI_TUNNEL_ADDR", ":8081"),
+		PublicURL:          strings.TrimRight(os.Getenv("HI_PUBLIC_URL"), "/"),
+		SeerEmail:          strings.ToLower(strings.TrimSpace(os.Getenv("HI_SEER_EMAIL"))),
+		SeerName:           env("HI_SEER_NAME", "Seer"),
+		SeerPassword:       os.Getenv("HI_SEER_PASSWORD"),
+		CFTeamDomain:       strings.TrimSuffix(strings.TrimPrefix(os.Getenv("HI_CF_TEAM_DOMAIN"), "https://"), "/"),
+		CFAudience:         os.Getenv("HI_CF_AUD"),
+		OAuthIssuer:        os.Getenv("HI_OAUTH_ISSUER"),
+		OAuthAudience:      os.Getenv("HI_OAUTH_AUDIENCE"),
+		GameDataRepo:       os.Getenv("GAMEDATA_REPO"),
+		GameDataRef:        env("GAMEDATA_REF", "main"),
+		GameDataToken:      os.Getenv("GAMEDATA_TOKEN"),
+		GameDataKnownHosts: os.Getenv("GAMEDATA_KNOWN_HOSTS"),
 	}
 	var err error
 	if c.LANCIDRs, err = prefixes("HI_LAN_CIDR", "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8,::1/128,fc00::/7"); err != nil {

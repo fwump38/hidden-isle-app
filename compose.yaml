@@ -9,28 +9,31 @@ services:
     # user: "1026:100"
     ports:
       - "8080:8080"            # LAN: PIN login. Don't forward this port to the internet.
-      - "127.0.0.1:8081:8081"  # Tunnel: point cloudflared here (SSO required). Drop this line if cloudflared runs on the same Docker network.
+      - "127.0.0.1:8081:8081"  # Tunnel: only the Authentik outpost/proxy should reach this (SSO required). Drop the line if they share a Docker network.
     volumes:
       - hidden-isle-data:/data
     environment:
       HI_PUBLIC_URL: https://isle.example.com       # the tunnel hostname
       HI_SEER_NAME: Seer
-      HI_SEER_EMAIL: you@example.com                # your SSO email
-      HI_SEER_PASSWORD: ${HI_SEER_PASSWORD}          # LAN password for the Seer (8+ characters)
+      HI_SEER_EMAIL: you@example.com                # your Authentik email
+      HI_SEER_PASSWORD: ${HI_SEER_PASSWORD}          # your LAN password (8+ characters)
       # HI_LAN_CIDR: 192.168.1.0/24                 # PIN login only from these ranges (default: private ranges)
-      # Cloudflare Access (verify the JWT on every tunnel request):
-      HI_CF_TEAM_DOMAIN: yourteam.cloudflareaccess.com
-      HI_CF_AUD: ${HI_CF_AUD}
-      # Authentik forward auth: trust X-authentik-email only from these peers (your proxy's IP):
-      # HI_AUTHENTIK_PROXY_IPS: 172.18.0.10
-      # MCP OAuth for claude.ai (Authentik OAuth2 provider):
+      # Remote sign-in (the Seer only): trust X-authentik-email only from the Authentik outpost / proxy
+      # that sits between cloudflared and port 8081. A Docker subnet is fine, e.g. 172.18.0.0/16.
+      HI_AUTHENTIK_PROXY_IPS: 172.18.0.0/16
+      # MCP OAuth for claude.ai (an Authentik OAuth2/OpenID provider):
       HI_OAUTH_ISSUER: https://auth.example.com/application/o/hidden-isle/
       HI_OAUTH_AUDIENCE: ${HI_OAUTH_CLIENT_ID}
-      # Rules data (private repo needs a fine-grained PAT with Contents: read-only on that repo):
-      GAMEDATA_REPO: https://github.com/fwump38/The-Hidden-Isle.git
+      # Rules data over SSH with a read-only deploy key (the app generates it; copy it from Admin):
+      GAMEDATA_REPO: git@github.com:fwump38/The-Hidden-Isle.git
       GAMEDATA_REF: main
-      GAMEDATA_TOKEN: ${GAMEDATA_TOKEN}
       GAMEDATA_INTERVAL: 1h
+      # Alternative: HTTPS + a fine-grained token (expires, so needs replacing):
+      # GAMEDATA_REPO: https://github.com/fwump38/The-Hidden-Isle.git
+      # GAMEDATA_TOKEN: ${GAMEDATA_TOKEN}
+      # Cloudflare Access instead of Authentik for remote sign-in:
+      # HI_CF_TEAM_DOMAIN: yourteam.cloudflareaccess.com
+      # HI_CF_AUD: ${HI_CF_AUD}
 
 volumes:
   hidden-isle-data:

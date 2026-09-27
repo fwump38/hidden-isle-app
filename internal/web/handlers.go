@@ -70,16 +70,23 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------- admin
 
 type adminData struct {
-	Status   gamedata.Status
-	Snapshot *gamedata.Snapshot
-	Users    []db.User
-	Tokens   []db.APIToken
-	NewToken string
-	MCPURL   string
+	Status    gamedata.Status
+	Snapshot  *gamedata.Snapshot
+	Users     []db.User
+	Tokens    []db.APIToken
+	NewToken  string
+	MCPURL    string
+	DeployKey string
+	KeyError  string
 }
 
 func (s *Server) adminData() adminData {
 	ad := adminData{Status: s.Data.Status(), Snapshot: s.Data.Current(), MCPURL: s.Cfg.PublicURL + "/mcp"}
+	if pub, err := s.Data.DeployPublicKey(); err != nil {
+		ad.KeyError = err.Error()
+	} else {
+		ad.DeployKey = pub
+	}
 	s.DB.Order("role desc, name").Find(&ad.Users)
 	s.DB.Where("revoked_at IS NULL").Order("created_at desc").Find(&ad.Tokens)
 	return ad

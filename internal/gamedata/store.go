@@ -20,6 +20,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	gitconfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 )
 
@@ -28,9 +29,12 @@ const keepSnapshots = 3
 // Store keeps the current snapshot and syncs new ones from the source repo.
 type Store struct {
 	root   string // <data dir>/gamedata
-	source string // git URL or local directory
+	source string // git URL (https or ssh) or local directory
 	ref    string
-	token  string
+	token  string // HTTPS token (e.g. a GitHub fine-grained PAT)
+
+	keyPath    string // SSH deploy key, created on first use
+	knownHosts string // known_hosts for non-GitHub SSH hosts
 
 	cur atomic.Pointer[Snapshot]
 	mu  sync.Mutex // one sync at a time
@@ -51,7 +55,34 @@ type Status struct {
 
 func NewStore(dataDir, source, ref, token string) *Store {
 	return &Store{root: filepath.Join(dataDir, "gamedata"), source: source, ref: ref, token: token,
-		status: Status{Source: redact(source), Ref: ref}}
+		keyPath: filepath.Join(dataDir, "secrets", "gamedata_ed25519"),
+		status:  Status{Source: redact(source), Ref: ref}}
+}
+
+// SetKnownHosts sets a known_hosts file for SSH hosts other than github.com.
+func (s *Store) SetKnownHosts(path string) { s.knownHosts = path }
+
+// UsesSSH reports whether the source is an SSH URL (and so needs the deploy key).
+func (s *Store) UsesSSH() bool { return IsSSHURL(s.source) }
+
+// DeployPublicKey returns the public deploy key to add to the rules repo ("" unless SSH is used).
+func (s *Store) DeployPublicKey() (string, error) {
+	if !s.UsesSSH() {
+		return "", nil
+	}
+	_, pub, err := DeployKey(s.keyPath)
+	return pub, err
+}
+
+// authMethod returns credentials for the source, or nil for anonymous HTTPS.
+func (s *Store) authMethod() (transport.AuthMethod, error) {
+	if s.UsesSSH() {
+		return sshAuth(s.source, s.keyPath, s.knownHosts)
+	}
+	if s.token != "" {
+		return &http.BasicAuth{Username: "x-access-token", Password: s.token}, nil
+	}
+	return nil, nil // a nil interface, not a typed nil pointer
 }
 
 // Current returns the snapshot in use, or nil before the first successful load.
@@ -167,12 +198,19 @@ func (s *Store) checkout(ctx context.Context) (dir, id string, err error) {
 		return s.source, "local-" + id, err
 	}
 	clone := filepath.Join(s.root, "repo")
-	var auth *http.BasicAuth
-	if s.token != "" {
-		auth = &http.BasicAuth{Username: "x-access-token", Password: s.token}
+	auth, err := s.authMethod()
+	if err != nil {
+		return "", "", err
 	}
 	branch := plumbing.NewBranchReferenceName(s.ref)
 	repo, err := git.PlainOpen(clone)
+	if err == nil {
+		// GAMEDATA_REPO changed (e.g. HTTPS to SSH): start over with a fresh clone.
+		if rem, rErr := repo.Remote("origin"); rErr != nil || len(rem.Config().URLs) == 0 || rem.Config().URLs[0] != s.source {
+			_ = os.RemoveAll(clone)
+			repo, err = nil, git.ErrRepositoryNotExists
+		}
+	}
 	if errors.Is(err, git.ErrRepositoryNotExists) {
 		repo, err = git.PlainCloneContext(ctx, clone, false, &git.CloneOptions{
 			URL: s.source, Auth: auth, ReferenceName: branch, SingleBranch: true})
