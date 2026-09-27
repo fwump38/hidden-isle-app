@@ -1,0 +1,144 @@
+package web
+
+import (
+	"errors"
+	"net/http"
+	"strconv"
+
+	"github.com/fwump38/hidden-isle-app/internal/campaign"
+	"github.com/fwump38/hidden-isle-app/internal/db"
+)
+
+func (s *Server) registerChat(mux *http.ServeMux) {
+	u := func(h http.HandlerFunc) http.Handler { return s.requireUser(h) }
+	mux.Handle("GET /c/{cid}/chat", u(s.chatPage))
+	mux.Handle("GET /c/{cid}/chat/with/{uid}", u(s.chatPage))
+	mux.Handle("POST /c/{cid}/chat/send", u(s.sendChat))
+	mux.Handle("POST /c/{cid}/chat/memory", u(s.saveChatMemory))
+	mux.Handle("POST /chat/suggest/{id}/apply", u(s.applyChatSuggestion))
+	mux.Handle("POST /chat/suggest/{id}/dismiss", u(s.dismissChatSuggestion))
+}
+
+type chatPageData struct {
+	Enabled     bool
+	ReadOnly    bool
+	ViewingName string
+	Campaign    *db.Campaign
+	Thread      *db.ChatThread
+	Messages    []db.ChatMessage
+	Suggestions []db.ChatSuggestion
+	Error       string
+}
+
+// pendingSuggestions is the subset chat.html's Apply/Dismiss cards render.
+func (d chatPageData) Pending() []db.ChatSuggestion {
+	var out []db.ChatSuggestion
+	for _, s := range d.Suggestions {
+		if s.Status == "pending" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func (s *Server) chatPage(w http.ResponseWriter, r *http.Request) {
+	a := s.actor(r)
+	c, err := s.Svc.Campaign(a, pathID(r, "cid"))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	d := s.buildChatPage(a, c, r)
+	if d.Error != "" && d.Thread == nil && !d.Enabled {
+		s.page(w, r, "chat", "Chat", c, "chat", d)
+		return
+	}
+	if d.Error != "" && d.Thread == nil {
+		s.fail(w, r, errors.New(d.Error))
+		return
+	}
+	s.page(w, r, "chat", "Chat", c, "chat", d)
+}
+
+// buildChatPage loads the caller's own thread, or (Seer only, via the {uid} path value) a
+// read-only view of a player's thread.
+func (s *Server) buildChatPage(a campaign.Actor, c *db.Campaign, r *http.Request) chatPageData {
+	d := chatPageData{Enabled: s.Chat != nil, Campaign: c}
+	if !d.Enabled {
+		return d
+	}
+	userID := a.User.ID
+	if uidStr := r.PathValue("uid"); uidStr != "" {
+		if !a.IsSeer() {
+			d.Error = "only the Seer can read another player's chat"
+			return d
+		}
+		uid, _ := strconv.ParseUint(uidStr, 10, 64)
+		userID = uint(uid)
+		d.ReadOnly = true
+		var u db.User
+		s.DB.First(&u, userID)
+		d.ViewingName = u.Name
+	}
+	th, err := s.Chat.Thread(userID, c.ID)
+	if err != nil {
+		d.Error = friendly(err)
+		return d
+	}
+	d.Thread = th
+	d.Messages, d.Suggestions, _ = s.Chat.History(th.ID)
+	return d
+}
+
+func (s *Server) sendChat(w http.ResponseWriter, r *http.Request) {
+	a := s.actor(r)
+	c, err := s.Svc.Campaign(a, pathID(r, "cid"))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	d := s.buildChatPage(a, c, r)
+	if s.Chat != nil && d.Thread != nil {
+		if _, err := s.Chat.Send(r.Context(), a.User, d.Thread.ID, r.FormValue("message")); err != nil {
+			d.Error = friendly(err)
+		}
+		d.Messages, d.Suggestions, _ = s.Chat.History(d.Thread.ID)
+	}
+	s.partial(w, "chat", "chat-body", d)
+}
+
+func (s *Server) saveChatMemory(w http.ResponseWriter, r *http.Request) {
+	a := s.actor(r)
+	c, err := s.Svc.Campaign(a, pathID(r, "cid"))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	d := s.buildChatPage(a, c, r)
+	if s.Chat != nil && d.Thread != nil {
+		if err := s.Chat.UpdateMemory(a, d.Thread.ID, r.FormValue("memory")); err != nil {
+			d.Error = friendly(err)
+		}
+		d.Thread, _ = s.Chat.Thread(d.Thread.UserID, c.ID)
+		d.Messages, d.Suggestions, _ = s.Chat.History(d.Thread.ID)
+	}
+	s.partial(w, "chat", "chat-body", d)
+}
+
+func (s *Server) applyChatSuggestion(w http.ResponseWriter, r *http.Request) {
+	if s.Chat == nil {
+		s.done(w, r, errors.New("chat isn't enabled"), "/")
+		return
+	}
+	err := s.Chat.ApplySuggestion(s.actor(r), pathID(r, "id"))
+	s.done(w, r, err, "/")
+}
+
+func (s *Server) dismissChatSuggestion(w http.ResponseWriter, r *http.Request) {
+	if s.Chat == nil {
+		s.done(w, r, errors.New("chat isn't enabled"), "/")
+		return
+	}
+	err := s.Chat.DismissSuggestion(s.actor(r), pathID(r, "id"))
+	s.done(w, r, err, "/")
+}

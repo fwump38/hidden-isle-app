@@ -41,6 +41,13 @@ type Config struct {
 	GameDataInterval   time.Duration // GAMEDATA_INTERVAL
 
 	BackupInterval time.Duration // HI_BACKUP_INTERVAL: consistent SQLite snapshot for the NAS backup (0 = off)
+
+	AnthropicAPIKey   string  // ANTHROPIC_API_KEY: enables the in-app player chat (unset = disabled)
+	ChatModel         string  // HI_CHAT_MODEL
+	ChatMonthlyCapUSD float64 // HI_CHAT_MONTHLY_CAP_USD: table-wide monthly spend cap (0 = no cap)
+	ChatPlayerCapUSD  float64 // HI_CHAT_PLAYER_CAP_USD: per-player monthly spend cap (0 = no cap)
+	ChatPriceInUSD    float64 // HI_CHAT_PRICE_IN: $ per million input tokens, for the cost estimate
+	ChatPriceOutUSD   float64 // HI_CHAT_PRICE_OUT: $ per million output tokens
 }
 
 func Load() (*Config, error) {
@@ -62,8 +69,22 @@ func Load() (*Config, error) {
 		GameDataRef:        env("GAMEDATA_REF", "release"),
 		GameDataToken:      os.Getenv("GAMEDATA_TOKEN"),
 		GameDataKnownHosts: os.Getenv("GAMEDATA_KNOWN_HOSTS"),
+		AnthropicAPIKey:    os.Getenv("ANTHROPIC_API_KEY"),
+		ChatModel:          env("HI_CHAT_MODEL", "claude-sonnet-5"),
 	}
 	var err error
+	if c.ChatMonthlyCapUSD, err = floatEnv("HI_CHAT_MONTHLY_CAP_USD", "20"); err != nil {
+		return nil, err
+	}
+	if c.ChatPlayerCapUSD, err = floatEnv("HI_CHAT_PLAYER_CAP_USD", "5"); err != nil {
+		return nil, err
+	}
+	if c.ChatPriceInUSD, err = floatEnv("HI_CHAT_PRICE_IN", "3"); err != nil {
+		return nil, err
+	}
+	if c.ChatPriceOutUSD, err = floatEnv("HI_CHAT_PRICE_OUT", "15"); err != nil {
+		return nil, err
+	}
 	if c.LANCIDRs, err = prefixes("HI_LAN_CIDR", "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8,::1/128,fc00::/7"); err != nil {
 		return nil, err
 	}
@@ -107,6 +128,15 @@ func duration(key, def string) (time.Duration, error) {
 		return 0, fmt.Errorf("%s: %w", key, err)
 	}
 	return d, nil
+}
+
+func floatEnv(key, def string) (float64, error) {
+	v := env(key, def)
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", key, err)
+	}
+	return f, nil
 }
 
 func prefixes(key, def string) ([]netip.Prefix, error) {

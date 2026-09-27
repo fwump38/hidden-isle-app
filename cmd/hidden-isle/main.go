@@ -21,6 +21,7 @@ import (
 
 	"github.com/fwump38/hidden-isle-app/internal/auth"
 	"github.com/fwump38/hidden-isle-app/internal/campaign"
+	"github.com/fwump38/hidden-isle-app/internal/chat"
 	"github.com/fwump38/hidden-isle-app/internal/config"
 	"github.com/fwump38/hidden-isle-app/internal/db"
 	"github.com/fwump38/hidden-isle-app/internal/gamedata"
@@ -92,9 +93,6 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	mux := http.NewServeMux()
-	ui.Live = hub
-	ui.Register(mux)
 	idx, err := rules.New(g)
 	if err != nil {
 		return err
@@ -106,6 +104,19 @@ func run() error {
 	}
 	data.OnLoad(index)
 	go index(data.Current())
+
+	mux := http.NewServeMux()
+	ui.Live = hub
+	if cfg.AnthropicAPIKey != "" {
+		ui.Chat = chat.New(g, svc, data, idx, chat.Config{
+			APIKey: cfg.AnthropicAPIKey, Model: cfg.ChatModel,
+			GlobalCapUSD: cfg.ChatMonthlyCapUSD, PlayerCapUSD: cfg.ChatPlayerCapUSD,
+			PriceInPerMTok: cfg.ChatPriceInUSD, PriceOutPerMTok: cfg.ChatPriceOutUSD,
+		})
+	} else {
+		slog.Info("ANTHROPIC_API_KEY not set: the in-app player chat is off")
+	}
+	ui.Register(mux)
 	mcpsrv.New(g, cfg, data, svc, idx, build).Register(mux)
 
 	// CSRF: reject cross-site browser writes. /mcp uses bearer tokens, not cookies, so it's exempt.

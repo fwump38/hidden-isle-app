@@ -9,7 +9,8 @@ import (
 // models lists every table AutoMigrate manages. Add new models here.
 var models = []any{&SchemaMigration{}, &User{}, &APIToken{},
 	&Campaign{}, &Member{}, &Agent{}, &Contact{}, &Session{}, &Adversary{}, &Territory{}, &Clock{},
-	&HouseRuling{}, &SeerNote{}, &Event{}, &Entry{}, &Handout{}, &DowntimeSubmission{}}
+	&HouseRuling{}, &SeerNote{}, &Event{}, &Entry{}, &Handout{}, &DowntimeSubmission{},
+	&ChatThread{}, &ChatMessage{}, &ChatSuggestion{}, &ChatUsage{}}
 
 // migrations are one-off steps AutoMigrate can't express (renames, data fixes). Append only.
 var migrations = []struct {

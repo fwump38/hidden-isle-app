@@ -12,6 +12,7 @@
     <li class="nav-item"><a class="nav-link {{if eq $sec "journal"}}active{{end}}" href="/c/{{$c.ID}}/journal">Journal</a></li>
     <li class="nav-item"><a class="nav-link {{if eq $sec "rulings"}}active{{end}}" href="/c/{{$c.ID}}/rulings">Rulings</a></li>
     <li class="nav-item"><a class="nav-link {{if eq $sec "log"}}active{{end}}" href="/c/{{$c.ID}}/log">Log</a></li>
+    <li class="nav-item"><a class="nav-link {{if eq $sec "chat"}}active{{end}}" href="/c/{{$c.ID}}/chat"><i class="bi bi-stars"></i> Chat</a></li>
     {{if $.User.IsSeer}}
     <li class="nav-item"><a class="nav-link text-info {{if eq $sec "play"}}active{{end}}" href="/c/{{$c.ID}}/play"><i class="bi bi-controller"></i> Play</a></li>
     <li class="nav-item"><a class="nav-link text-info {{if eq $sec "downtime"}}active{{end}}" href="/c/{{$c.ID}}/downtime"><i class="bi bi-moon"></i> Downtime</a></li>

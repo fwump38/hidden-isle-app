@@ -33,6 +33,7 @@
         <input type="hidden" name="user_id" value="{{.ID}}"><input type="hidden" name="back" value="{{$back}}">
         <span>{{.Name}}</span>
         {{if index $d.Members .ID}}
+        {{if $d.ChatEnabled}}<a class="btn btn-sm btn-outline-info" href="/c/{{$c.ID}}/chat/with/{{.ID}}" title="Read their chat with the assistant"><i class="bi bi-stars"></i></a>{{end}}
         <button class="btn btn-sm btn-success" type="submit" name="member" value="off"><i class="bi bi-check2"></i> Member</button>
         {{else}}
         <button class="btn btn-sm btn-outline-secondary" type="submit" name="member" value="on">Add</button>

@@ -9,7 +9,7 @@ It runs as a single Go binary in one container, with its state in SQLite.
 
 This repo holds **no game text**. The rules data (classes, abilities, cards, tables, limits) comes from a separate rules repository, which the app syncs on a timer through that repo's `hidden-isle-data.yaml` manifest.
 
-> **Status: Phase 4 (table tools).** Working:
+> **Status: Phase 5 (in-app chat).** Working:
 > - sign-in (PIN at home, Authentik away);
 > - campaigns and player-owned Agents with live character sheets;
 > - clocks, adversaries, territories, sessions, house rulings, Seer notes and journals;
@@ -22,10 +22,13 @@ This repo holds **no game text**. The rules data (classes, abilities, cards, tab
 > - live updates over SSE, a Seer dashboard for the table, a secret-link TV view, and
 >   handouts pushed to players' phones;
 > - a step-by-step creation wizard (pp. 40-42);
-> - downtime a player plans and submits, and the Seer approves before it touches the sheet.
+> - downtime a player plans and submits, and the Seer approves before it touches the sheet;
+> - an in-app Claude chat for players (character-creation help, rules Q&A), on the Seer's own
+>   Anthropic billing, with monthly spend caps and read-mostly tools scoped to what that player
+>   may see. A suggested sheet change is only a card in the chat until the player taps Apply.
 >
-> Next: an in-app Claude chat for players (character creation help, rules Q&A), on the Seer's
-> own API budget and locked to what each player may see.
+> Next: MCP Apps widgets in claude.ai (an Agent sheet, clock and challenge picker as `ui://`
+> resources), if that turns out to be worth it over the web UI.
 
 ## How it's put together
 
@@ -118,6 +121,11 @@ claude mcp add --transport http hidden-isle https://isle.example.com/mcp --heade
 | `GAMEDATA_KNOWN_HOSTS` | | A known_hosts file for SSH hosts other than github.com (GitHub's keys are built in) |
 | `GAMEDATA_INTERVAL` | `1h` | How often to check for new releases |
 | `HI_BACKUP_INTERVAL` | `24h` | Writes a consistent `/data/backup/hidden-isle.db` for your NAS backup (`0` = off) |
+| `ANTHROPIC_API_KEY` | | Turns on the in-app player chat (an [API key](https://platform.claude.com), billed per token — separate from a claude.ai subscription, and never able to see it) |
+| `HI_CHAT_MODEL` | `claude-sonnet-5` | Model for the in-app chat |
+| `HI_CHAT_MONTHLY_CAP_USD` | `20` | Table-wide monthly spend cap for the in-app chat (`0` = no cap) |
+| `HI_CHAT_PLAYER_CAP_USD` | `5` | Per-player monthly spend cap (`0` = no cap) |
+| `HI_CHAT_PRICE_IN` / `HI_CHAT_PRICE_OUT` | `3` / `15` | $ per million input/output tokens, for the app's own cost estimate (set these to match your model; they don't change what Anthropic bills you) |
 
 **Rules data sync:**
 - A sync that fails validation keeps the last good snapshot, and Admin shows the error.
@@ -143,6 +151,7 @@ scripts/vendor.sh                                                     # refresh 
   - `internal/gamedata`: sync and validation
   - `internal/cards`: draws
   - `internal/mcpsrv`: MCP
+  - `internal/chat`: the in-app player chat (Anthropic API, tool loop, budget caps)
   - `internal/web`: UI
 - **Schema changes:** add models to `internal/db/models.go`, where `AutoMigrate` applies additive changes. Put renames and data fixes in `migrations`.
 - **CI:** gofmt, vet and race tests on every push. On pushes to `main` and on `v*` tags, it also builds a multi-arch image (amd64 and arm64) and pushes it to `ghcr.io/fwump38/hidden-isle-app`.

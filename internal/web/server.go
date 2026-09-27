@@ -17,6 +17,7 @@ import (
 
 	"github.com/fwump38/hidden-isle-app/internal/auth"
 	"github.com/fwump38/hidden-isle-app/internal/campaign"
+	"github.com/fwump38/hidden-isle-app/internal/chat"
 	"github.com/fwump38/hidden-isle-app/internal/config"
 	"github.com/fwump38/hidden-isle-app/internal/db"
 	"github.com/fwump38/hidden-isle-app/internal/gamedata"
@@ -32,7 +33,8 @@ type Server struct {
 	Auth  *auth.Authenticator
 	Data  *gamedata.Store
 	Svc   *campaign.Service
-	Live  *live.Hub // live updates; nil disables them
+	Live  *live.Hub     // live updates; nil disables them
+	Chat  *chat.Service // in-app player chat; nil disables it (no ANTHROPIC_API_KEY)
 	Build string
 
 	pages map[string]*template.Template
@@ -73,6 +75,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	s.registerPlay(mux)
 	s.registerWizard(mux)
 	s.registerDowntime(mux)
+	s.registerChat(mux)
 
 	mux.Handle("GET /admin", s.requireSeer(http.HandlerFunc(s.admin)))
 	mux.Handle("POST /admin/gamedata/sync", s.requireSeer(http.HandlerFunc(s.syncGameData)))
