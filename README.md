@@ -9,15 +9,23 @@ It runs as a single Go binary in one container, with its state in SQLite.
 
 This repo holds **no game text**. The rules data (classes, abilities, cards, tables, limits) comes from a separate rules repository, which the app syncs on a timer through that repo's `hidden-isle-data.yaml` manifest.
 
-> **Status: Phase 3 (MCP).** Working:
+> **Status: Phase 4 (table tools).** Working:
 > - sign-in (PIN at home, Authentik away);
 > - campaigns and player-owned Agents with live character sheets;
 > - clocks, adversaries, territories, sessions, house rulings, Seer notes and journals;
-> - a change log with undo; export and print;
-> - rules data by release;
-> - an MCP server with tools for all of this, rules search, and the plugin's skills as prompts.
+> - a change log with undo; export and print; rules data by release;
+> - an MCP server with tools for all of this, rules search, and the plugin's skills as prompts;
+> - a challenge helper on the sheet (card counts and resolution, pp. 15-19), and the same as
+>   MCP tools;
+> - an oracle page (fate questions, random events, NPCs, complications, mission types) and
+>   matching MCP tools;
+> - live updates over SSE, a Seer dashboard for the table, a secret-link TV view, and
+>   handouts pushed to players' phones;
+> - a step-by-step creation wizard (pp. 40-42);
+> - downtime a player plans and submits, and the Seer approves before it touches the sheet.
 >
-> Next: table tools (challenge helper, oracle, live push, TV view).
+> Next: an in-app Claude chat for players (character creation help, rules Q&A), on the Seer's
+> own API budget and locked to what each player may see.
 
 ## How it's put together
 
