@@ -17,3 +17,13 @@ clock:
 adversary:
   progress: {min: 0, page: "pp. 28, 81"}
   sections: 3
+downtime:
+  page: "pp. 65-71"
+  free_actions: 2
+  extra_action_cost_spiritual_harm: 2
+  solitaire_free_actions: 3
+  heal_max: 3
+  train_xp: 2
+  train_segments: 1
+  vice_spiritual_harm: 1
+  visits_per_downtime: 1

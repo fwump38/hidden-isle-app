@@ -1,0 +1,110 @@
+{{define "content"}}
+{{$d := .Data}}{{$a := $d.Agent}}{{$act := printf "/agents/%d/downtime" $a.ID}}
+<h1 class="h4 mb-1">Downtime: {{$a.Name}}</h1>
+<p class="small text-body-secondary">Plan your downtime, then send it to the Seer to approve (pp. 65-71). Nothing changes on your sheet until it's approved.</p>
+
+{{if $d.Mine}}
+<div class="card mb-3"><div class="card-body">
+  <h2 class="h6">Your submissions</h2>
+  <ul class="list-group list-group-flush">
+    {{range $d.Mine}}
+    <li class="list-group-item px-0 d-flex justify-content-between align-items-start">
+      <div>
+        <span class="badge {{if eq .Status "pending"}}text-bg-warning{{else if eq .Status "approved"}}text-bg-success{{else}}text-bg-danger{{end}}">{{.Status}}</span>
+        {{len .Actions}} action{{if ne (len .Actions) 1}}s{{end}}{{with .PlayerNote}} — {{.}}{{end}}
+        {{with .SeerNote}}<div class="small text-body-secondary">Seer: {{.}}</div>{{end}}
+      </div>
+      <span class="small text-body-secondary">{{when .CreatedAt}}</span>
+    </li>
+    {{end}}
+  </ul>
+</div></div>
+{{end}}
+
+<form method="post" action="{{$act}}">
+  {{if $a.Vices}}
+  <div class="card mb-3"><div class="card-body">
+    <h2 class="h6">Vices cause harm <span class="small text-body-secondary fw-normal">(p. 66)</span></h2>
+    <p class="small text-body-secondary">1 spiritual harm per vice. Choose the suit for each and explain how it shows.</p>
+    <div class="row g-2">
+      {{range $i, $v := $a.Vices}}
+      <div class="col-12 col-md-6 d-flex align-items-center gap-2">
+        <span class="flex-grow-1">{{$v}}</span>
+        <select class="form-select form-select-sm w-auto" name="vice{{$i}}.suit" aria-label="Suit for {{$v}}">
+          <option value="Swords">Swords</option><option value="Wands">Wands</option><option value="Cups">Cups</option><option value="Pentacles">Pentacles</option>
+        </select>
+      </div>
+      {{end}}
+    </div>
+  </div></div>
+  {{else}}
+  <p class="small text-body-secondary">No vices yet — no vice harm this downtime.</p>
+  {{end}}
+
+  <div class="card mb-3"><div class="card-body">
+    <h2 class="h6">Actions <span class="small text-body-secondary fw-normal">(pp. 68-69)</span></h2>
+    <p class="small text-body-secondary">{{$d.FreeSlots}} free, plus one more for 2 spiritual harm.</p>
+    {{range $i := seq 0 2}}
+    <fieldset class="border rounded p-2 mb-2">
+      <legend class="fs-6 float-none w-auto px-1">Action {{add $i 1}}{{if ge $i $d.FreeSlots}} <span class="badge text-bg-warning">costs 2 spiritual harm</span>{{end}}</legend>
+      <div class="row g-2 small">
+        <div class="col-12 col-md-4">
+          <select class="form-select form-select-sm" name="action{{$i}}.kind" aria-label="Kind">
+            <option value="">(unused)</option>
+            <option value="heal">Heal harm</option>
+            <option value="train">Train</option>
+            <option value="prepare">Make preparations</option>
+            <option value="reflect">Reflect on burden/ideal</option>
+            <option value="new_contact">Make a new contact</option>
+            <option value="visit_contact">Visit a contact</option>
+          </select>
+        </div>
+        <div class="col-6 col-md-2"><select class="form-select form-select-sm" name="action{{$i}}.harm_type" aria-label="Harm type (Heal / Visit-heal)"><option value="">P or S…</option><option value="P">P physical</option><option value="S">S spiritual</option></select></div>
+        <div class="col-6 col-md-2"><input class="form-control form-control-sm" type="number" min="1" max="3" name="action{{$i}}.amount" placeholder="Amount" aria-label="Amount (Heal)"></div>
+        <div class="col-6 col-md-4"><input class="form-control form-control-sm" name="action{{$i}}.suit" placeholder="Suit (Heal target / heart-to-heart cost)" aria-label="Suit"></div>
+
+        <div class="col-6 col-md-3"><input class="form-control form-control-sm" name="action{{$i}}.track" placeholder="Train: swords/wands/cups/pentacles/ability" aria-label="Train track"></div>
+        <div class="col-6 col-md-3"><input class="form-control form-control-sm" name="action{{$i}}.proficiency" placeholder="…or an existing proficiency's name" aria-label="Train proficiency"></div>
+
+        <div class="col-6 col-md-3"><select class="form-select form-select-sm" name="action{{$i}}.trait" aria-label="Reflect trait"><option value="">Burden or ideal…</option><option value="burden">Burden</option><option value="ideal">Ideal</option></select></div>
+        <div class="col-6 col-md-3"><select class="form-select form-select-sm" name="action{{$i}}.delta" aria-label="Reflect direction"><option value="">±1…</option><option value="1">+1</option><option value="-1">−1</option></select></div>
+
+        <div class="col-6 col-md-3"><input class="form-control form-control-sm" name="action{{$i}}.district" placeholder="New contact: district" aria-label="District"></div>
+        <div class="col-6 col-md-3"><input class="form-control form-control-sm" name="action{{$i}}.contact_name" placeholder="New contact: name" aria-label="New contact name"></div>
+        <div class="col-6 col-md-3"><input class="form-control form-control-sm" name="action{{$i}}.contact_card" placeholder="Their vision card" aria-label="Contact card"></div>
+        <div class="col-6 col-md-3"><input class="form-control form-control-sm" name="action{{$i}}.contact_description" placeholder="Who they are" aria-label="Contact description"></div>
+
+        {{if $d.Contacts}}
+        <div class="col-6 col-md-4">
+          <select class="form-select form-select-sm" name="action{{$i}}.contact_id" aria-label="Visit which contact">
+            <option value="">Visit which contact…</option>
+            {{range $d.Contacts}}<option value="{{.ID}}">{{.Name}} (affection {{.Affection}})</option>{{end}}
+          </select>
+        </div>
+        <div class="col-6 col-md-4">
+          <select class="form-select form-select-sm" name="action{{$i}}.activity" aria-label="Visit activity">
+            <option value="">Activity…</option>
+            <option value="heal">Heal</option><option value="train">Train</option><option value="reflect">Reflect</option><option value="heart_to_heart">Heart-to-heart (affection 6)</option>
+          </select>
+        </div>
+        {{end}}
+
+        <div class="col-12"><input class="form-control form-control-sm" name="action{{$i}}.note" placeholder="A short vignette (optional)" aria-label="Note"></div>
+      </div>
+    </fieldset>
+    {{end}}
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" name="extra_action" id="extra"><label class="form-check-label small" for="extra">I'm taking that 3rd action (2 spiritual harm)</label>
+    </div>
+    <div class="row g-2 small mt-1">
+      <div class="col-6 col-md-3"><select class="form-select form-select-sm" name="extra_action_suit" aria-label="Extra action harm suit"><option value="">Extra action harm suit…</option><option>Swords</option><option>Wands</option><option>Cups</option><option>Pentacles</option></select></div>
+    </div>
+  </div></div>
+
+  <div class="mb-3">
+    <label class="form-label small" for="pnote">Anything else for the Seer</label>
+    <textarea class="form-control form-control-sm" id="pnote" name="player_note" rows="2"></textarea>
+  </div>
+  <button class="btn btn-primary" type="submit"><i class="bi bi-send"></i> Submit for approval</button>
+</form>
+{{end}}

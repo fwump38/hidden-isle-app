@@ -70,4 +70,15 @@ type Limits struct {
 		} `yaml:"progress"`
 		Sections int `yaml:"sections"`
 	} `yaml:"adversary"`
+	Downtime struct {
+		Page                         string `yaml:"page"`
+		FreeActions                  int    `yaml:"free_actions"`
+		ExtraActionCostSpiritualHarm int    `yaml:"extra_action_cost_spiritual_harm"`
+		SolitaireFreeActions         int    `yaml:"solitaire_free_actions"`
+		HealMax                      int    `yaml:"heal_max"`
+		TrainXP                      int    `yaml:"train_xp"`
+		TrainSegments                int    `yaml:"train_segments"`
+		ViceSpiritualHarm            int    `yaml:"vice_spiritual_harm"`
+		VisitsPerDowntime            int    `yaml:"visits_per_downtime"`
+	} `yaml:"downtime"`
 }

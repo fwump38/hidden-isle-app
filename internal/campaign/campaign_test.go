@@ -612,3 +612,127 @@ func TestTableViewAndHandouts(t *testing.T) {
 		t.Errorf("TV shows the latest public handout, not the private one: %+v", ps.Handout)
 	}
 }
+
+func TestDowntimeSubmitAndApprove(t *testing.T) {
+	w := setup(t)
+	id := w.anaAgent.ID
+	// Give Ana's Agent a vice and a contact to work with.
+	_, err := w.s.Update(w.ana, "agent", id, patch(t, map[string]any{"vices": []string{"Gambling"}}), Opts{})
+	must(t, err)
+	must(t, w.s.Create(w.ana, "contact", &db.Contact{CampaignID: w.camp.ID, AgentID: id, Name: "Mother Agnese", Kind: "Homeland", Affection: 6, Distance: 0}, Opts{}))
+	cs, _ := w.s.Contacts(w.ana, id)
+	contactID := cs[0].ID
+
+	// Wrong vice suit set, or missing a vice, is rejected.
+	if _, err := w.s.SubmitDowntime(w.ana, id, &db.DowntimeSubmission{Vices: nil, Actions: []db.DowntimeAction{{Kind: "heal", HarmType: "P", Amount: 2}}}); err == nil {
+		t.Error("missing vice suit accepted")
+	}
+	if _, err := w.s.SubmitDowntime(w.ana, id, &db.DowntimeSubmission{Vices: []db.DowntimeVice{{Vice: "Not a vice", Suit: "Cups"}}, Actions: []db.DowntimeAction{{Kind: "heal", HarmType: "P", Amount: 2}}}); err == nil {
+		t.Error("fabricated vice accepted")
+	}
+	// Bram can't submit for Ana's Agent.
+	if _, err := w.s.SubmitDowntime(w.bram, id, &db.DowntimeSubmission{Vices: []db.DowntimeVice{{Vice: "Gambling", Suit: "Cups"}}}); !IsForbidden(err) {
+		t.Errorf("another player submitted downtime: %v", err)
+	}
+	// Too many actions without accepting the harm cost.
+	if _, err := w.s.SubmitDowntime(w.ana, id, &db.DowntimeSubmission{Vices: []db.DowntimeVice{{Vice: "Gambling", Suit: "Cups"}},
+		Actions: []db.DowntimeAction{{Kind: "heal", HarmType: "P", Amount: 1}, {Kind: "reflect", Trait: "burden", TrackDelta: 1}, {Kind: "reflect", Trait: "ideal", TrackDelta: -1}}}); err == nil {
+		t.Error("a 3rd action without ExtraAction accepted")
+	}
+
+	sub, err := w.s.SubmitDowntime(w.ana, id, &db.DowntimeSubmission{
+		Vices: []db.DowntimeVice{{Vice: "Gambling", Suit: "Cups"}},
+		Actions: []db.DowntimeAction{
+			{Kind: "heal", HarmType: "P", Amount: 2, Note: "resting up"},
+			{Kind: "visit_contact", ContactID: contactID, Activity: "heart_to_heart", Suit: "Wands", Note: "a long talk"},
+		},
+		PlayerNote: "quiet week",
+	})
+	must(t, err)
+	if sub.Status != DowntimeStatusPending {
+		t.Fatalf("status = %s", sub.Status)
+	}
+	// A player can't approve their own submission; another player can't see it via list for a different agent owner.
+	if err := w.s.ApproveDowntime(w.ana, sub.ID, ""); !IsForbidden(err) {
+		t.Errorf("player approved their own downtime: %v", err)
+	}
+	pending, err := w.s.DowntimeSubmissions(w.seer, w.camp.ID, DowntimeStatusPending)
+	must(t, err)
+	if len(pending) != 1 {
+		t.Fatalf("pending list: %d", len(pending))
+	}
+	bramList, _ := w.s.DowntimeSubmissions(w.bram, w.camp.ID, "")
+	if len(bramList) != 0 {
+		t.Errorf("Bram should not see Ana's submission: %d", len(bramList))
+	}
+
+	must(t, w.s.ApproveDowntime(w.seer, sub.ID, "looks good"))
+
+	ag, _ := w.s.Agent(w.seer, id)
+	c2, _ := w.s.Contacts(w.ana, id)
+	if c2[0].Distance != 0 || c2[0].Affection != 6 {
+		t.Errorf("heart-to-heart should clear distance and cap affection at 6: %+v", c2[0])
+	}
+	sub2, _ := w.s.getSubmission(w.seer, sub.ID)
+	if sub2.Status != DowntimeStatusApproved || sub2.SeerNote != "looks good" {
+		t.Errorf("submission not marked approved: %+v", sub2)
+	}
+	evs, _ := w.s.Events(w.seer, w.camp.ID, EventFilter{EntityType: "agent", EntityID: id, Limit: 50})
+	found := false
+	for _, e := range evs {
+		if strings.Contains(e.Reason, "vice (Gambling)") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("vice harm should be logged with the vice named")
+	}
+	if ag.Harm == nil {
+		t.Error("some harm should have been recorded")
+	}
+}
+
+func TestDowntimeReject(t *testing.T) {
+	w := setup(t)
+	id := w.anaAgent.ID
+	sub, err := w.s.SubmitDowntime(w.ana, id, &db.DowntimeSubmission{Actions: []db.DowntimeAction{{Kind: "reflect", Trait: "burden", TrackDelta: 1}}})
+	must(t, err)
+	if err := w.s.RejectDowntime(w.ana, sub.ID, "x"); !IsForbidden(err) {
+		t.Errorf("player rejected their own submission: %v", err)
+	}
+	if err := w.s.RejectDowntime(w.seer, sub.ID, ""); err == nil {
+		t.Error("reject without a reason accepted")
+	}
+	must(t, w.s.RejectDowntime(w.seer, sub.ID, "not this week"))
+	got, _ := w.s.getSubmission(w.ana, sub.ID)
+	if got.Status != DowntimeStatusRejected || got.SeerNote != "not this week" {
+		t.Errorf("rejection: %+v", got)
+	}
+	ag, _ := w.s.Agent(w.ana, id)
+	if ag.BurdenTrack != 0 {
+		t.Error("a rejected submission must not touch the sheet")
+	}
+	if err := w.s.ApproveDowntime(w.seer, sub.ID, ""); err == nil {
+		t.Error("approved an already-rejected submission")
+	}
+}
+
+func TestDowntimeTrainProficiencyAndBadTargets(t *testing.T) {
+	w := setup(t)
+	id := w.anaAgent.ID
+	if _, err := w.s.SubmitDowntime(w.ana, id, &db.DowntimeSubmission{Actions: []db.DowntimeAction{{Kind: "train", Track: "proficiency:Illusion"}}}); err == nil {
+		t.Error("training a proficiency the Agent doesn't have should be rejected")
+	}
+	_, err := w.s.Update(w.ana, "agent", id, patch(t, map[string]any{"proficiencies": []db.AgentProficiency{{School: "Illusion", Rank: "Adept", Segments: 1}}}), Opts{})
+	must(t, err)
+	sub, err := w.s.SubmitDowntime(w.ana, id, &db.DowntimeSubmission{Actions: []db.DowntimeAction{{Kind: "train", Track: "proficiency:Illusion"}}})
+	must(t, err)
+	must(t, w.s.ApproveDowntime(w.seer, sub.ID, ""))
+	ag, _ := w.s.Agent(w.seer, id)
+	if ag.Proficiencies[0].Segments != 2 {
+		t.Errorf("proficiency segments = %d, want 2", ag.Proficiencies[0].Segments)
+	}
+	if _, err := w.s.SubmitDowntime(w.ana, id, &db.DowntimeSubmission{Actions: []db.DowntimeAction{{Kind: "train", Track: "nonsense"}}}); err == nil {
+		t.Error("unknown train target accepted")
+	}
+}

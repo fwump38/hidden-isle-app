@@ -70,5 +70,8 @@ func Fixture() *Snapshot {
 	l.Contact.Distance = Range{0, 3, "p. 66"}
 	l.Clock.Segments, l.Clock.Page = []int{3, 4, 6, 8}, "p. 86"
 	l.Adversary.Progress.Page = "p. 81"
+	l.Downtime.Page, l.Downtime.FreeActions, l.Downtime.ExtraActionCostSpiritualHarm = "pp. 65-71", 2, 2
+	l.Downtime.SolitaireFreeActions, l.Downtime.HealMax, l.Downtime.TrainXP = 3, 3, 2
+	l.Downtime.TrainSegments, l.Downtime.ViceSpiritualHarm, l.Downtime.VisitsPerDowntime = 1, 1, 1
 	return s
 }

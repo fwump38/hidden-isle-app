@@ -538,3 +538,86 @@ func TestWizardMagicStepAndDraw(t *testing.T) {
 		t.Errorf("digital draw: %d %s", w.Code, w.Body.String())
 	}
 }
+
+func TestDowntimeSubmitApproveFlow(t *testing.T) {
+	st, svc := newSite(t)
+	ok := func(code int, flash string) {
+		t.Helper()
+		if code != http.StatusSeeOther || flash != "" {
+			t.Fatalf("post: %d %q", code, flash)
+		}
+	}
+	ok(st.post("Seer", "/campaigns", url.Values{"name": {"Venice"}, "mode": {"group"}}))
+	ok(st.post("Seer", "/c/1/members", url.Values{"user_id": {"2"}, "member": {"on"}}))
+	ok(st.post("Ana", "/c/1/agents", url.Values{"name": {"Ines"}, "class": {"prowler"}}))
+	ok(st.post("Ana", "/agents/1", url.Values{"set.vices": {"Gambling"}}))
+	ok(st.post("Ana", "/agents/1/contacts", url.Values{"set.kind": {"Homeland"}, "set.name": {"Mother Agnese"}, "set.affection": {"6"}}))
+
+	// A non-owner can't open or submit downtime for Ines.
+	if code, _ := st.get("Bram", "/agents/1/downtime"); code != http.StatusForbidden && code != http.StatusNotFound {
+		t.Errorf("another player opened the downtime page: %d", code)
+	}
+	if code, body := st.get("Ana", "/agents/1/downtime"); code != http.StatusOK || !strings.Contains(body, "Gambling") {
+		t.Fatalf("downtime page: %d", code)
+	}
+	// Players can't reach the Seer's queue.
+	if code, _ := st.get("Ana", "/c/1/downtime"); code != http.StatusForbidden {
+		t.Errorf("player opened the downtime queue: %d", code)
+	}
+
+	form := url.Values{
+		"vice0.suit":   {"Cups"},
+		"action0.kind": {"heal"}, "action0.harm_type": {"P"}, "action0.amount": {"2"}, "action0.suit": {"Swords"},
+		"action1.kind": {"reflect"}, "action1.trait": {"ideal"}, "action1.delta": {"1"},
+		"player_note": {"a quiet week"},
+	}
+	if code, flash := st.post("Ana", "/agents/1/downtime", form); code != http.StatusSeeOther || flash != "" {
+		t.Fatalf("submit: %d %q", code, flash)
+	}
+
+	// The submission shows on the player's own downtime page and the Seer's queue, but not to Bram.
+	if _, body := st.get("Ana", "/agents/1/downtime"); !strings.Contains(body, "pending") || !strings.Contains(body, "a quiet week") {
+		t.Error("submission should show on Ana's downtime page")
+	}
+	_, queue := st.get("Seer", "/c/1/downtime")
+	if !strings.Contains(queue, "Ines") || !strings.Contains(queue, "Gambling") || !strings.Contains(queue, "reflect") {
+		t.Fatalf("Seer's queue: %s", queue)
+	}
+
+	var seer db.User
+	svc.DB.First(&seer, 1)
+	pending, err := svc.DowntimeSubmissions(campaign.Actor{User: &seer}, 1, campaign.DowntimeStatusPending)
+	if err != nil || len(pending) != 1 {
+		t.Fatalf("pending: %v %v", pending, err)
+	}
+	subID := pending[0].ID
+
+	// Approve it and check the sheet actually changed.
+	ok(st.post("Seer", fmt.Sprintf("/downtime/%d/approve", subID), url.Values{"note": {"looks good"}, "back": {"/c/1/downtime"}}))
+	ag, _ := svc.Agent(campaign.Actor{User: &seer}, 1)
+	if ag.IdealTrack != 1 {
+		t.Errorf("reflect should have moved the ideal track: %d", ag.IdealTrack)
+	}
+	if len(ag.Harm["Cups"]) == 0 { // vice harm landed somewhere in Cups
+		t.Errorf("vice harm missing: %+v", ag.Harm)
+	}
+	_, queue2 := st.get("Seer", "/c/1/downtime")
+	if !strings.Contains(queue2, "approved") {
+		t.Errorf("decided list should show the approved submission: %s", queue2)
+	}
+
+	// A second submission, rejected this time.
+	ok(st.post("Ana", "/agents/1/downtime", url.Values{"vice0.suit": {"Cups"}, "action0.kind": {"reflect"}, "action0.trait": {"burden"}, "action0.delta": {"1"}}))
+	pending2, _ := svc.DowntimeSubmissions(campaign.Actor{User: &seer}, 1, campaign.DowntimeStatusPending)
+	if len(pending2) != 1 {
+		t.Fatalf("expected 1 new pending submission, got %d", len(pending2))
+	}
+	ok(st.post("Seer", fmt.Sprintf("/downtime/%d/reject", pending2[0].ID), url.Values{"reason": {"too much harm this week"}, "back": {"/c/1/downtime"}}))
+	ag2, _ := svc.Agent(campaign.Actor{User: &seer}, 1)
+	if ag2.BurdenTrack != 0 {
+		t.Error("a rejected submission must not touch the sheet")
+	}
+	if _, body := st.get("Ana", "/agents/1/downtime"); !strings.Contains(body, "rejected") || !strings.Contains(body, "too much harm this week") {
+		t.Error("the player should see the rejection reason")
+	}
+}
