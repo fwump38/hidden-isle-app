@@ -29,7 +29,11 @@ func Fixture() *Snapshot {
 			s.Skills.Skills = append(s.Skills.Skills, Skill{ID: sk, Name: sk, Suit: suit.name, SheetDescription: "test"})
 		}
 		for _, rank := range []string{"Page", "Knight"} {
-			s.Cards.Vision = append(s.Cards.Vision, VisionCard{ID: rank + "-" + suit.name, Name: rank + " of " + suit.name, Arcana: "court", Suit: suit.name, Rank: rank})
+			s.Cards.Vision = append(s.Cards.Vision, VisionCard{ID: rank + "-" + suit.name, Name: rank + " of " + suit.name, Arcana: "court", Suit: suit.name, Rank: rank,
+				Characters: "a test " + suit.name + " " + rank,
+				History:    []string{"Test childhood phrase (" + rank + " " + suit.name + ")", "Test other phrase", "Test third phrase"},
+				Ideals:     []string{"TestIdeal" + rank, "TestIdealTwo", "TestIdealThree", "TestIdealFour"},
+				Burdens:    []string{"TestBurden" + rank, "TestBurdenTwo", "TestBurdenThree", "TestBurdenFour"}})
 		}
 		s.Cards.Pips = append(s.Cards.Pips, PipCard{ID: "ace-" + suit.name, Name: "Ace of " + suit.name, Suit: suit.name, Rank: "Ace", ChallengeValue: 11, FateValue: 1})
 	}
@@ -41,7 +45,8 @@ func Fixture() *Snapshot {
 			Items:           []Item{{Name: "Lockpick"}}},
 		{ID: "occultist", Name: "Occultist", Guild: "Test Guild B", AbilityXPTrack: "Track B", Motto: "Test motto B.",
 			PrefilledSkills: map[string]int{"Unleash": 1, "Channel": 2}, StartsWithAdeptProficiency: true,
-			Abilities: []Ability{{ID: "evil-eye", Name: "EVIL EYE", Text: "Test.", Page: 45, Clock: &Clock{Segments: 3, Name: "Law of reflection"}}}},
+			Abilities: []Ability{{ID: "evil-eye", Name: "EVIL EYE", Text: "Test.", Page: 45, Clock: &Clock{Segments: 3, Name: "Law of reflection"}},
+				{ID: "familiar", Name: "FAMILIAR", Text: "Test familiar text.", Page: 46}}},
 	}
 	s.Campaign = Campaign{
 		AgentStatus: []string{"Active", "Resting", "Dead"}, ContactKind: []string{"Homeland", "Dioscorian", "Other"},
@@ -51,6 +56,10 @@ func Fixture() *Snapshot {
 		Visibility: []string{"seer", "party", "owner"},
 	}
 	s.Adventures.Adventures = []Adventure{{ID: "test-adventure", Title: "Test Adventure", Book: "Test"}}
+	s.Homebrew.Names = &HomebrewNames{Source: "homebrew", Note: "test", Regions: []HomebrewRegion{
+		{Region: "Venice", Convention: "test", After: []string{"Testfam", "Othertest"}},
+		{Region: "Dioscoria", Convention: "test", Given: []string{"Dio A", "Dio B"}, After: []string{"of House Test"}},
+	}}
 	l := &s.Limits
 	l.Agent.BurdenTrack = Range{0, 7, "p. 20"}
 	l.Agent.IdealTrack = Range{0, 7, "p. 20"}

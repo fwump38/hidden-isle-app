@@ -1,10 +1,10 @@
 {{define "content"}}
-{{$d := .Data}}{{$c := $d.Campaign}}
+{{$d := .Data}}
 <h1 class="h4 mb-1">Chat</h1>
 {{if not $d.Enabled}}
 <p class="text-body-secondary">The in-app assistant isn't set up yet. Ask the Seer to set <code>ANTHROPIC_API_KEY</code> to turn it on.</p>
 {{else}}
-<p class="small text-body-secondary">Ask about character creation or the rules. It can see your own Agent{{if $c}}, this campaign's public state{{end}} and the rules text — nothing Seer-only, and it never speaks for the Seer. It's a real Claude, on the Seer's own budget, so keep it to Hidden Isle questions.</p>
+<p class="small text-body-secondary">Ask about character creation or the rules. It can see your own Agent{{if $d.CampaignID}}, this campaign's public state{{end}} and the rules text — nothing Seer-only, and it never speaks for the Seer. It's a real Claude, on the Seer's own budget, so keep it to Hidden Isle questions.</p>
 {{if $d.ReadOnly}}<p class="small"><span class="badge text-bg-info">read-only</span> Reading {{$d.ViewingName}}'s chat.</p>{{end}}
 {{template "chat-body" $d}}
 {{end}}
@@ -42,8 +42,8 @@
       <details class="small text-body-secondary"><summary>fields</summary><pre class="mb-0">{{.Fields}}</pre></details>
       {{if not $d.ReadOnly}}
       <div class="mt-1">
-        <form class="d-inline" method="post" action="/chat/suggest/{{.ID}}/apply"><input type="hidden" name="back" value="/c/{{$d.Campaign.ID}}/chat"><button class="btn btn-sm btn-success" type="submit">Apply</button></form>
-        <form class="d-inline" method="post" action="/chat/suggest/{{.ID}}/dismiss"><input type="hidden" name="back" value="/c/{{$d.Campaign.ID}}/chat"><button class="btn btn-sm btn-outline-secondary" type="submit">Dismiss</button></form>
+        <form class="d-inline" method="post" action="/chat/suggest/{{.ID}}/apply"><input type="hidden" name="back" value="{{$d.Base}}"><button class="btn btn-sm btn-success" type="submit">Apply</button></form>
+        <form class="d-inline" method="post" action="/chat/suggest/{{.ID}}/dismiss"><input type="hidden" name="back" value="{{$d.Base}}"><button class="btn btn-sm btn-outline-secondary" type="submit">Dismiss</button></form>
       </div>
       {{end}}
     </div>
@@ -53,9 +53,9 @@
 {{end}}
 
 {{if not $d.ReadOnly}}
-<form hx-post="/c/{{$d.Campaign.ID}}/chat/send" hx-target="#chat-body" hx-swap="outerHTML" hx-indicator="#chat-sending" class="mb-3">
+<form hx-post="{{$d.Base}}/send" hx-target="#chat-body" hx-swap="outerHTML" hx-indicator="#chat-sending" class="mb-3">
   <div class="input-group">
-    <textarea class="form-control" name="message" rows="2" placeholder="Ask something…" required></textarea>
+    <textarea class="form-control" name="message" rows="2" placeholder="Ask something…" required>{{$d.Prefill}}</textarea>
     <button class="btn btn-primary" type="submit"><i class="bi bi-send"></i></button>
   </div>
   <div id="chat-sending" class="htmx-indicator small text-body-secondary mt-1"><span class="spinner-border spinner-border-sm"></span> thinking…</div>
@@ -63,7 +63,7 @@
 
 <details class="small">
   <summary class="text-body-secondary">What it remembers about you here</summary>
-  <form hx-post="/c/{{$d.Campaign.ID}}/chat/memory" hx-target="#chat-body" hx-swap="outerHTML" class="mt-2">
+  <form hx-post="{{$d.Base}}/memory" hx-target="#chat-body" hx-swap="outerHTML" class="mt-2">
     <textarea class="form-control form-control-sm" name="memory" rows="3" placeholder="Nothing yet.">{{$d.Thread.Memory}}</textarea>
     <button class="btn btn-sm btn-outline-secondary mt-1" type="submit">Save</button>
   </form>

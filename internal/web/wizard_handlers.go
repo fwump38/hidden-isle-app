@@ -55,7 +55,32 @@ type wizardData struct {
 	Homeland   *db.Contact
 	Dioscorian *db.Contact
 	Chosen     map[string]bool // ability id -> already on the sheet
+	Abil       []wizardAbility // the Agent's chosen abilities, resolved to their name and text
 	Error      string
+}
+
+// wizardAbility is one chosen ability with its text resolved from the class data: the sheet
+// stores only the ability's id (rules text can be corrected later without touching every Agent).
+type wizardAbility struct {
+	Index int
+	Name  string
+	Text  string
+}
+
+func resolveAbilities(abilities []db.AgentAbility, class *gamedata.Class) []wizardAbility {
+	var out []wizardAbility
+	for i, ab := range abilities {
+		v := wizardAbility{Index: i, Name: ab.Name, Text: ab.Text}
+		if ab.ID != "" && class != nil {
+			for _, x := range class.Abilities {
+				if x.ID == ab.ID {
+					v.Name, v.Text = x.Name, x.Text
+				}
+			}
+		}
+		out = append(out, v)
+	}
+	return out
 }
 
 // creationStep works out the first incomplete step for ag (1-12; 12 = everything's there).
@@ -167,7 +192,8 @@ func (s *Server) buildWizardData(a campaign.Actor, ag *db.Agent, snap *gamedata.
 		}
 	}
 	d := wizardData{Agent: ag, Class: class, Solo: solo, Limits: &snap.Limits, Steps: wizStepList,
-		Done: map[int]bool{}, Homeland: findContact(contacts, "Homeland"), Dioscorian: findContact(contacts, "Dioscorian"), Chosen: chosen}
+		Done: map[int]bool{}, Homeland: findContact(contacts, "Homeland"), Dioscorian: findContact(contacts, "Dioscorian"),
+		Chosen: chosen, Abil: resolveAbilities(ag.Abilities, class)}
 	current := creationStep(ag, class, &snap.Limits, solo, contacts)
 	for _, st := range wizStepList {
 		d.Done[st.N] = st.N < current

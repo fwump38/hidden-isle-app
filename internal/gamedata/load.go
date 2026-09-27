@@ -39,6 +39,26 @@ func Load(dir, id string) (*Snapshot, error) {
 		errs = append(errs, readYAML(path, &m))
 		s.Raw[key] = m
 	}
+	for key, rel := range s.Manifest.Data.Homebrew {
+		if key != "names" {
+			continue // a homebrew table this build doesn't use yet
+		}
+		path, err := within(dir, rel)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		var n HomebrewNames
+		if err := readYAML(path, &n); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if n.Source != "homebrew" {
+			errs = append(errs, fmt.Errorf("%s: homebrew data must say source: homebrew", rel))
+			continue
+		}
+		s.Homebrew.Names = &n
+	}
 	for _, key := range []string{"cards", "skills", "classes", "campaign", "adventures", "limits"} {
 		if _, ok := s.Manifest.files()[key]; !ok {
 			errs = append(errs, fmt.Errorf("manifest: data file %q is missing", key))
@@ -71,6 +91,9 @@ func (m *Manifest) files() map[string]string {
 func (m *Manifest) paths() []string {
 	out := []string{manifestFile}
 	for _, v := range m.files() {
+		out = append(out, v)
+	}
+	for _, v := range m.Data.Homebrew {
 		out = append(out, v)
 	}
 	for _, t := range m.Text {

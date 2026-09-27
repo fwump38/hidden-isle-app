@@ -1,0 +1,41 @@
+{{define "content"}}
+{{$d := .Data}}{{$a := $d.Agent}}
+<h1 class="h4 mb-1">Creating {{$a.Name}}</h1>
+<div class="text-body-secondary small mb-3">{{with $d.Class}}{{.Name}} · {{.Guild}}{{end}}</div>
+<p class="text-body-secondary">How would you like to fill in the rest — core self, burden and ideal, abilities, skills, and who they are?</p>
+
+<div class="row g-3">
+  {{if $d.ChatEnabled}}
+  <div class="col-12 col-md-4">
+    <div class="card h-100 border-info-subtle">
+      <div class="card-body d-flex flex-column">
+        <h2 class="h5 card-title"><i class="bi bi-stars"></i> Guided</h2>
+        <p class="small flex-grow-1">Chat walks you through it step by step: it draws cards, explains the choices, and proposes each field for you to approve. Nothing changes until you say so.</p>
+        <a class="btn btn-info mt-2" href="{{$d.ChatURL}}"><i class="bi bi-stars"></i> Start in chat</a>
+      </div>
+    </div>
+  </div>
+  {{end}}
+  <div class="col-12 col-md-4">
+    <div class="card h-100">
+      <div class="card-body d-flex flex-column">
+        <h2 class="h5 card-title"><i class="bi bi-shuffle"></i> Automatic</h2>
+        <p class="small flex-grow-1">Draws real cards and makes every rules-legal choice for you — core self, burden, ideal, abilities, skills, name, and both contacts. Takes a few seconds; review and change anything after.</p>
+        <form method="post" action="/agents/{{$a.ID}}/creation/automatic">
+          <button class="btn btn-primary mt-2" type="submit"><i class="bi bi-shuffle"></i> Generate my Agent</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-md-4">
+    <div class="card h-100">
+      <div class="card-body d-flex flex-column">
+        <h2 class="h5 card-title"><i class="bi bi-list-ol"></i> Manual</h2>
+        <p class="small flex-grow-1">The step-by-step sheet, same as always: draw your own cards (real or digital) and fill in each field by hand.</p>
+        <a class="btn btn-outline-light mt-2" href="/agents/{{$a.ID}}/wizard"><i class="bi bi-list-ol"></i> Start the wizard</a>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="small text-body-secondary mt-3">Whichever you pick, you can always switch: edit anything by hand afterward, or come back here later.</p>
+{{end}}

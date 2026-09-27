@@ -39,6 +39,9 @@ func TestSyncLocalAndKeepLastGood(t *testing.T) {
 	if good == nil || good.Class("hunter") == nil || len(good.Cards.Vision) != 38 {
 		t.Fatalf("snapshot not loaded correctly: %+v", good)
 	}
+	if len(m.Data.Homebrew) > 0 && (good.Homebrew.Names == nil || good.HomebrewRegion("Dioscoria") == nil) {
+		t.Fatalf("manifest lists homebrew %v but it didn't load", m.Data.Homebrew)
+	}
 	if got := good.Audience("markdown/stories/fhyp_01_a_muse_of_fire.md"); got != "seer" {
 		t.Errorf("stories audience = %q, want seer", got)
 	}

@@ -21,11 +21,13 @@ This repo holds **no game text**. The rules data (classes, abilities, cards, tab
 >   matching MCP tools;
 > - live updates over SSE, a Seer dashboard for the table, a secret-link TV view, and
 >   handouts pushed to players' phones;
-> - a step-by-step creation wizard (pp. 40-42);
+> - a step-by-step creation wizard (pp. 40-42), plus a class-picker with a deterministic
+>   automatic generator (real card draws, no Claude needed) and a chat-guided path alongside it;
 > - downtime a player plans and submits, and the Seer approves before it touches the sheet;
-> - an in-app Claude chat for players (character-creation help, rules Q&A), on the Seer's own
->   Anthropic billing, with monthly spend caps and read-mostly tools scoped to what that player
->   may see. A suggested sheet change is only a card in the chat until the player taps Apply.
+> - an in-app Claude chat for players (character-creation help, rules Q&A) that works before a
+>   player has even joined a campaign, on the Seer's own Anthropic billing, with monthly spend
+>   caps and read-mostly tools scoped to what that player may see. A suggested sheet change is
+>   only a card in the chat until the player taps Apply.
 >
 > Next: MCP Apps widgets in claude.ai (an Agent sheet, clock and challenge picker as `ui://`
 > resources), if that turns out to be worth it over the web UI.
@@ -161,6 +163,7 @@ scripts/vendor.sh                                                     # refresh 
   - `internal/db`: GORM models and migrations
   - `internal/gamedata`: sync and validation
   - `internal/cards`: draws
+  - `internal/creation`: the automatic character-creation generator (no Claude; real draws only)
   - `internal/mcpsrv`: MCP
   - `internal/chat`: the in-app player chat (Anthropic API, tool loop, budget caps)
   - `internal/web`: UI

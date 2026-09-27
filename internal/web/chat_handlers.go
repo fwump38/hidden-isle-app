@@ -1,7 +1,7 @@
 package web
 
 import (
-	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -9,8 +9,16 @@ import (
 	"github.com/fwump38/hidden-isle-app/internal/db"
 )
 
+// Chat works with or without a campaign: a player can use it for character-creation help before
+// joining one (campaign 0), and from inside a campaign for rules questions grounded in that
+// campaign's state. /c/{cid}/chat and the bare /chat share every handler below; cid is simply 0
+// on the bare routes.
 func (s *Server) registerChat(mux *http.ServeMux) {
 	u := func(h http.HandlerFunc) http.Handler { return s.requireUser(h) }
+	mux.Handle("GET /chat", u(s.chatPage))
+	mux.Handle("GET /chat/with/{uid}", u(s.chatPage))
+	mux.Handle("POST /chat/send", u(s.sendChat))
+	mux.Handle("POST /chat/memory", u(s.saveChatMemory))
 	mux.Handle("GET /c/{cid}/chat", u(s.chatPage))
 	mux.Handle("GET /c/{cid}/chat/with/{uid}", u(s.chatPage))
 	mux.Handle("POST /c/{cid}/chat/send", u(s.sendChat))
@@ -23,14 +31,16 @@ type chatPageData struct {
 	Enabled     bool
 	ReadOnly    bool
 	ViewingName string
-	Campaign    *db.Campaign
+	Base        string // "/chat" or "/c/{id}/chat"; every form action in chat.html is Base + "/…"
+	CampaignID  uint   // 0 outside a campaign
 	Thread      *db.ChatThread
 	Messages    []db.ChatMessage
 	Suggestions []db.ChatSuggestion
+	Prefill     string // pre-fills the message box, e.g. from a "help me choose" link
 	Error       string
 }
 
-// pendingSuggestions is the subset chat.html's Apply/Dismiss cards render.
+// Pending is the subset chat.html's Apply/Dismiss cards render.
 func (d chatPageData) Pending() []db.ChatSuggestion {
 	var out []db.ChatSuggestion
 	for _, s := range d.Suggestions {
@@ -43,27 +53,33 @@ func (d chatPageData) Pending() []db.ChatSuggestion {
 
 func (s *Server) chatPage(w http.ResponseWriter, r *http.Request) {
 	a := s.actor(r)
-	c, err := s.Svc.Campaign(a, pathID(r, "cid"))
-	if err != nil {
-		s.fail(w, r, err)
-		return
+	cid := pathID(r, "cid")
+	var c *db.Campaign
+	if cid != 0 {
+		var err error
+		if c, err = s.Svc.Campaign(a, cid); err != nil {
+			s.fail(w, r, err)
+			return
+		}
 	}
-	d := s.buildChatPage(a, c, r)
-	if d.Error != "" && d.Thread == nil && !d.Enabled {
+	d := s.buildChatPage(a, cid, r)
+	d.Prefill = r.URL.Query().Get("ask")
+	if c != nil {
 		s.page(w, r, "chat", "Chat", c, "chat", d)
 		return
 	}
-	if d.Error != "" && d.Thread == nil {
-		s.fail(w, r, errors.New(d.Error))
-		return
-	}
-	s.page(w, r, "chat", "Chat", c, "chat", d)
+	s.render(w, r, "chat", http.StatusOK, pageData{Title: "Chat", Error: takeFlash(w, r), Data: d})
 }
 
-// buildChatPage loads the caller's own thread, or (Seer only, via the {uid} path value) a
-// read-only view of a player's thread.
-func (s *Server) buildChatPage(a campaign.Actor, c *db.Campaign, r *http.Request) chatPageData {
-	d := chatPageData{Enabled: s.Chat != nil, Campaign: c}
+// buildChatPage loads the caller's own thread for campaignID (0 = outside any campaign), or
+// (Seer only, via the {uid} path value) a read-only view of a player's thread.
+func (s *Server) buildChatPage(a campaign.Actor, campaignID uint, r *http.Request) chatPageData {
+	d := chatPageData{Enabled: s.Chat != nil, CampaignID: campaignID}
+	if campaignID != 0 {
+		d.Base = fmt.Sprintf("/c/%d/chat", campaignID)
+	} else {
+		d.Base = "/chat"
+	}
 	if !d.Enabled {
 		return d
 	}
@@ -80,7 +96,7 @@ func (s *Server) buildChatPage(a campaign.Actor, c *db.Campaign, r *http.Request
 		s.DB.First(&u, userID)
 		d.ViewingName = u.Name
 	}
-	th, err := s.Chat.Thread(userID, c.ID)
+	th, err := s.Chat.Thread(userID, campaignID)
 	if err != nil {
 		d.Error = friendly(err)
 		return d
@@ -92,12 +108,8 @@ func (s *Server) buildChatPage(a campaign.Actor, c *db.Campaign, r *http.Request
 
 func (s *Server) sendChat(w http.ResponseWriter, r *http.Request) {
 	a := s.actor(r)
-	c, err := s.Svc.Campaign(a, pathID(r, "cid"))
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	d := s.buildChatPage(a, c, r)
+	cid := pathID(r, "cid")
+	d := s.buildChatPage(a, cid, r)
 	if s.Chat != nil && d.Thread != nil {
 		if _, err := s.Chat.Send(r.Context(), a.User, d.Thread.ID, r.FormValue("message")); err != nil {
 			d.Error = friendly(err)
@@ -109,17 +121,13 @@ func (s *Server) sendChat(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) saveChatMemory(w http.ResponseWriter, r *http.Request) {
 	a := s.actor(r)
-	c, err := s.Svc.Campaign(a, pathID(r, "cid"))
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	d := s.buildChatPage(a, c, r)
+	cid := pathID(r, "cid")
+	d := s.buildChatPage(a, cid, r)
 	if s.Chat != nil && d.Thread != nil {
 		if err := s.Chat.UpdateMemory(a, d.Thread.ID, r.FormValue("memory")); err != nil {
 			d.Error = friendly(err)
 		}
-		d.Thread, _ = s.Chat.Thread(d.Thread.UserID, c.ID)
+		d.Thread, _ = s.Chat.Thread(d.Thread.UserID, cid)
 		d.Messages, d.Suggestions, _ = s.Chat.History(d.Thread.ID)
 	}
 	s.partial(w, "chat", "chat-body", d)
@@ -127,7 +135,7 @@ func (s *Server) saveChatMemory(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) applyChatSuggestion(w http.ResponseWriter, r *http.Request) {
 	if s.Chat == nil {
-		s.done(w, r, errors.New("chat isn't enabled"), "/")
+		s.done(w, r, fmt.Errorf("chat isn't enabled"), "/")
 		return
 	}
 	err := s.Chat.ApplySuggestion(s.actor(r), pathID(r, "id"))
@@ -136,7 +144,7 @@ func (s *Server) applyChatSuggestion(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) dismissChatSuggestion(w http.ResponseWriter, r *http.Request) {
 	if s.Chat == nil {
-		s.done(w, r, errors.New("chat isn't enabled"), "/")
+		s.done(w, r, fmt.Errorf("chat isn't enabled"), "/")
 		return
 	}
 	err := s.Chat.DismissSuggestion(s.actor(r), pathID(r, "id"))

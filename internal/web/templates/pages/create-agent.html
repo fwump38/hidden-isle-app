@@ -1,0 +1,50 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1 class="h4 mb-1">Create an Agent</h1>
+<p class="small text-body-secondary">{{if $d.Campaign}}For {{$d.Campaign.Name}}. {{end}}Pick a class to start. You'll choose the rest next — with chat's help, an automatic draw, or entirely by hand.</p>
+
+<form id="create-agent-form" method="post" action="/agents/create" class="row g-2 mb-3">
+  <input type="hidden" name="campaign_id" value="{{$d.CampaignID}}">
+  <div class="col-12 col-md-6">
+    <label class="form-label small mb-0" for="ca-name">Name</label>
+    <input class="form-control" id="ca-name" name="name" placeholder="You can change this later" aria-label="Agent name">
+  </div>
+  {{if $d.AllPlayers}}
+  <div class="col-12 col-md-6">
+    <label class="form-label small mb-0" for="ca-owner">Played by</label>
+    <select class="form-select" id="ca-owner" name="owner_id" aria-label="Played by">
+      <option value="">Played by the Seer</option>
+      {{range $d.AllPlayers}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+    </select>
+  </div>
+  {{end}}
+</form>
+
+<div class="row g-3">
+  {{range $d.Classes}}
+  <div class="col-12 col-md-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-body d-flex flex-column">
+        <h2 class="h5 card-title">{{.Name}}</h2>
+        <div class="small text-body-secondary mb-2">{{.Guild}}{{with .Pages}} · {{.}}{{end}}</div>
+        {{with .Motto}}<p class="fst-italic small">"{{.}}"</p>{{end}}
+        <p class="small flex-grow-1">{{.Summary}}</p>
+        <button class="btn btn-primary mt-2" type="submit" form="create-agent-form" name="class" value="{{.ID}}">Choose {{.Name}}</button>
+      </div>
+    </div>
+  </div>
+  {{end}}
+
+  {{if $d.ChatEnabled}}
+  <div class="col-12 col-md-6 col-lg-4">
+    <div class="card h-100 border-info-subtle">
+      <div class="card-body d-flex flex-column">
+        <h2 class="h5 card-title"><i class="bi bi-stars"></i> Not sure?</h2>
+        <p class="small flex-grow-1">Describe the character you have in mind, or the way you like to play, and chat can help you pick a class.</p>
+        <a class="btn btn-outline-info mt-2" href="{{$d.HelpChooseURL}}"><i class="bi bi-stars"></i> Help me choose</a>
+      </div>
+    </div>
+  </div>
+  {{end}}
+</div>
+{{end}}

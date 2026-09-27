@@ -37,15 +37,10 @@ func (s *site) get(user, path string) (int, string) {
 	return w.Code, string(b)
 }
 
-// post submits a form as user and returns the status and the flash message, if any.
+// post submits a form as user and returns the status and the flash message, if any. Use this
+// for the usual redirect-on-POST handlers.
 func (s *site) post(user, path string, form url.Values) (int, string) {
-	r := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
-	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	r.Header.Set("Sec-Fetch-Site", "same-origin")
-	r.RemoteAddr = "192.168.1.10:1234"
-	r.AddCookie(s.cookies[user])
-	w := httptest.NewRecorder()
-	s.h.ServeHTTP(w, r)
+	w := s.doPost(user, path, form)
 	flash := ""
 	for _, c := range w.Result().Cookies() {
 		if c.Name == flashCookie {
@@ -55,7 +50,32 @@ func (s *site) post(user, path string, form url.Values) (int, string) {
 	return w.Code, flash
 }
 
+// postBody submits a form as user and returns the status and the response body, for handlers
+// that render a partial directly (htmx swaps) instead of redirecting.
+func (s *site) postBody(user, path string, form url.Values) (int, string) {
+	w := s.doPost(user, path, form)
+	b, _ := io.ReadAll(w.Result().Body)
+	return w.Code, string(b)
+}
+
+func (s *site) doPost(user, path string, form url.Values) *httptest.ResponseRecorder {
+	r := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.Header.Set("Sec-Fetch-Site", "same-origin")
+	r.RemoteAddr = "192.168.1.10:1234"
+	r.AddCookie(s.cookies[user])
+	w := httptest.NewRecorder()
+	s.h.ServeHTTP(w, r)
+	return w
+}
+
 func newSite(t *testing.T) (*site, *campaign.Service) {
+	t.Helper()
+	st, svc, _ := newSiteWithServer(t)
+	return st, svc
+}
+
+func newSiteWithServer(t *testing.T) (*site, *campaign.Service, *Server) {
 	t.Helper()
 	dir := t.TempDir()
 	g, err := db.Open(filepath.Join(dir, "t.db"))
@@ -86,7 +106,7 @@ func newSite(t *testing.T) (*site, *campaign.Service) {
 		sess.Issue(rec, u.ID, auth.KindLocal)
 		st.cookies[u.Name] = rec.Result().Cookies()[0]
 	}
-	return st, svc
+	return st, svc, srv
 }
 
 func TestPagesRenderAndKeepSecrets(t *testing.T) {

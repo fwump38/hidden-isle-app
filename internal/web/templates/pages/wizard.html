@@ -139,11 +139,11 @@
   <p class="small text-body-secondary">Choose {{$d.Limits.Creation.Abilities}} from {{with $d.Class}}{{.Name}}'s{{end}} list. Quote text depends on exact wording, so it's copied verbatim.</p>
   {{if $a.Abilities}}
   <ul class="list-group list-group-flush mb-2">
-    {{range $i, $ab := $a.Abilities}}
+    {{range $ab := $d.Abil}}
     <li class="list-group-item d-flex justify-content-between align-items-start px-0">
       <div><strong>{{$ab.Name}}</strong><div class="small text-body-secondary">{{$ab.Text}}</div></div>
       <form method="post" action="{{$act}}"><input type="hidden" name="back" value="/agents/{{$id}}/wizard?step=5">
-        <button class="btn btn-sm btn-outline-danger" type="submit" name="ability.remove" value="{{$i}}">Remove</button></form>
+        <button class="btn btn-sm btn-outline-danger" type="submit" name="ability.remove" value="{{$ab.Index}}">Remove</button></form>
     </li>
     {{end}}
   </ul>
@@ -325,11 +325,13 @@
   <p class="small">Ask the Seer or Claude for a 3-sentence pitch to read at the table, or write your own.</p>
   <h3 class="h6 mt-3">Transcription checklist for the paper sheet</h3>
   <ul class="small">
+    <li>As a child: {{$a.ChildPhrase}} ({{$a.ChildCard}}) · As an adult, {{$a.AdultVerb}}: {{$a.AdultPhrase}} ({{$a.AdultCard}})</li>
     <li>Skills: {{range $k, $v := $a.Skills}}{{$k}} {{$v}}, {{end}}</li>
     <li>Burden: {{$a.Burden}} ({{$a.BurdenCard}}) · Ideal: {{$a.Ideal}} ({{$a.IdealCard}})</li>
-    <li>Abilities: {{range $a.Abilities}}{{.Name}}, {{end}}</li>
+    <li>Abilities: {{range $d.Abil}}{{.Name}}, {{end}}</li>
     <li>{{if $d.Class}}{{if $d.Class.StartsWithAdeptProficiency}}Proficiency: {{range $a.Proficiencies}}{{.School}} ({{.Rank}}){{end}}{{end}}{{end}}</li>
     <li>Contacts: {{with $d.Homeland}}{{.Name}} (homeland){{end}}{{if and $d.Homeland $d.Dioscorian}}, {{end}}{{with $d.Dioscorian}}{{.Name}} (Dioscorian){{end}}</li>
+    {{with $a.Why}}<li>Why Dioscoria: {{.}}</li>{{end}}
   </ul>
   <a class="btn btn-primary" href="{{$act}}"><i class="bi bi-card-list"></i> Go to the full sheet</a>
 </div></div>

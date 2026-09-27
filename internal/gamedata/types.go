@@ -16,6 +16,7 @@ type Manifest struct {
 	Data          struct {
 		Generated map[string]string `yaml:"generated"`
 		Hand      map[string]string `yaml:"hand"`
+		Homebrew  map[string]string `yaml:"homebrew"` // not from the books; see Homebrew
 	} `yaml:"data"`
 	Text       []TextSource      `yaml:"text"`
 	Prompts    string            `yaml:"prompts"` // folder of <skill>/SKILL.md files, served as MCP prompts
@@ -161,8 +162,44 @@ type Snapshot struct {
 	Adventures Adventures
 	Limits     Limits
 	Prompts    []Prompt
+	Homebrew   Homebrew
 	// Tables the app doesn't type yet (limits, setting, oracle, downtime), keyed by manifest name.
 	Raw map[string]map[string]any
+}
+
+// Homebrew is supplementary data written for the table, NOT from the published books. It's
+// optional (older rules releases have none), and anything built from it must say it's homebrew.
+type Homebrew struct {
+	Names *HomebrewNames
+}
+
+// HomebrewNames adds family names and bynames to the books' given names per city, and names for
+// Dioscoria (the books print none).
+type HomebrewNames struct {
+	Source  string           `yaml:"source"`
+	Note    string           `yaml:"note"`
+	Regions []HomebrewRegion `yaml:"regions"`
+}
+
+type HomebrewRegion struct {
+	Region     string   `yaml:"region" json:"region"`
+	Convention string   `yaml:"convention" json:"convention"`
+	Given      []string `yaml:"given" json:"given,omitempty"`
+	Before     []string `yaml:"before" json:"before,omitempty"` // bynames before the given name
+	After      []string `yaml:"after" json:"after,omitempty"`   // family names or bynames after it
+}
+
+// HomebrewRegion returns the homebrew names for a region, or nil.
+func (s *Snapshot) HomebrewRegion(region string) *HomebrewRegion {
+	if s.Homebrew.Names == nil {
+		return nil
+	}
+	for i := range s.Homebrew.Names.Regions {
+		if s.Homebrew.Names.Regions[i].Region == region {
+			return &s.Homebrew.Names.Regions[i]
+		}
+	}
+	return nil
 }
 
 // Class returns the class with the given id or name.
