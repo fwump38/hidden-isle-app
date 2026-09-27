@@ -10,6 +10,7 @@ import (
 
 	"github.com/fwump38/hidden-isle-app/internal/campaign"
 	"github.com/fwump38/hidden-isle-app/internal/cards"
+	"github.com/fwump38/hidden-isle-app/internal/challenge"
 	"github.com/fwump38/hidden-isle-app/internal/db"
 	"github.com/fwump38/hidden-isle-app/internal/gamedata"
 )
@@ -187,6 +188,34 @@ type cardIn struct {
 }
 type tableIn struct {
 	Name string `json:"name" jsonschema:"limits, oracle, downtime, setting or skills"`
+}
+type challengeCountIn struct {
+	AgentID      uint                 `json:"agent_id,omitempty" jsonschema:"read skill points and harm from this Agent's sheet"`
+	Skill        string               `json:"skill"`
+	SkillPoints  int                  `json:"skill_points,omitempty" jsonschema:"only without agent_id"`
+	HarmInSuit   int                  `json:"harm_in_suit,omitempty" jsonschema:"only without agent_id"`
+	IgnoreHarm   bool                 `json:"ignore_harm,omitempty" jsonschema:"an ability says harm doesn't reduce cards (e.g. UNSTOPPABLE)"`
+	Burden       bool                 `json:"burden,omitempty"`
+	Vice         bool                 `json:"vice,omitempty"`
+	Ideal        bool                 `json:"ideal,omitempty"`
+	Virtue       bool                 `json:"virtue,omitempty"`
+	Modifiers    []challenge.Modifier `json:"modifiers,omitempty" jsonschema:"extra or lost cards with a label: preparation, vision, item, ally, ability (p. 15)"`
+	Difficulty   string               `json:"difficulty" jsonschema:"easy (2), medium (3) or hard (4)"`
+	SeerExtra    int                  `json:"seer_extra,omitempty" jsonschema:"extra Seer cards for dangerous context"`
+	Participants int                  `json:"participants,omitempty" jsonschema:"group action: number of participants (+1 Seer card each, p. 22)"`
+}
+type fortuneIn struct {
+	Card      string `json:"card" jsonschema:"e.g. 2 of Swords"`
+	Mode      string `json:"mode" jsonschema:"suit (change the challenge card's suit) or add (add its number)"`
+	SuitBonus bool   `json:"suit_bonus,omitempty" jsonschema:"the player has at least 1 point in all three skills of this card's suit: +3"`
+	By        string `json:"by,omitempty"`
+}
+type challengeResolveIn struct {
+	Skill        string      `json:"skill" jsonschema:"sets the trump suit"`
+	Played       string      `json:"played" jsonschema:"the challenger's card, e.g. 7 of Cups"`
+	Seer         string      `json:"seer" jsonschema:"the Seer's card"`
+	NumeralBonus int         `json:"numeral_bonus,omitempty" jsonschema:"+3 for an ideal, +3 for a virtue (from challenge_count)"`
+	Fortunes     []fortuneIn `json:"fortunes,omitempty"`
 }
 type drawIn struct {
 	Deck  string          `json:"deck" jsonschema:"vision (22 Majors + 16 Courts) or pips (Ace-10 in four suits)"`
@@ -433,6 +462,45 @@ func (s *Server) addTools() {
 				return t, nil
 			}
 			return nil, fmt.Errorf("table must be limits, oracle, downtime, setting or skills")
+		})
+	tool(s, "challenge_count", "How many cards each side draws for a challenge (p. 15): 1 + skill, burden +1 (mark the track), vice +1, ideal -1 with +3 to each card (mark the track), virtue +3, -1 for 2 harm in the suit (p. 23), modifiers, minimum 1; Seer 2/3/4 + danger + group participants. Returns the breakdown with pages.",
+		func(ctx context.Context, a campaign.Actor, in challengeCountIn) (any, error) {
+			st := challenge.Setup{Skill: in.Skill, SkillPoints: in.SkillPoints, HarmInSuit: in.HarmInSuit, IgnoreHarm: in.IgnoreHarm,
+				Burden: in.Burden, Vice: in.Vice, Ideal: in.Ideal, Virtue: in.Virtue, Modifiers: in.Modifiers,
+				Difficulty: in.Difficulty, SeerExtra: in.SeerExtra, Participants: in.Participants}
+			if in.AgentID != 0 {
+				ag, err := s.svc.Agent(a, in.AgentID)
+				if err != nil {
+					return nil, err
+				}
+				st.SkillPoints = ag.Skills[in.Skill]
+				st.HarmInSuit = len(ag.Harm[challenge.SuitOf(in.Skill)])
+			}
+			return challenge.Counts(st)
+		})
+	tool(s, "challenge_resolve", "Resolve the cards played (pp. 15-19): trump beats non-trump; otherwise higher number, ties to the challenger; a trump Ace is always a total success; Ace = 11. Applies the ideal/virtue bonus and fortune cards in order. Returns the outcome with each step and page.",
+		func(ctx context.Context, a campaign.Actor, in challengeResolveIn) (any, error) {
+			trump := challenge.SuitOf(in.Skill)
+			if trump == "" {
+				return nil, fmt.Errorf("unknown skill %q", in.Skill)
+			}
+			played, err := challenge.ParseCard(in.Played)
+			if err != nil {
+				return nil, err
+			}
+			seer, err := challenge.ParseCard(in.Seer)
+			if err != nil {
+				return nil, err
+			}
+			var fs []challenge.Fortune
+			for _, f := range in.Fortunes {
+				c, err := challenge.ParseCard(f.Card)
+				if err != nil {
+					return nil, err
+				}
+				fs = append(fs, challenge.Fortune{Card: c, Mode: f.Mode, SuitBonus: f.SuitBonus, By: f.By})
+			}
+			return challenge.Resolve(trump, played, seer, in.NumeralBonus, fs)
 		})
 	tool(s, "draw_cards", "Digital card draw, only when the Seer asks for one (the table normally draws real cards). Hands come from one shuffled deck, so no card is in two hands. Ace = 11 in challenges, 1 for fate numbers.",
 		func(ctx context.Context, a campaign.Actor, in drawIn) (any, error) {

@@ -265,3 +265,35 @@ func TestPlayerAgentFlow(t *testing.T) {
 		t.Error("Bram still exists")
 	}
 }
+
+func TestChallengeHelper(t *testing.T) {
+	st, _ := newSite(t)
+	st.post("Ana", "/agents", url.Values{"name": {"Ines"}, "class": {"prowler"}, "campaign_id": {"0"}}) // Slip 2 pre-filled
+	st.post("Ana", "/agents/1", url.Values{"harm.Cups.0": {"P"}, "harm.Cups.1": {"S"}})
+	body := func(form url.Values) string {
+		r := httptest.NewRequest(http.MethodPost, "/agents/1/challenge", strings.NewReader(form.Encode()))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.Header.Set("Sec-Fetch-Site", "same-origin")
+		r.RemoteAddr = "192.168.1.10:1"
+		r.AddCookie(st.cookies["Ana"])
+		w := httptest.NewRecorder()
+		st.h.ServeHTTP(w, r)
+		return w.Body.String()
+	}
+	out := body(url.Values{"skill": {"Slip"}, "difficulty": {"hard"}, "burden": {"on"}, "action": {"count"}})
+	// 1 + 2 Slip + 1 burden - 1 (2 harm in Cups) = 3; Seer 4.
+	if !strings.Contains(out, `<div class="fs-4 fw-bold">3</div>cards for you`) || !strings.Contains(out, `<div class="fs-4 fw-bold">4</div>cards for the Seer`) {
+		t.Errorf("count output: %s", out)
+	}
+	if !strings.Contains(out, "Mark the burden track") {
+		t.Error("should offer to mark the burden track")
+	}
+	out = body(url.Values{"skill": {"Slip"}, "difficulty": {"medium"}, "action": {"resolve"}, "played": {"3 of Cups"}, "seer": {"10 of Pentacles"}})
+	if !strings.Contains(out, "Total success") {
+		t.Errorf("resolve: %s", out)
+	}
+	out = body(url.Values{"skill": {"Slip"}, "difficulty": {"medium"}, "action": {"resolve"}, "played": {"3 of Wands"}, "seer": {"10 of Pentacles"}})
+	if !strings.Contains(out, "Failure") || !strings.Contains(out, "Consequence ideas") {
+		t.Errorf("failure: %s", out)
+	}
+}

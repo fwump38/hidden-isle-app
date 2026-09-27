@@ -68,6 +68,53 @@
   </div>
 </div>
 
+{{if $d.CanEdit}}
+<details class="card mb-3" id="challenge-card">
+  <summary class="card-header"><i class="bi bi-suit-spade"></i> Challenge helper {{help "Counts both hands (p. 15, p. 20) and resolves the cards you played (pp. 15-19). The table draws real cards; enter what was played. A digital draw is there only as a backup."}}</summary>
+  <div class="card-body">
+    <form method="post" action="{{$act}}/challenge" hx-post="{{$act}}/challenge" hx-target="#challenge-out" hx-select="#challenge-out" hx-swap="outerHTML" class="row g-2 small">
+      <div class="col-12 col-md-4">
+        <label class="form-label mb-0" for="ch-skill">Skill</label>
+        <select class="form-select form-select-sm" id="ch-skill" name="skill">
+          {{range $d.Suits}}<optgroup label="{{.Suit}}">{{range .Skills}}<option value="{{.Name}}">{{.Name}} ({{.Points}})</option>{{end}}</optgroup>{{end}}
+        </select>
+      </div>
+      <div class="col-6 col-md-3">
+        <label class="form-label mb-0" for="ch-diff">Seer's difficulty</label>
+        <select class="form-select form-select-sm" id="ch-diff" name="difficulty"><option value="easy">Easy (2)</option><option value="medium" selected>Medium (3)</option><option value="hard">Hard (4)</option></select>
+      </div>
+      <div class="col-3 col-md-2"><label class="form-label mb-0" for="ch-extra">Danger +</label><input class="form-control form-control-sm" type="number" id="ch-extra" name="seer_extra" value="0" title="Extra Seer cards for dangerous context (p. 15)"></div>
+      <div class="col-3 col-md-3"><label class="form-label mb-0" for="ch-group">Group of</label><input class="form-control form-control-sm" type="number" min="0" id="ch-group" name="participants" value="0" title="Group action: participants, +1 Seer card each (p. 22)"></div>
+      <div class="col-12 d-flex flex-wrap gap-3">
+        <span class="form-check"><input class="form-check-input" type="checkbox" name="burden" id="ch-b"><label class="form-check-label" for="ch-b">Burden{{with $a.Burden}} ({{.}}){{end}}: +1 card</label></span>
+        <span class="form-check"><input class="form-check-input" type="checkbox" name="vice" id="ch-v"><label class="form-check-label" for="ch-v">Vice: +1 card</label></span>
+        <span class="form-check"><input class="form-check-input" type="checkbox" name="ideal" id="ch-i"><label class="form-check-label" for="ch-i">Ideal{{with $a.Ideal}} ({{.}}){{end}}: −1 card, +3</label></span>
+        <span class="form-check"><input class="form-check-input" type="checkbox" name="virtue" id="ch-vt"><label class="form-check-label" for="ch-vt">Virtue: +3</label></span>
+        <span class="form-check"><input class="form-check-input" type="checkbox" name="ignore_harm" id="ch-ih"><label class="form-check-label" for="ch-ih">Ignore harm penalty {{help "Only when an ability says so, e.g. UNSTOPPABLE."}}</label></span>
+      </div>
+      {{range $i := seq 0 1}}
+      <div class="col-8 col-md-4"><input class="form-control form-control-sm" name="mod{{$i}}_label" placeholder="{{if eq $i 0}}e.g. preparation, an item, an ally{{else}}another modifier{{end}}" aria-label="Modifier"></div>
+      <div class="col-4 col-md-2"><select class="form-select form-select-sm" name="mod{{$i}}" aria-label="Cards"><option value="0">±0</option><option value="1">+1</option><option value="2">+2</option><option value="-1">−1</option></select></div>
+      {{end}}
+      <div class="col-12"><button class="btn btn-sm btn-outline-light" type="submit" name="action" value="count"><i class="bi bi-calculator"></i> Count cards</button>
+        <button class="btn btn-sm btn-outline-secondary" type="submit" name="action" value="draw" title="Only if you're not using a real deck">Draw my hand digitally</button></div>
+      <div class="col-12 border-top pt-2 mt-2"><strong>Cards played</strong></div>
+      <div class="col-6 col-md-3"><label class="form-label mb-0" for="ch-played">Your card</label><select class="form-select form-select-sm" id="ch-played" name="played"><option value="">…</option>{{range $d.Pips}}<option>{{.}}</option>{{end}}</select></div>
+      <div class="col-6 col-md-3"><label class="form-label mb-0" for="ch-seer">Seer's card</label><select class="form-select form-select-sm" id="ch-seer" name="seer"><option value="">…</option>{{range $d.Pips}}<option>{{.}}</option>{{end}}</select></div>
+      <div class="col-12 col-md-6 form-text">Fortune cards (after the reveal, one per player, p. 18):</div>
+      {{range $i := seq 0 2}}
+      <div class="col-5 col-md-3"><select class="form-select form-select-sm" name="fortune{{$i}}" aria-label="Fortune card"><option value="">No fortune</option>{{range $d.Pips}}<option>{{.}}</option>{{end}}</select></div>
+      <div class="col-4 col-md-3"><select class="form-select form-select-sm" name="fortune{{$i}}_mode" aria-label="Fortune effect"><option value="add">adds its number</option><option value="suit">changes the suit</option></select></div>
+      <div class="col-3 col-md-2"><input class="form-control form-control-sm" name="fortune{{$i}}_by" placeholder="who" aria-label="Played by"></div>
+      <div class="col-12 col-md-4"><span class="form-check"><input class="form-check-input" type="checkbox" name="fortune{{$i}}_bonus" id="fb{{$i}}"><label class="form-check-label" for="fb{{$i}}">+3: they have points in all three skills of its suit</label></span></div>
+      {{end}}
+      <div class="col-12"><button class="btn btn-sm btn-primary" type="submit" name="action" value="resolve"><i class="bi bi-check2-circle"></i> Resolve</button></div>
+    </form>
+    {{template "challenge-out" dict "AgentID" $a.ID}}
+  </div>
+</details>
+{{end}}
+
 <div class="row g-3">
   {{/* ---------------- skills, XP, harm */}}
   <div class="col-12 col-lg-7">
@@ -394,4 +441,36 @@
   </div>
 </div>
 {{end}}
+{{end}}
+
+{{define "challenge-out"}}
+<div id="challenge-out" class="mt-3">
+  {{with .Error}}<div class="alert alert-warning py-2 small">{{.}}</div>{{end}}
+  {{with .Count}}
+  <div class="row g-2 small">
+    <div class="col-6"><div class="border rounded p-2"><div class="fs-4 fw-bold">{{.AgentCards}}</div>cards for you · trump <strong>{{.Trump}}</strong>{{if .NumeralBonus}} · +{{.NumeralBonus}} to each card{{end}}<ul class="mb-0 ps-3 text-body-secondary">{{range .Breakdown}}<li>{{.}}</li>{{end}}</ul></div></div>
+    <div class="col-6"><div class="border rounded p-2"><div class="fs-4 fw-bold">{{.SeerCards}}</div>cards for the Seer<ul class="mb-0 ps-3 text-body-secondary">{{range .SeerBreakdown}}<li>{{.}}</li>{{end}}</ul></div></div>
+  </div>
+  {{range .Notes}}<div class="small text-warning mt-1"><i class="bi bi-exclamation-diamond"></i> {{.}}</div>{{end}}
+  {{end}}
+  {{with .Drawn}}<div class="small mt-2"><strong>Your digital hand:</strong> {{join . ", "}}. <span class="text-body-secondary">The Seer draws their own.</span></div>{{end}}
+  {{with .Result}}
+  <div class="alert {{if eq .Outcome "total"}}alert-success{{else if eq .Outcome "complicated"}}alert-warning{{else}}alert-danger{{end}} mt-2 mb-1">
+    <div class="fs-5 fw-bold">{{.Label}}</div>
+    <div class="small">{{.Challenge}} ({{.ChallengeN}}) vs {{.Seer}} ({{.SeerN}})</div>
+  </div>
+  <ol class="small mb-1">{{range .Steps}}<li>{{.}}</li>{{end}}</ol>
+  {{range .Notes}}<div class="small text-warning"><i class="bi bi-exclamation-diamond"></i> {{.}}</div>{{end}}
+  {{end}}
+  {{with .Ideas}}<div class="small mt-1"><strong>Consequence ideas</strong> (the world must change, p. 17): {{join . "; "}}.</div>{{end}}
+  {{if and .Count .CanEdit}}{{if or .Count.MarkBurden .Count.MarkIdeal}}
+  <form method="post" action="/agents/{{.AgentID}}" class="mt-2">
+    <input type="hidden" name="why" value="used in a challenge (p. 20)">
+    {{if .Count.MarkBurden}}<input type="hidden" name="inc.burden_track" value="1">{{end}}
+    {{if .Count.MarkIdeal}}<input type="hidden" name="inc.ideal_track" value="1">{{end}}
+    <button class="btn btn-sm btn-outline-warning" type="submit"><i class="bi bi-plus-circle"></i> Mark the {{if and .Count.MarkBurden .Count.MarkIdeal}}burden and ideal tracks{{else if .Count.MarkBurden}}burden track{{else}}ideal track{{end}}</button>
+    <span class="small text-body-secondary">Marked whatever the outcome (p. 20).</span>
+  </form>
+  {{end}}{{end}}
+</div>
 {{end}}

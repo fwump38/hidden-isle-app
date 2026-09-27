@@ -46,6 +46,7 @@ func (s *Server) registerCampaign(mux *http.ServeMux) {
 	mux.Handle("GET /agents/{id}/print", u(s.agentPrint))
 	mux.Handle("POST /agents/{id}", u(s.updateAgent))
 	mux.Handle("POST /agents/{id}/contacts", u(s.createContact))
+	mux.Handle("POST /agents/{id}/challenge", u(s.challengeHelper))
 }
 
 func (s *Server) actor(r *http.Request) campaign.Actor {
@@ -303,6 +304,7 @@ type sheetData struct {
 	Abil      []abilityView   // the Agent's abilities with their text
 	Unused    []gamedata.Ability
 	Schools   []string
+	Pips      []string // the 40 pips, for card pickers
 }
 
 type suitRow struct {
@@ -343,7 +345,7 @@ func (s *Server) agentSheet(a campaign.Actor, id uint) (*sheetData, *db.Campaign
 	if snap == nil {
 		return nil, nil, campaign.ErrNoData
 	}
-	d := &sheetData{Campaign: c, Agent: ag, Class: snap.Class(ag.Class), CanEdit: s.Svc.CanEditAgent(a, ag)}
+	d := &sheetData{Campaign: c, Agent: ag, Class: snap.Class(ag.Class), CanEdit: s.Svc.CanEditAgent(a, ag), Pips: s.pipNames()}
 	if ag.OwnerID != nil {
 		var u db.User
 		if s.DB.First(&u, *ag.OwnerID).Error == nil {

@@ -149,6 +149,15 @@ func TestToolsPlayACampaign(t *testing.T) {
 	if _, e := h.try("delete_record", map[string]any{"kind": "campaign", "id": cid, "reason": "x"}); e == "" {
 		t.Error("campaign deletion over MCP should be refused")
 	}
+	cnt := h.call("challenge_count", map[string]any{"agent_id": aid, "skill": "Slip", "difficulty": "hard", "burden": true})
+	if cnt["agent_cards"].(float64) != 3 || cnt["seer_cards"].(float64) != 4 || cnt["mark_burden"] != true {
+		t.Errorf("challenge_count (1 + Slip 2 + burden - 1 for 2 Cups harm = 3): %v", cnt)
+	}
+	res := h.call("challenge_resolve", map[string]any{"skill": "Convince", "played": "5 of Pentacles", "seer": "8 of Swords",
+		"fortunes": []map[string]any{{"card": "2 of Swords", "mode": "suit"}, {"card": "3 of Wands", "mode": "add"}}})
+	if res["outcome"] != "complicated" {
+		t.Errorf("p. 19 example over MCP: %v", res)
+	}
 	card, e := h.try("lookup_card", map[string]any{"name": "Page of Cups"})
 	if e != "" || card["name"] != "Page of Cups" {
 		t.Errorf("lookup_card: %v %s", card, e)
