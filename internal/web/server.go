@@ -106,11 +106,14 @@ type pageData struct {
 	Data  any
 	Nav   *campaignNav // set on campaign pages
 	Live  bool         // subscribe to the campaign's live updates
+
+	ChatEnabled bool // the in-app player chat is configured (ANTHROPIC_API_KEY)
 }
 
 func (s *Server) render(w http.ResponseWriter, r *http.Request, page string, status int, pd pageData) {
 	pd.User = auth.User(r.Context())
 	pd.Live = s.Live != nil && pd.Nav != nil && pd.Nav.Campaign != nil
+	pd.ChatEnabled = s.Chat != nil
 	pd.Info = auth.Info(r.Context())
 	pd.Build = s.Build
 	t, ok := s.pages[page]

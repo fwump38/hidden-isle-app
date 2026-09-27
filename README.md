@@ -98,6 +98,17 @@ claude mcp add --transport http hidden-isle https://isle.example.com/mcp --heade
 - **Prompts:** the rules repo's plugin skills are served as prompts (`create-agent`, `challenge`, `downtime`, `wrap-up`, …), so a claude.ai chat with only this connector has them.
 - **Refreshing:** prompts and the search index refresh when you install a new rules release.
 
+## In-app chat for players
+
+Players get their own Claude chat on the campaign's **Chat** tab, for character-creation help and rules questions. It's separate from the MCP connector above: MCP is the Seer's own claude.ai/Claude Code session; this is a chat the app itself runs on the Seer's Anthropic billing, so players never need (or get) their own Anthropic account, and it can't see or touch the Seer's claude.ai account, memories or connectors.
+
+1. **Get a key.** Go to the [Anthropic Console](https://console.anthropic.com/settings/keys) → **API Keys** → **Create Key**. If it offers identity federation, decline it — that's for workload identity in a cloud provider (AWS/GCP/Azure), not this app; just create a standard API key.
+2. **Expiration:** the app has no way to refresh or rotate this key itself — it's read once from `ANTHROPIC_API_KEY` at startup. If the key expires, the chat quietly stops working until you generate a new one and update it. Set it to **Never**, or note the date somewhere you'll actually see it before it lapses.
+3. **Set it:** add `ANTHROPIC_API_KEY` to the container's environment (see `compose.yaml`) and restart. The **Chat** tab appears for everyone in a campaign once it's set; with it unset, the tab is hidden entirely and nothing chat-related is reachable.
+4. **Optional caps:** `HI_CHAT_MONTHLY_CAP_USD` (table-wide) and `HI_CHAT_PLAYER_CAP_USD` (per player) stop new chat requests once that month's spend is reached; Admin shows the running total against them.
+
+Everything a player's chat can see or change is scoped to that player: it reads their own Agent, party-visible campaign state, and the rules text (never adventures or anything Seer-only), and the one thing it can write — a suggested change to the player's own Agent — only becomes real once the player taps **Apply** on the suggestion card. The Seer can read (not write) any player's chat from that campaign's Settings page.
+
 ## Configuration
 
 | Variable | Default | Purpose |
