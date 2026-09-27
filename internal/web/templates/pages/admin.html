@@ -42,6 +42,37 @@
   <div class="col-12">
     <div class="card">
       <div class="card-body">
+        <h2 class="h5 card-title"><i class="bi bi-house-heart"></i> Home network</h2>
+        <p class="small text-body-secondary">Through your domain, requests from home get PIN sign-in, just like the local address. From anywhere else, it's Sign in with Authentik.</p>
+        <dl class="row small mb-2">
+          <dt class="col-sm-4">This request</dt>
+          <dd class="col-sm-8">
+            {{if .Data.Me.Tunnel}}through the tunnel from <code>{{.Data.Me.Client}}</code>:
+              {{if .Data.Me.Home}}<span class="text-success"><i class="bi bi-check-circle"></i> counts as home</span>{{else}}<span class="text-warning"><i class="bi bi-x-circle"></i> doesn't count as home</span>{{end}}
+            {{else}}on the local network (<code>{{.Data.Me.Client}}</code>){{end}}
+          </dd>
+          {{with .Data.Home}}
+          <dt class="col-sm-4">Home public address</dt>
+          <dd class="col-sm-8">{{range .PublicIPs}}<code>{{.}}</code> {{else}}<span class="text-warning">unknown</span>{{end}}<span class="text-body-secondary">(checked {{since .Checked}})</span>{{with .Error}}<br><span class="text-danger">{{.}}</span>{{end}}</dd>
+          <dt class="col-sm-4">Also home</dt>
+          <dd class="col-sm-8">
+            {{range .Static}}<code>{{.}}</code> (HI_HOME_NETWORKS) {{end}}
+            {{range .Learned}}<form method="post" action="/admin/home" class="d-inline"><input type="hidden" name="forget" value="{{.}}"><code>{{.}}</code> <button class="btn btn-sm btn-link text-danger p-0" type="submit" aria-label="Forget {{.}}"><i class="bi bi-x-lg"></i></button></form> {{end}}
+            {{if and (not .Static) (not .Learned)}}<span class="text-body-secondary">none</span>{{end}}
+          </dd>
+          {{else}}<dt class="col-sm-4">Detection</dt><dd class="col-sm-8">off (HI_HOME_DETECT=off)</dd>{{end}}
+        </dl>
+        {{if and .Data.Me.Tunnel (not .Data.Me.Home)}}
+        <form method="post" action="/admin/home"><button class="btn btn-sm btn-outline-light" type="submit"><i class="bi bi-house-add"></i> I'm at home: treat this network as home</button></form>
+        <p class="small text-body-secondary mt-1 mb-0">Phones often reach Cloudflare over IPv6, which doesn't match the home IPv4 address. On the home Wi-Fi, press this once from a phone to add the house's IPv6 network.</p>
+        {{end}}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body">
         <h2 class="h5 card-title"><i class="bi bi-people"></i> People</h2>
         <p class="small text-body-secondary">Players sign in on the home network with their PIN, or anywhere through SSO with their email. The Seer signs in with SSO or, at home, a password.</p>
         <div class="table-responsive">
@@ -95,10 +126,31 @@
   <div class="card-body">
     <h2 class="h5 card-title"><i class="bi bi-arrow-repeat"></i> Rules data</h2>
     <dl class="row small mb-2">
-      <dt class="col-4">Source</dt><dd class="col-8 text-break"><code>{{.Status.Source}}</code> @ {{.Status.Ref}}</dd>
-      <dt class="col-4">In use</dt><dd class="col-8">{{with .Snapshot}}<code>{{short .ID}}</code>, loaded {{since .LoadedAt}}{{else}}<span class="text-warning">nothing loaded</span>{{end}}</dd>
+      <dt class="col-4">In use</dt><dd class="col-8">{{with .Snapshot}}<strong>{{.Label}}</strong>, loaded {{since .LoadedAt}}{{else}}<span class="text-warning">nothing loaded</span>{{end}}</dd>
+      <dt class="col-4">Source</dt><dd class="col-8 text-break"><code>{{.Status.Source}}</code></dd>
+      <dt class="col-4">Follows</dt><dd class="col-8">{{if eq .Status.Mode "release"}}pinned release (update below){{else if eq .Status.Mode "tag"}}release {{.Status.Ref}} (set by GAMEDATA_REF){{else if eq .Status.Mode "branch"}}every commit on <code>{{.Status.Ref}}</code>{{else}}a local folder{{end}}</dd>
       <dt class="col-4">Last check</dt><dd class="col-8">{{since .Status.LastAttempt}}</dd>
     </dl>
+    {{if .Status.Updates}}
+    <div class="alert alert-info small py-2">
+      <strong>{{len .Status.Updates}} newer release{{if gt (len .Status.Updates) 1}}s{{end}}.</strong> Release notes: the rules repo's Releases page on GitHub.
+      <div class="d-flex flex-wrap gap-2 mt-2">
+        {{range .Status.Updates}}
+        <form method="post" action="/admin/gamedata/install" hx-boost="false"><input type="hidden" name="tag" value="{{.}}">
+          <button class="btn btn-sm btn-primary" type="submit" onclick="return confirm('Switch the rules data to {{.}}?')"><i class="bi bi-cloud-download"></i> Update to {{.}}</button></form>
+        {{end}}
+      </div>
+    </div>
+    {{end}}
+    {{with .Status.TooNew}}<div class="alert alert-warning small py-2"><i class="bi bi-exclamation-triangle"></i> {{join . ", "}} need{{if eq (len .) 1}}s{{end}} a newer version of this app (a new major version changes the data's structure).</div>{{end}}
+    {{if and (eq .Status.Mode "release") (gt (len .Status.Releases) 1)}}
+    <details class="small mb-2"><summary class="text-body-secondary">Switch to another release</summary>
+      <form method="post" action="/admin/gamedata/install" class="input-group input-group-sm mt-1" hx-boost="false">
+        <select class="form-select" name="tag" aria-label="Release">{{range .Status.Releases}}<option>{{.}}</option>{{end}}</select>
+        <button class="btn btn-outline-light" type="submit">Install</button>
+      </form>
+    </details>
+    {{end}}
     {{with .DeployKey}}
     <details class="mb-2" {{if $.Status.LastError}}open{{end}}>
       <summary class="small">Deploy key (read-only access to the rules repo)</summary>
@@ -106,13 +158,13 @@
         <input class="form-control font-monospace" readonly value="{{.}}" id="deploy-key" aria-label="Deploy key">
         <button class="btn btn-outline-light" type="button" data-copy="#deploy-key"><i class="bi bi-clipboard"></i> Copy</button>
       </div>
-      <p class="small text-body-secondary mb-0">On GitHub: the rules repo → Settings → Deploy keys → Add deploy key. Paste this, leave <em>Allow write access</em> unticked, then press Sync now.</p>
+      <p class="small text-body-secondary mb-0">On GitHub: the rules repo → Settings → Deploy keys → Add deploy key. Paste this, leave <em>Allow write access</em> unticked, then press Check now.</p>
     </details>
     {{end}}
     {{with .KeyError}}<div class="alert alert-danger small py-2">Deploy key: {{.}}</div>{{end}}
-    {{with .Status.LastError}}<div class="alert alert-danger small py-2"><strong>Last sync failed; still using the snapshot above.</strong><pre class="mb-0 mt-1 text-wrap">{{.}}</pre></div>{{end}}
-    <button class="btn btn-outline-light" hx-post="/admin/gamedata/sync" hx-target="#gamedata" hx-select="#gamedata" hx-swap="outerHTML" hx-disabled-elt="this">
-      <i class="bi bi-cloud-download"></i> Sync now <span class="htmx-indicator spinner-border spinner-border-sm"></span>
+    {{with .Status.LastError}}<div class="alert alert-danger small py-2"><strong>The last check failed; still using the version above.</strong><pre class="mb-0 mt-1 text-wrap">{{.}}</pre></div>{{end}}
+    <button class="btn btn-outline-light btn-sm" hx-post="/admin/gamedata/sync" hx-target="#gamedata" hx-select="#gamedata" hx-swap="outerHTML" hx-disabled-elt="this">
+      <i class="bi bi-arrow-clockwise"></i> Check now <span class="htmx-indicator spinner-border spinner-border-sm"></span>
     </button>
   </div>
 </div>

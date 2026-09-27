@@ -4,7 +4,8 @@
     <h1 class="h3 mb-3">Who's at the table?</h1>
     {{if .Data.PINAllowed}}
       {{if .Data.Users}}
-      <form method="post" action="/login" id="login-form" autocomplete="off">
+      <form method="post" action="/login" id="login-form" autocomplete="off" hx-boost="false">
+        <input type="hidden" name="next" value="{{.Data.Next}}">
         <div class="d-grid gap-2 mb-3" role="radiogroup" aria-label="Your name">
           {{range .Data.Users}}
           <input type="radio" class="btn-check" name="user_id" id="u{{.ID}}" value="{{.ID}}" data-seer="{{.IsSeer}}" required>
@@ -22,8 +23,13 @@
       {{else}}
       <p class="text-body-secondary">Nobody has been added yet. The Seer sets up the first account with <code>HI_SEER_PASSWORD</code> (see the README).</p>
       {{end}}
+      {{if .Data.OIDC}}<p class="text-center small text-body-secondary mt-3 mb-1">or</p>
+      <a class="btn btn-outline-light w-100" href="/auth/login?next={{.Data.Next}}" hx-boost="false"><i class="bi bi-shield-lock"></i> Sign in with Authentik</a>{{end}}
     {{else}}
-      <p>PIN sign-in only works on the home network. From outside, sign in through Cloudflare Access or Authentik.</p>
+      <p>You're not on the home network, so PIN sign-in isn't available here.</p>
+      {{if .Data.OIDC}}
+      <a class="btn btn-primary btn-lg w-100" href="/auth/login?next={{.Data.Next}}" hx-boost="false"><i class="bi bi-shield-lock"></i> Sign in with Authentik</a>
+      {{else}}<p class="text-body-secondary small">Remote sign-in isn't set up.</p>{{end}}
     {{end}}
   </div>
 </div>

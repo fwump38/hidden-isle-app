@@ -4,10 +4,12 @@ package web
 import (
 	"bytes"
 	"embed"
+	"errors"
 	"html/template"
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"path"
 	"strings"
 
@@ -60,6 +62,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /login", s.loginPage)
 	mux.HandleFunc("POST /login", s.login)
 	mux.HandleFunc("POST /logout", s.logout)
+	mux.HandleFunc("GET /auth/login", s.oidcStart)
+	mux.HandleFunc("GET /auth/callback", s.oidcCallback)
 
 	mux.Handle("GET /{$}", s.requireUser(http.HandlerFunc(s.home)))
 
@@ -67,9 +71,11 @@ func (s *Server) Register(mux *http.ServeMux) {
 
 	mux.Handle("GET /admin", s.requireSeer(http.HandlerFunc(s.admin)))
 	mux.Handle("POST /admin/gamedata/sync", s.requireSeer(http.HandlerFunc(s.syncGameData)))
+	mux.Handle("POST /admin/gamedata/install", s.requireSeer(http.HandlerFunc(s.installGameData)))
 	mux.Handle("POST /admin/users", s.requireSeer(http.HandlerFunc(s.addUser)))
 	mux.Handle("POST /admin/users/{id}", s.requireSeer(http.HandlerFunc(s.updateUser)))
 	mux.Handle("POST /admin/tokens", s.requireSeer(http.HandlerFunc(s.createToken)))
+	mux.Handle("POST /admin/home", s.requireSeer(http.HandlerFunc(s.homeNetwork)))
 	mux.Handle("POST /admin/tokens/{id}/revoke", s.requireSeer(http.HandlerFunc(s.revokeToken)))
 }
 
@@ -132,15 +138,12 @@ func (s *Server) requireUser(next http.Handler) http.Handler {
 			return
 		}
 		info := auth.Info(r.Context())
-		if info.Tunnel || info.Err != nil {
-			msg := "You need to sign in."
-			if info.Err != nil {
-				msg = info.Err.Error()
-			}
-			s.render(w, r, "denied", http.StatusForbidden, pageData{Title: "Not signed in", Error: msg})
+		var unknown auth.UnknownEmailError
+		if errors.As(info.Err, &unknown) || (info.Err != nil && !errors.Is(info.Err, auth.ErrSSORequired)) {
+			s.render(w, r, "denied", http.StatusForbidden, pageData{Title: "Not signed in", Error: info.Err.Error()})
 			return
 		}
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
 	})
 }
 

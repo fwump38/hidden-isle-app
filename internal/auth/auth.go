@@ -53,6 +53,8 @@ type Authenticator struct {
 	Cfg      *config.Config
 	Sessions *Sessions
 	CF       *JWTVerifier // nil when Cloudflare Access isn't configured
+	OIDC     *OIDC        // "Sign in with Authentik"; nil when not configured
+	Home     *Home        // recognizes tunnel requests from the home network; nil = never
 	Limiter  *Limiter
 }
 
@@ -60,6 +62,9 @@ func New(g *gorm.DB, cfg *config.Config, s *Sessions) *Authenticator {
 	a := &Authenticator{DB: g, Cfg: cfg, Sessions: s, Limiter: NewLimiter(5, 10*time.Minute, 10*time.Minute)}
 	if cfg.CFTeamDomain != "" {
 		a.CF = NewCloudflareAccess(cfg.CFTeamDomain, cfg.CFAudience)
+	}
+	if cfg.OAuthIssuer != "" && cfg.OAuthAudience != "" && cfg.OAuthClientSecret != "" && cfg.PublicURL != "" {
+		a.OIDC = NewOIDCLogin(g, s, cfg.OAuthIssuer, cfg.OAuthAudience, cfg.OAuthClientSecret, cfg.PublicURL)
 	}
 	return a
 }
@@ -74,10 +79,15 @@ const (
 // RequestInfo describes how a request arrived.
 type RequestInfo struct {
 	Listener Listener
-	Tunnel   bool   // tunnel listener, or Cloudflare headers seen on the LAN listener
-	Via      string // "sso", "cookie" or ""
-	Err      error  // why no user was identified (SSO failure, unknown email)
+	Tunnel   bool       // tunnel listener, or Cloudflare headers seen on the LAN listener
+	Home     bool       // a tunnel request from the home network (counts like the LAN)
+	Client   netip.Addr // the browser's address: Cf-Connecting-IP through the tunnel, else the TCP peer
+	Via      string     // "sso", "cookie" or ""
+	Err      error      // why no user was identified (SSO failure, unknown email)
 }
+
+// AtHome reports whether the request counts as coming from home (PIN login allowed).
+func (i RequestInfo) AtHome() bool { return !i.Tunnel || i.Home }
 
 // User returns the identified user, or nil.
 func User(ctx context.Context) *db.User {
@@ -100,8 +110,15 @@ func WithUser(ctx context.Context, u *db.User) context.Context {
 func (a *Authenticator) Middleware(l Listener) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			info := RequestInfo{Listener: l, Tunnel: l == Tunnel || fromCloudflare(r)}
-			u, via, err := a.identify(r, info.Tunnel)
+			info := RequestInfo{Listener: l, Tunnel: l == Tunnel || fromCloudflare(r), Client: PeerIP(r)}
+			if info.Tunnel {
+				// Only cloudflared reaches the tunnel listener, and it sets this header.
+				if c, err := netip.ParseAddr(strings.TrimSpace(r.Header.Get("Cf-Connecting-Ip"))); err == nil {
+					info.Client = c.Unmap()
+				}
+				info.Home = a.Home != nil && a.Home.IsHome(info.Client)
+			}
+			u, via, err := a.identify(r, info)
 			info.Via, info.Err = via, err
 			ctx := context.WithValue(r.Context(), reqInfoKey, info)
 			if u != nil {
@@ -116,7 +133,7 @@ func fromCloudflare(r *http.Request) bool {
 	return r.Header.Get("Cf-Access-Jwt-Assertion") != "" || r.Header.Get("Cf-Connecting-Ip") != ""
 }
 
-func (a *Authenticator) identify(r *http.Request, tunnel bool) (*db.User, string, error) {
+func (a *Authenticator) identify(r *http.Request, info RequestInfo) (*db.User, string, error) {
 	email, err := a.ssoEmail(r)
 	if err != nil {
 		return nil, "", err
@@ -128,14 +145,15 @@ func (a *Authenticator) identify(r *http.Request, tunnel bool) (*db.User, string
 		}
 		return &u, "sso", nil
 	}
-	if tunnel {
-		return nil, "", ErrSSORequired
-	}
-	if id := a.Sessions.UserID(r); id != 0 {
+	// PIN/password sessions only count at home; Authentik sessions count anywhere.
+	if id, kind := a.Sessions.UserID(r); id != 0 && (info.AtHome() || kind == KindSSO) {
 		var u db.User
 		if err := a.DB.Where("id = ? AND active = ?", id, true).First(&u).Error; err == nil {
 			return &u, "cookie", nil
 		}
+	}
+	if !info.AtHome() {
+		return nil, "", ErrSSORequired
 	}
 	return nil, "", nil
 }
@@ -165,10 +183,14 @@ func PeerIP(r *http.Request) netip.Addr {
 	return addr.Unmap()
 }
 
-// PINAllowed reports whether this request may use PIN or password login.
+// PINAllowed reports whether this request may use PIN or password login: on the LAN listener
+// from HI_LAN_CIDR, or through the tunnel from the home network.
 func (a *Authenticator) PINAllowed(r *http.Request) bool {
 	info := Info(r.Context())
-	return !info.Tunnel && info.Listener == LAN && config.Contains(a.Cfg.LANCIDRs, PeerIP(r))
+	if info.Tunnel {
+		return info.Home
+	}
+	return info.Listener == LAN && config.Contains(a.Cfg.LANCIDRs, PeerIP(r))
 }
 
 // Login checks a PIN (players) or password (Seer) and issues a cookie. Errors are safe to show.
@@ -176,7 +198,7 @@ func (a *Authenticator) Login(w http.ResponseWriter, r *http.Request, userID uin
 	if !a.PINAllowed(r) {
 		return nil, errors.New("PIN login only works on the home network")
 	}
-	key := fmt.Sprintf("%d|%s", userID, PeerIP(r))
+	key := fmt.Sprintf("%d|%s", userID, Info(r.Context()).Client)
 	if locked, left := a.Limiter.Locked(key); locked {
 		return nil, fmt.Errorf("too many tries; wait %d minutes", int(left.Minutes())+1)
 	}
@@ -196,7 +218,7 @@ func (a *Authenticator) Login(w http.ResponseWriter, r *http.Request, userID uin
 		return nil, errors.New("wrong PIN")
 	}
 	a.Limiter.Succeed(key)
-	a.Sessions.Issue(w, u.ID)
+	a.Sessions.Issue(w, u.ID, KindLocal)
 	return &u, nil
 }
 

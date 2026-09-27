@@ -1,145 +1,99 @@
-# Authentik setup
+# Sign-in, Authentik and the tunnel
 
-How to set up Authentik and the Cloudflare Tunnel for the Hidden Isle app. Authentik's menus move a little between versions, so labels here may differ slightly from yours.
+How to set up sign-in for the Hidden Isle app: Authentik (one OAuth2 provider) and the Cloudflare Tunnel. Authentik's menus move a little between versions, so labels may differ slightly.
 
-The examples use `isle.example.com` for the app, `auth.example.com` for Authentik, and `hidden-isle` for the app's container name. Replace them with yours.
+The examples use `isle.example.com` for the app, `auth.example.com` for Authentik, and `<unraid-ip>` for the NAS. Replace them with yours.
 
-## What each piece does
+## How sign-in works
 
-| Piece | Purpose | Needed? |
+| Who, where | Address | Signs in with |
 |---|---|---|
-| **OAuth2/OpenID provider** (part A) | claude.ai logs you in through Authentik and gets a token for `/mcp`. The app checks the token's signature and that its email is the Seer's. | Yes, to use claude.ai. Claude Code can use an API token from Admin instead. |
-| **Proxy provider** (part B) | Puts an Authentik login in front of the **web pages** on the tunnel, and tells the app who you are. | Only if you want the web UI while away from home. Players use it only at home (PIN), so they never need Authentik accounts. |
+| Anyone **at home** | `https://isle.example.com` (or `http://<unraid-ip>:8390`) | Name + PIN (the Seer: name + password) |
+| The Seer, **away** | `https://isle.example.com` | **Sign in with Authentik** (the app sends you there and back) |
+| **claude.ai** (MCP) | `https://isle.example.com/mcp` | An OAuth token from the same Authentik provider |
+| **Claude Code** (MCP) | `https://isle.example.com/mcp` | An API token from Admin |
 
-Do part A first. Without part B, the web pages on the tunnel just say "sign in required", which is fine if you only use the web UI at home.
+How the app knows you're at home:
+- Everything comes through the tunnel, and Cloudflare tells the app each visitor's real address.
+- The app asks Cloudflare every few minutes what the house's public IP is, so it follows IP changes by itself.
+- A visitor from that address counts as home.
+- Phones on the home Wi-Fi often use IPv6, so there's also a button in Admin that adds the house's IPv6 network (step A6).
+
+Players never need Authentik accounts. Nothing sits in front of the app: no Authentik proxy and no Cloudflare Access.
 
 ---
 
-## Part A: OAuth2 provider for claude.ai (MCP)
-
-### A1. Create the provider and application
+## A1. Create the provider and application
 1. In Authentik go to **Admin interface → Applications → Applications → Create with provider** (the wizard).
 2. **Application:**
-   - Name: `Hidden Isle MCP`
+   - Name: `Hidden Isle`
    - Slug: `hidden-isle`. The slug becomes part of the issuer URL.
-   - Launch URL: leave empty.
 3. **Provider type:** **OAuth2/OpenID Provider**.
 4. **Provider settings:**
-   - **Authorization flow:** `default-provider-authorization-explicit-consent`. The implicit-consent flow also works and skips the "allow access?" screen.
-   - **Client type:** **Confidential**.
-   - **Client ID / Client Secret:** leave the generated values and copy both. You'll need them in A3 and A4.
-   - **Redirect URIs:** add `https://claude.ai/api/mcp/auth_callback` as a *Strict* match.
-     - Check this against the claude.ai connector help page. If Authentik later shows a "redirect URI mismatch" error, the URL in the error is the one to add.
-   - **Signing Key:** choose a certificate, e.g. `authentik Self-signed Certificate`. **This is required.** With a signing key, tokens are signed RS256 JWTs that the app can verify through Authentik's public keys. Without one, they're signed with the client secret, and the app can't verify them.
-   - **Advanced protocol settings → Scopes:** make sure `openid`, `email` and `profile` are selected (the default authentik mappings).
-   - **Access token validity:** the default is fine. claude.ai refreshes tokens with the refresh token.
+   - **Authorization flow:** your implicit-consent flow (no "allow access?" screen), or explicit consent if you prefer.
+   - **Client type:** **Confidential**. Copy the **Client ID** and **Client Secret**.
+   - **Redirect URIs**, both as *Strict*:
+     - `https://claude.ai/api/mcp/auth_callback`: for the claude.ai connector. If Authentik ever shows "redirect URI mismatch", add the URL from the error instead.
+     - `https://isle.example.com/auth/callback`: for Sign in with Authentik in the browser.
+   - **Signing Key:** choose a certificate, e.g. `authentik Self-signed Certificate`. **This is required.** Without it, tokens are signed with the client secret, and the app can't verify them.
+   - **Scopes:** `openid`, `email`, `profile`.
 5. Finish the wizard.
 
-### A2. Only you may use it
-Open the application → **Policy / Group / User Bindings** → **Bind existing policy/group/user** → **User** → your user. Anyone else is then refused at Authentik's login.
+If you already created the provider for MCP, just add the second redirect URI.
 
-The app also checks that the token's email matches `HI_SEER_EMAIL`, so this is a second lock.
+## A2. Only you may use it
+Open the application → **Policy / Group / User Bindings** → bind **your user**. Anyone else is refused at Authentik. The app also only accepts the email in `HI_SEER_EMAIL`, or emails you've given to players in Admin.
 
-### A3. Tell the app
-1. Open the provider's page and copy the **Issuer**, from its "OpenID Configuration Issuer" line.
-   - It looks like `https://auth.example.com/application/o/hidden-isle/`.
-   - Copy it exactly, trailing slash included. The app compares it character for character.
-2. In the Portainer stack, set:
-   ```yaml
-   HI_PUBLIC_URL: https://isle.example.com
-   HI_SEER_EMAIL: you@example.com                # the email on your Authentik user
-   HI_OAUTH_ISSUER: https://auth.example.com/application/o/hidden-isle/
-   HI_OAUTH_AUDIENCE: <client ID from A1>
-   ```
-3. Redeploy the stack.
+## A3. App settings (Portainer stack)
+```yaml
+HI_PUBLIC_URL: https://isle.example.com
+HI_SEER_EMAIL: you@example.com                                     # the email on your Authentik user
+HI_OAUTH_ISSUER: https://auth.example.com/application/o/hidden-isle/   # provider page → "OpenID Configuration Issuer", exactly
+HI_OAUTH_AUDIENCE: ${HI_OAUTH_CLIENT_ID}                           # the Client ID
+HI_OAUTH_CLIENT_SECRET: ${HI_OAUTH_CLIENT_SECRET}                  # the Client Secret: turns on Sign in with Authentik
+```
+- The app checks the issuer character for character, so copy it exactly, trailing slash included.
+- Put the client ID and secret in the stack's environment variables, not in the compose file.
 
-### A4. Cloudflare Tunnel route for `/mcp`
-claude.ai's servers must reach `/mcp` without a browser login. Send those paths **straight to the app** in the tunnel's public hostnames. Order matters: the more specific entries go first.
+## A4. Cloudflare Tunnel
+One public hostname:
 
-| Order | Hostname | Path | Service |
-|---|---|---|---|
-| 1 | `isle.example.com` | `^/mcp` | `http://hidden-isle:8081` |
-| 2 | `isle.example.com` | `^/\.well-known/oauth-protected-resource` | `http://hidden-isle:8081` |
-| 3 | `isle.example.com` | *(empty)* | See below |
+| Hostname | Path | Service |
+|---|---|---|
+| `isle.example.com` | *(empty)* | `http://<unraid-ip>:8391`, or `http://hidden-isle:8081` if cloudflared shares a Docker network with the app |
 
-What goes in the service column for row 3:
-- **Without part B:** `http://hidden-isle:8081` as well. The web pages will just ask you to sign in.
-- **With part B:** your Authentik server, e.g. `http://authentik-server:9000`.
+If you earlier added separate `/mcp` routes, or pointed this hostname at Authentik, remove them: everything goes straight to the app now. **Don't** put Cloudflare Access in front of this hostname.
 
-`http://hidden-isle:8081` only works if cloudflared is on the same Docker network as the app. Otherwise use the host port from `compose.yaml`, e.g. `http://<unraid-ip>:8391`.
-
-Check it from any machine:
+Check from any machine:
 ```sh
 curl -si https://isle.example.com/.well-known/oauth-protected-resource/mcp   # JSON naming your Authentik issuer
 curl -si -X POST https://isle.example.com/mcp | head -3                       # 401 with a WWW-Authenticate header
 ```
 
-### A5. Add the connector in claude.ai
+## A5. claude.ai connector
 1. Go to **Settings → Connectors → Add custom connector**.
-2. Fill in:
-   - Name: `The Hidden Isle`
-   - URL: `https://isle.example.com/mcp`
-   - **Advanced settings:** the OAuth **Client ID** and **Client Secret** from A1.
-3. Press **Connect**. You'll be sent to Authentik: log in, allow access, and you're returned to claude.ai.
-4. Test it: in a chat, ask Claude to run the Hidden Isle `whoami` tool. It should answer with your Seer name and the rules-data snapshot.
+2. Use URL `https://isle.example.com/mcp`. Under *Advanced settings*, enter the Client ID and Client Secret.
+3. Press **Connect**, log in to Authentik, and ask Claude to run the Hidden Isle `whoami` tool.
 
-**If it fails,** send the container log and what claude.ai says. Common causes:
+## A6. Check the home network
+1. On your home Wi-Fi, open `https://isle.example.com/admin` on a **phone** and sign in with your password. If it asks for Authentik instead, see below.
+2. **Admin → Home network** shows "This request: through the tunnel from …: counts as home".
+3. If it says **doesn't count as home**, press **"I'm at home: treat this network as home"**. The phone was using IPv6, and this adds the house's IPv6 network (a /64). Once is enough, for all devices.
 
-| Symptom | Likely fix |
+If the page asks for Authentik at home, sign in with Authentik once, then press the button in Admin. After that, PIN and password sign-in work at home.
+
+**Troubleshooting:**
+
+| Symptom | Fix |
 |---|---|
-| `token has no email claim` | In A1's scopes, make sure the `email` scope mapping is selected. |
-| `issuer` or `audience` errors | Recheck `HI_OAUTH_ISSUER` (exact, trailing slash) and `HI_OAUTH_AUDIENCE` (the client ID). |
-| `signing method` errors | No signing key is selected (A1, step 4). |
-| `... is not the Seer` | The Authentik user's email differs from `HI_SEER_EMAIL`. |
+| Players at home are asked to sign in with Authentik | Open Admin → Home network from their phone's network (step 3). "Home public address: unknown" means the container can't reach Cloudflare; check its internet access. |
+| `token has no email claim` | Add the `email` scope mapping in A1. |
+| `issuer` or `audience` errors | Recheck `HI_OAUTH_ISSUER` (exact) and `HI_OAUTH_AUDIENCE` (the client ID). |
+| "Sign in with Authentik" missing | `HI_OAUTH_CLIENT_SECRET` isn't set. |
+| `… isn't on the guest list` | The Authentik user's email isn't `HI_SEER_EMAIL`, and isn't on a player in Admin. |
 
----
-
-## Part B (optional): proxy provider for remote web access
-
-The web pages reach you like this: browser → cloudflared → Authentik's embedded outpost → app port 8081. Authentik handles the login and adds `X-authentik-email` to each request. The app trusts that header only from the addresses in `HI_AUTHENTIK_PROXY_IPS`.
-
-### B1. Create the provider and application
-1. Go to **Applications → Applications → Create with provider**.
-2. **Application:** Name `Hidden Isle`, Slug `hidden-isle-web`.
-3. **Provider type:** **Proxy Provider**, mode **Proxy**. In this mode the outpost forwards requests to the app itself, so no separate reverse proxy is needed.
-4. **Provider settings:**
-   - **External host:** `https://isle.example.com`
-   - **Internal host:** `http://hidden-isle:8081`, or `http://<unraid-ip>:8391`
-   - **Authorization flow:** your usual implicit-consent flow.
-   - **Advanced protocol settings:**
-     - **Unauthenticated Paths:** add these two lines. They're a safety net: the tunnel already sends these paths straight to the app (A4).
-       ```
-       ^/mcp
-       ^/\.well-known/oauth-protected-resource
-       ```
-     - **Intercept header authentication:** turn **off**. Otherwise Authentik may try to handle `Authorization: Bearer` headers itself.
-5. Finish the wizard.
-
-### B2. Only you may use it
-Bind **your user** to the application, as in A2. Players never go through Authentik.
-
-### B3. Attach it to the outpost
-Go to **Applications → Outposts**, edit **authentik Embedded Outpost**, and add `Hidden Isle` to its applications.
-
-### B4. Point the tunnel's catch-all route at Authentik
-Change row 3 from A4 to your Authentik server, e.g. `http://authentik-server:9000`. The embedded outpost recognizes `isle.example.com` by its hostname.
-
-### B5. Tell the app which address to trust
-`HI_AUTHENTIK_PROXY_IPS` must cover the address the **Authentik server container** connects to the app from. Choose one:
-- **Exact IP (best):** give the Authentik server a fixed IP on a shared Docker network (`ipv4_address:` in its compose), and use that IP.
-- **Subnet (simpler):** use a small Docker network that only Authentik, cloudflared and the app share, and put its subnet here, e.g. `172.30.0.0/24`. Any container on that network could claim to be you, so keep it private to those three.
-
-Redeploy the app. Then, from outside your home network, open `https://isle.example.com`, log in through Authentik, and you should land on the app signed in as the Seer.
-
----
-
-## Summary of app settings
-
-```yaml
-HI_PUBLIC_URL: https://isle.example.com
-HI_SEER_EMAIL: you@example.com
-HI_SEER_PASSWORD: ${HI_SEER_PASSWORD}          # for signing in at home
-HI_OAUTH_ISSUER: https://auth.example.com/application/o/hidden-isle/   # part A
-HI_OAUTH_AUDIENCE: ${HI_OAUTH_CLIENT_ID}                               # part A
-HI_AUTHENTIK_PROXY_IPS: 172.30.0.10                                    # part B only
-```
+## Alternatives (still supported)
+- **Authentik proxy provider or forward auth in front of port 8081:** set `HI_AUTHENTIK_PROXY_IPS` to the outpost's address. The app then trusts its `X-authentik-email` header.
+- **Cloudflare Access in front:** set `HI_CF_TEAM_DOMAIN` and `HI_CF_AUD` (Zero Trust → Access → Applications → your app → *Application Audience (AUD) Tag*). Add a Bypass policy for `/mcp` and `/.well-known/oauth-protected-resource`.
+- **`HI_HOME_NETWORKS`:** fixed networks that always count as home, e.g. `2001:db8:1:2::/64`.
+- **`HI_HOME_DETECT=off`:** turns off home detection; only the local address then allows PIN sign-in.

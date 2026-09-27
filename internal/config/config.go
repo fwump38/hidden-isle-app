@@ -27,11 +27,15 @@ type Config struct {
 
 	AuthentikProxies []netip.Prefix // HI_AUTHENTIK_PROXY_IPS: only these peers may send X-authentik-email
 
-	OAuthIssuer   string // HI_OAUTH_ISSUER: Authentik provider issuer, for MCP bearer tokens
-	OAuthAudience string // HI_OAUTH_AUDIENCE: expected aud (the Authentik client ID)
+	OAuthIssuer       string // HI_OAUTH_ISSUER: Authentik provider issuer, for MCP bearer tokens
+	OAuthAudience     string // HI_OAUTH_AUDIENCE: the Authentik client ID (expected token audience)
+	OAuthClientSecret string // HI_OAUTH_CLIENT_SECRET: enables "Sign in with Authentik" in the browser
+
+	HomeNetworks []netip.Prefix // HI_HOME_NETWORKS: extra networks that count as home through the tunnel
+	HomeDetect   bool           // HI_HOME_DETECT: learn the home public IP from Cloudflare (default on)
 
 	GameDataRepo       string        // GAMEDATA_REPO: git URL or local path
-	GameDataRef        string        // GAMEDATA_REF
+	GameDataRef        string        // GAMEDATA_REF: release (pinned releases, default), a tag like v1.2.0, or a branch
 	GameDataToken      string        // GAMEDATA_TOKEN: HTTPS token (not needed with an SSH URL + deploy key)
 	GameDataKnownHosts string        // GAMEDATA_KNOWN_HOSTS: known_hosts file for SSH hosts other than github.com
 	GameDataInterval   time.Duration // GAMEDATA_INTERVAL
@@ -52,8 +56,10 @@ func Load() (*Config, error) {
 		CFAudience:         os.Getenv("HI_CF_AUD"),
 		OAuthIssuer:        os.Getenv("HI_OAUTH_ISSUER"),
 		OAuthAudience:      os.Getenv("HI_OAUTH_AUDIENCE"),
+		OAuthClientSecret:  os.Getenv("HI_OAUTH_CLIENT_SECRET"),
+		HomeDetect:         env("HI_HOME_DETECT", "on") != "off",
 		GameDataRepo:       os.Getenv("GAMEDATA_REPO"),
-		GameDataRef:        env("GAMEDATA_REF", "main"),
+		GameDataRef:        env("GAMEDATA_REF", "release"),
 		GameDataToken:      os.Getenv("GAMEDATA_TOKEN"),
 		GameDataKnownHosts: os.Getenv("GAMEDATA_KNOWN_HOSTS"),
 	}
@@ -62,6 +68,9 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if c.AuthentikProxies, err = prefixes("HI_AUTHENTIK_PROXY_IPS", ""); err != nil {
+		return nil, err
+	}
+	if c.HomeNetworks, err = prefixes("HI_HOME_NETWORKS", ""); err != nil {
 		return nil, err
 	}
 	if c.GameDataInterval, err = duration("GAMEDATA_INTERVAL", "1h"); err != nil {
@@ -76,9 +85,9 @@ func Load() (*Config, error) {
 	return c, nil
 }
 
-// SSOConfigured reports whether any SSO source is set up (needed for the tunnel listener).
+// SSOConfigured reports whether any SSO source is set up for the tunnel listener.
 func (c *Config) SSOConfigured() bool {
-	return c.CFTeamDomain != "" || len(c.AuthentikProxies) > 0
+	return c.CFTeamDomain != "" || len(c.AuthentikProxies) > 0 || c.OAuthClientSecret != ""
 }
 
 func env(key, def string) string {

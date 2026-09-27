@@ -79,7 +79,7 @@ func newSite(t *testing.T) (*site, *campaign.Service) {
 			t.Fatal(err)
 		}
 		rec := httptest.NewRecorder()
-		sess.Issue(rec, u.ID)
+		sess.Issue(rec, u.ID, auth.KindLocal)
 		st.cookies[u.Name] = rec.Result().Cookies()[0]
 	}
 	return st, svc

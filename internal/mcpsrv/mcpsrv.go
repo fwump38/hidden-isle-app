@@ -128,7 +128,7 @@ type whoamiOut struct {
 	Name     string `json:"name"`
 	Role     string `json:"role"`
 	Build    string `json:"build"`
-	GameData string `json:"game_data" jsonschema:"snapshot id of the rules data in use"`
+	GameData string `json:"game_data" jsonschema:"rules data version in use"`
 }
 
 type classIn struct {
@@ -154,7 +154,7 @@ func (s *Server) addTools() {
 			}
 			out := whoamiOut{Name: u.Name, Role: string(u.Role), Build: s.build}
 			if snap := s.data.Current(); snap != nil {
-				out.GameData = snap.ID
+				out.GameData = snap.Label()
 			}
 			return nil, out, nil
 		})

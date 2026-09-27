@@ -2,10 +2,8 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -31,6 +29,7 @@ type Claims struct {
 	Email   string
 	Subject string
 	Scopes  []string
+	Nonce   string
 	Expiry  time.Time
 }
 
@@ -45,7 +44,11 @@ func NewCloudflareAccess(teamDomain, aud string) *JWTVerifier {
 // discovering the JWKS from <issuer>/.well-known/openid-configuration.
 func NewOIDC(issuer, aud string) *JWTVerifier {
 	return &JWTVerifier{issuer: issuer, audience: aud, jwksURL: func(ctx context.Context) (string, error) {
-		return discoverJWKS(ctx, issuer)
+		d, err := discover(ctx, issuer)
+		if err != nil {
+			return "", err
+		}
+		return d.JWKSURI, nil
 	}}
 }
 
@@ -90,6 +93,7 @@ func (v *JWTVerifier) Verify(ctx context.Context, token string) (*Claims, error)
 	c.Email, _ = mc["email"].(string)
 	c.Email = strings.ToLower(strings.TrimSpace(c.Email))
 	c.Subject, _ = mc.GetSubject()
+	c.Nonce, _ = mc["nonce"].(string)
 	if exp, _ := mc.GetExpirationTime(); exp != nil {
 		c.Expiry = exp.Time
 	}
@@ -100,31 +104,4 @@ func (v *JWTVerifier) Verify(ctx context.Context, token string) (*Claims, error)
 		return nil, errors.New("token has no email claim")
 	}
 	return c, nil
-}
-
-func discoverJWKS(ctx context.Context, issuer string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(issuer, "/")+"/.well-known/openid-configuration", nil)
-	if err != nil {
-		return "", err
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("openid-configuration: %s", resp.Status)
-	}
-	var doc struct {
-		JWKSURI string `json:"jwks_uri"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
-		return "", err
-	}
-	if doc.JWKSURI == "" {
-		return "", errors.New("openid-configuration has no jwks_uri")
-	}
-	return doc.JWKSURI, nil
 }

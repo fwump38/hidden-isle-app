@@ -42,7 +42,7 @@ func setup(t *testing.T) *fixture {
 	}
 	f := &fixture{a: New(g, cfg, s), player: p}
 	rec := httptest.NewRecorder()
-	s.Issue(rec, p.ID)
+	s.Issue(rec, p.ID, KindLocal)
 	f.cookie = rec.Result().Cookies()[0]
 	return f
 }

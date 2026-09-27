@@ -45,37 +45,28 @@ A request that reaches `:8080` carrying Cloudflare headers is treated as tunnel 
 
 ## Deploy (Portainer)
 
-> Step-by-step Authentik and tunnel setup (MCP OAuth, plus optional remote web sign-in): [docs/authentik-setup.md](docs/authentik-setup.md).
+> Step-by-step sign-in setup (Authentik, the tunnel, claude.ai, the home network): [docs/authentik-setup.md](docs/authentik-setup.md).
 
-Players only use the app **at home**, signing in with a PIN, so they never need an SSO account. Only the Seer uses it remotely (web and MCP), through Authentik.
+Everyone uses `https://<your domain>` through the Cloudflare Tunnel:
+- **At home:** the app sees your house's public IP and offers name + PIN, so players need no accounts.
+- **Away:** only the Seer gets in, via *Sign in with Authentik*.
+- **claude.ai:** reaches `/mcp` with an OAuth token from the same Authentik provider.
 
-```
-at home:   phone ──────────────────────────────────▶ :8080   name + PIN (players), password (Seer)
-remote:    browser ─▶ cloudflared ─▶ Authentik outpost ─▶ :8081   Seer only
-claude.ai: ─▶ cloudflared ─▶ Authentik outpost (unauthenticated path) ─▶ :8081/mcp   OAuth token from Authentik
-```
+`http://<nas>:8390` also works at home, as a fallback when the internet is down.
 
-1. **Create the stack** from [`compose.yaml`](compose.yaml) and fill in the environment (see the table below). Put the secrets in Portainer's environment variables.
-2. **Rules repo deploy key:** the app makes its own SSH key on first start.
-   1. Open **Admin → Rules data → Deploy key** and copy the key.
-   2. On GitHub, open the rules repo → **Settings → Deploy keys → Add deploy key** and paste it. Leave write access **off**.
-   3. Press **Sync now**.
-
-   Deploy keys don't expire and can only read that one repo. GitHub's SSH host keys are pinned in the app.
-3. **Authentik (remote sign-in for the Seer):** create a **Proxy provider** (forward auth or proxy mode) for `https://isle.example.com` whose upstream is the app's port **8081**.
-   - Under *Unauthenticated Paths*, add `^/mcp` and `^/\.well-known/oauth-protected-resource`. The app protects `/mcp` itself with bearer tokens.
-   - Bind the application to **only your user**. Players never go through it.
-   - Set `HI_AUTHENTIK_PROXY_IPS` to the address the outpost connects to the app from (its IP, or its Docker network's subnet). The app ignores `X-authentik-email` from anyone else.
-4. **Cloudflare Tunnel:** route `https://isle.example.com` to the Authentik outpost, not to the app directly.
-5. **At home:** open `http://<nas>:8390` (the LAN port in `compose.yaml`), sign in as the Seer with `HI_SEER_PASSWORD`, then **Admin → People → Add a player** with a name and a PIN. No email is needed.
+1. **Create the folder:** `mkdir -p /mnt/user/appdata/hidden-isle && chown 99:100 /mnt/user/appdata/hidden-isle`.
+2. **Create the stack** from [`compose.yaml`](compose.yaml). Put the secrets in the stack's environment variables: `HI_SEER_PASSWORD`, `HI_OAUTH_CLIENT_ID` and `HI_OAUTH_CLIENT_SECRET`.
+3. **Set up Authentik and the tunnel:** one OAuth2 provider with two redirect URIs, and one tunnel route to port 8391. See the guide.
+4. **Rules data:**
+   1. Open **Admin → Rules data → Deploy key** and add it to the rules repo as a read-only deploy key.
+   2. Press **Check now**. The app installs the newest release and pins it; Admin shows when a newer one exists.
+5. **Players:** **Admin → People → Add a player** with a name and a PIN (no email needed), then add them to a campaign under its settings.
+6. **Home network:** on the home Wi-Fi, open Admin from a phone. If "This request" doesn't count as home, press the button (see guide A6).
 
 **Security notes:**
-- Never forward the LAN port (8390 on the host, 8080 in the container) to the internet. It accepts PINs.
-- The tunnel port (8391 on the host, 8081 in the container) needs an SSO identity on every request and ignores PIN cookies.
-- If a reverse proxy on your LAN also forwards to 8080 (for a nicer local hostname), that's fine: PIN login is still limited to `HI_LAN_CIDR`.
-
-### Cloudflare Access instead of Authentik
-Set `HI_CF_TEAM_DOMAIN` and `HI_CF_AUD` (Zero Trust → Access → Applications → your app → *Application Audience (AUD) Tag*), and route the tunnel straight to port 8081. For MCP, add a second Access application with a **Bypass** policy for `/mcp` and `/.well-known/oauth-protected-resource`.
+- Never forward the LAN port (8390) to the internet.
+- The tunnel port (8391) must only be reachable through cloudflared, because the app trusts the `Cf-Connecting-IP` header there.
+- PIN sessions only work at home. Authentik sessions work anywhere.
 
 ## Configuration
 
@@ -90,12 +81,15 @@ Set `HI_CF_TEAM_DOMAIN` and `HI_CF_AUD` (Zero Trust → Access → Applications 
 | `HI_LAN_CIDR` | private ranges | PIN login is allowed only from these ranges |
 | `HI_CF_TEAM_DOMAIN`, `HI_CF_AUD` | | Cloudflare Access team domain and application AUD |
 | `HI_AUTHENTIK_PROXY_IPS` | | Peers allowed to send `X-authentik-email` |
-| `HI_OAUTH_ISSUER`, `HI_OAUTH_AUDIENCE` | | OAuth provider for MCP bearer tokens (claude.ai) |
+| `HI_OAUTH_ISSUER`, `HI_OAUTH_AUDIENCE` | | Authentik OAuth2 provider: its issuer and client ID (claude.ai MCP tokens, browser sign-in) |
+| `HI_OAUTH_CLIENT_SECRET` | | Turns on *Sign in with Authentik* in the browser |
+| `HI_HOME_DETECT` | `on` | Learn the house's public IP from Cloudflare; tunnel requests from it get PIN sign-in |
+| `HI_HOME_NETWORKS` | | Extra networks that always count as home (e.g. an IPv6 /64) |
 | `GAMEDATA_REPO` | | Rules repo: an SSH URL (`git@github.com:owner/repo.git`, uses the app's deploy key), an HTTPS URL, or a local path |
-| `GAMEDATA_REF` | `main` | Branch to follow |
+| `GAMEDATA_REF` | `release` | `release` = pinned releases updated from Admin; or a fixed tag (`v1.2.0`); or a branch (`main`) |
 | `GAMEDATA_TOKEN` | | For HTTPS URLs only: a fine-grained token with **Contents: read-only** on the rules repo. These expire, so the deploy key is preferred |
 | `GAMEDATA_KNOWN_HOSTS` | | A known_hosts file for SSH hosts other than github.com (GitHub's keys are built in) |
-| `GAMEDATA_INTERVAL` | `1h` | How often to sync |
+| `GAMEDATA_INTERVAL` | `1h` | How often to check for new releases |
 | `HI_BACKUP_INTERVAL` | `24h` | Writes a consistent `/data/backup/hidden-isle.db` for your NAS backup (`0` = off) |
 
 **Rules data sync:**

@@ -62,6 +62,13 @@ func run() error {
 		return err
 	}
 	authn := auth.New(g, cfg, sessions)
+	if cfg.HomeDetect {
+		authn.Home = auth.NewHome(filepath.Join(cfg.DataDir, "home-networks.json"), cfg.HomeNetworks)
+		go authn.Home.Run(ctx, 5*time.Minute)
+	}
+	if authn.OIDC == nil && cfg.OAuthIssuer != "" {
+		slog.Info("set HI_OAUTH_CLIENT_SECRET to enable Sign in with Authentik in the browser")
+	}
 
 	data := gamedata.NewStore(cfg.DataDir, cfg.GameDataRepo, cfg.GameDataRef, cfg.GameDataToken)
 	data.SetKnownHosts(cfg.GameDataKnownHosts)

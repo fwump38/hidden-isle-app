@@ -2,13 +2,17 @@
 // the last good snapshot to the rest of the app.
 package gamedata
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // SupportedSchemas lists the manifest schema_version values this build understands.
 var SupportedSchemas = []int{1}
 
 type Manifest struct {
-	SchemaVersion int `yaml:"schema_version"`
+	Version       string `yaml:"version"`
+	SchemaVersion int    `yaml:"schema_version"`
 	Data          struct {
 		Generated map[string]string `yaml:"generated"`
 		Hand      map[string]string `yaml:"hand"`
@@ -160,6 +164,22 @@ func (s *Snapshot) Class(idOrName string) *Class {
 		}
 	}
 	return nil
+}
+
+// Label is how the snapshot is shown: the release ("v1.2.0"), or the manifest version plus the
+// commit or "local" for a branch or a local directory.
+func (s *Snapshot) Label() string {
+	if v := semverOf(s.ID); v != "" {
+		return v
+	}
+	v := "unversioned"
+	if s.Manifest.Version != "" {
+		v = "v" + s.Manifest.Version
+	}
+	if strings.HasPrefix(s.ID, "local-") {
+		return v + " (local)"
+	}
+	return v + " (" + s.Short() + ")"
 }
 
 // Short returns the first 8 characters of the snapshot id.

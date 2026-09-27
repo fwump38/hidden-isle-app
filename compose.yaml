@@ -19,24 +19,18 @@ services:
     labels:
       - net.unraid.docker.webui=http://[IP]:[PORT:8390]
     environment:
-      HI_PUBLIC_URL: https://isle.example.com       # the tunnel hostname
+      HI_PUBLIC_URL: https://isle.slothcorp.com     # the tunnel hostname
       HI_SEER_NAME: Seer
       HI_SEER_EMAIL: you@example.com                # the email on your Authentik user
-      HI_SEER_PASSWORD: ${HI_SEER_PASSWORD}          # your LAN password (8+ characters)
-      # HI_LAN_CIDR: 192.168.1.0/24                 # PIN login only from these ranges (default: private ranges)
-      # MCP OAuth for claude.ai (Authentik OAuth2/OpenID provider, docs/authentik-setup.md part A):
+      HI_SEER_PASSWORD: ${HI_SEER_PASSWORD}          # your password for signing in at home (8+ characters)
+      # Authentik OAuth2 provider (docs/authentik-setup.md): claude.ai MCP + "Sign in with Authentik" away from home
       HI_OAUTH_ISSUER: https://auth.example.com/application/o/hidden-isle/
       HI_OAUTH_AUDIENCE: ${HI_OAUTH_CLIENT_ID}
-      # Remote web sign-in (optional, docs/authentik-setup.md part B): trust X-authentik-email only
-      # from the Authentik server's address.
-      # HI_AUTHENTIK_PROXY_IPS: 172.30.0.10
-      # Rules data over SSH with a read-only deploy key (the app generates it; copy it from Admin):
+      HI_OAUTH_CLIENT_SECRET: ${HI_OAUTH_CLIENT_SECRET}
+      # Home detection is on by default: tunnel requests from the house's public IP get PIN sign-in.
+      # HI_HOME_NETWORKS: 2001:db8:1:2::/64         # extra networks that always count as home
+      # HI_LAN_CIDR: 192.168.1.0/24                 # PIN sign-in on the local address only from these ranges
+      # Rules data: pinned releases over SSH with a read-only deploy key (copy it from Admin).
       GAMEDATA_REPO: git@github.com:fwump38/The-Hidden-Isle.git
-      GAMEDATA_REF: main
-      GAMEDATA_INTERVAL: 1h
-      # Alternative: HTTPS + a fine-grained token (expires, so needs replacing):
-      # GAMEDATA_REPO: https://github.com/fwump38/The-Hidden-Isle.git
-      # GAMEDATA_TOKEN: ${GAMEDATA_TOKEN}
-      # Cloudflare Access instead of Authentik for remote sign-in:
-      # HI_CF_TEAM_DOMAIN: yourteam.cloudflareaccess.com
-      # HI_CF_AUD: ${HI_CF_AUD}
+      GAMEDATA_REF: release                         # or a fixed release like v1.2.0, or a branch like main
+      GAMEDATA_INTERVAL: 1h                         # how often to check for new releases

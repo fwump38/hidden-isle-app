@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
+	"golang.org/x/mod/semver"
 )
 
 const keepSnapshots = 3
@@ -47,10 +49,53 @@ type Store struct {
 type Status struct {
 	Source      string
 	Ref         string
+	Mode        string // release | tag | branch | local
 	Current     string
+	Version     string // manifest version of the snapshot in use
 	LoadedAt    time.Time
 	LastAttempt time.Time
 	LastError   string
+	Releases    []string // every release tag, newest first
+	Updates     []string // newer releases this app can install, newest first
+	TooNew      []string // newer releases that need a newer app (other major version)
+}
+
+// SupportedMajors are the rules-data major versions this build can read.
+var SupportedMajors = []string{"v1"}
+
+// semverOf normalizes a release tag ("1.2.0" or "v1.2.0") to "v1.2.0"; "" if it isn't one.
+func semverOf(tag string) string {
+	v := tag
+	if !strings.HasPrefix(v, "v") {
+		v = "v" + v
+	}
+	if !semver.IsValid(v) || semver.Prerelease(v) != "" {
+		return ""
+	}
+	return v
+}
+
+func supported(tag string) bool {
+	v := semverOf(tag)
+	return v != "" && slices.Contains(SupportedMajors, semver.Major(v))
+}
+
+// Mode reports how the store picks what to load.
+func (s *Store) Mode() string {
+	switch {
+	case s.source != "" && isLocalDir(s.source):
+		return "local"
+	case s.ref == "" || s.ref == "release":
+		return "release"
+	case semverOf(s.ref) != "":
+		return "tag"
+	}
+	return "branch"
+}
+
+func isLocalDir(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && st.IsDir()
 }
 
 func NewStore(dataDir, source, ref, token string) *Store {
@@ -92,10 +137,34 @@ func (s *Store) Status() Status {
 	s.statusMu.Lock()
 	defer s.statusMu.Unlock()
 	st := s.status
+	st.Mode = s.Mode()
 	if c := s.Current(); c != nil {
-		st.Current, st.LoadedAt = c.ID, c.LoadedAt
+		st.Current, st.LoadedAt, st.Version = c.ID, c.LoadedAt, c.Manifest.Version
+	}
+	st.Updates, st.TooNew = nil, nil
+	cur := "v" + st.Version
+	for _, t := range st.Releases {
+		if semver.Compare(semverOf(t), cur) <= 0 {
+			continue
+		}
+		if supported(t) {
+			st.Updates = append(st.Updates, t)
+		} else {
+			st.TooNew = append(st.TooNew, t)
+		}
 	}
 	return st
+}
+
+// Install switches to a release (from the admin page) and pins it once it loads.
+func (s *Store) Install(ctx context.Context, tag string) error {
+	if s.Mode() != "release" {
+		return fmt.Errorf("installing releases needs GAMEDATA_REF=release (it's %q)", s.ref)
+	}
+	if !supported(tag) {
+		return fmt.Errorf("this app can't read %s; it supports %v", tag, SupportedMajors)
+	}
+	return s.sync(ctx, tag)
 }
 
 // LoadExisting loads the snapshot recorded in <root>/current, so the app starts without network.
@@ -130,9 +199,12 @@ func (s *Store) Run(ctx context.Context, every time.Duration) {
 	}
 }
 
-// Sync fetches the source, and if it changed, copies, validates and swaps in a new snapshot.
-// On any failure the current snapshot stays in place.
-func (s *Store) Sync(ctx context.Context) (err error) {
+// Sync fetches the source, and if what should be loaded changed, copies, validates and swaps in
+// a new snapshot. In release mode it keeps the pinned release (or, on first run, installs the
+// newest compatible one) and only lists newer releases. On failure the current snapshot stays.
+func (s *Store) Sync(ctx context.Context) error { return s.sync(ctx, "") }
+
+func (s *Store) sync(ctx context.Context, want string) (err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	defer func() {
@@ -147,7 +219,7 @@ func (s *Store) Sync(ctx context.Context) (err error) {
 	if s.source == "" {
 		return errors.New("GAMEDATA_REPO is not set")
 	}
-	tree, id, err := s.checkout(ctx)
+	tree, id, err := s.checkout(ctx, want)
 	if err != nil {
 		return err
 	}
@@ -186,14 +258,21 @@ func (s *Store) Sync(ctx context.Context) (err error) {
 		return err
 	}
 	s.cur.Store(snap)
-	slog.Info("game data loaded", "snapshot", snap.Short(), "classes", len(snap.Classes.Classes))
+	if s.Mode() == "release" {
+		if err := writeAtomic(filepath.Join(s.root, "pin"), []byte(id+"\n")); err != nil {
+			return err
+		}
+	}
+	slog.Info("game data loaded", "snapshot", snap.Label(), "classes", len(snap.Classes.Classes))
 	s.prune(id)
 	return nil
 }
 
-// checkout returns a directory holding the source tree and an id for its content.
-func (s *Store) checkout(ctx context.Context) (dir, id string, err error) {
-	if st, statErr := os.Stat(s.source); statErr == nil && st.IsDir() {
+// checkout returns a directory holding the source tree and an id for its content: the release
+// tag in release/tag mode, the commit in branch mode, a content hash for a local directory.
+func (s *Store) checkout(ctx context.Context, want string) (dir, id string, err error) {
+	mode := s.Mode()
+	if mode == "local" {
 		id, err := hashTree(s.source)
 		return s.source, "local-" + id, err
 	}
@@ -202,7 +281,6 @@ func (s *Store) checkout(ctx context.Context) (dir, id string, err error) {
 	if err != nil {
 		return "", "", err
 	}
-	branch := plumbing.NewBranchReferenceName(s.ref)
 	repo, err := git.PlainOpen(clone)
 	if err == nil {
 		// GAMEDATA_REPO changed (e.g. HTTPS to SSH): start over with a fresh clone.
@@ -212,8 +290,7 @@ func (s *Store) checkout(ctx context.Context) (dir, id string, err error) {
 		}
 	}
 	if errors.Is(err, git.ErrRepositoryNotExists) {
-		repo, err = git.PlainCloneContext(ctx, clone, false, &git.CloneOptions{
-			URL: s.source, Auth: auth, ReferenceName: branch, SingleBranch: true})
+		repo, err = git.PlainCloneContext(ctx, clone, false, &git.CloneOptions{URL: s.source, Auth: auth, Tags: git.AllTags})
 		if err != nil {
 			_ = os.RemoveAll(clone)
 			return "", "", fmt.Errorf("clone %s: %w", redact(s.source), err)
@@ -221,24 +298,99 @@ func (s *Store) checkout(ctx context.Context) (dir, id string, err error) {
 	} else if err != nil {
 		return "", "", err
 	}
-	remoteRef := plumbing.NewRemoteReferenceName("origin", s.ref)
-	err = repo.FetchContext(ctx, &git.FetchOptions{Auth: auth, Force: true,
-		RefSpecs: []gitconfig.RefSpec{gitconfig.RefSpec(fmt.Sprintf("+%s:%s", branch, remoteRef))}})
-	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-		return "", "", fmt.Errorf("fetch: %w", err)
+
+	var target plumbing.Hash
+	switch mode {
+	case "branch":
+		branch := plumbing.NewBranchReferenceName(s.ref)
+		remoteRef := plumbing.NewRemoteReferenceName("origin", s.ref)
+		err = repo.FetchContext(ctx, &git.FetchOptions{Auth: auth, Force: true,
+			RefSpecs: []gitconfig.RefSpec{gitconfig.RefSpec(fmt.Sprintf("+%s:%s", branch, remoteRef))}})
+		if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+			return "", "", fmt.Errorf("fetch: %w", err)
+		}
+		ref, err := repo.Reference(remoteRef, true)
+		if err != nil {
+			return "", "", fmt.Errorf("branch %s: %w", s.ref, err)
+		}
+		target, id = ref.Hash(), ref.Hash().String()
+	default: // release or tag
+		err = repo.FetchContext(ctx, &git.FetchOptions{Auth: auth, Force: true, Tags: git.AllTags,
+			RefSpecs: []gitconfig.RefSpec{"+refs/tags/*:refs/tags/*"}})
+		if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+			return "", "", fmt.Errorf("fetch: %w", err)
+		}
+		releases, err := releaseTags(repo)
+		if err != nil {
+			return "", "", err
+		}
+		s.statusMu.Lock()
+		s.status.Releases = releases
+		s.statusMu.Unlock()
+		id = want
+		if id == "" && mode == "tag" {
+			id = s.ref
+		}
+		if id == "" {
+			id = s.pinned()
+		}
+		if id == "" { // first run: the newest release this app supports
+			for _, t := range releases {
+				if supported(t) {
+					id = t
+					break
+				}
+			}
+		}
+		if id == "" {
+			return "", "", errors.New("the rules repo has no releases yet: push a tag like v1.0.0 (see its CLAUDE.md)")
+		}
+		if !slices.Contains(releases, id) {
+			return "", "", fmt.Errorf("release %s doesn't exist in the rules repo", id)
+		}
+		h, err := repo.ResolveRevision(plumbing.Revision("refs/tags/" + id))
+		if err != nil {
+			return "", "", fmt.Errorf("release %s: %w", id, err)
+		}
+		target = *h
 	}
-	ref, err := repo.Reference(remoteRef, true)
-	if err != nil {
-		return "", "", fmt.Errorf("ref %s: %w", s.ref, err)
+	if cur := s.Current(); cur != nil && cur.ID == id {
+		return clone, id, nil // nothing to check out
 	}
 	wt, err := repo.Worktree()
 	if err != nil {
 		return "", "", err
 	}
-	if err := wt.Reset(&git.ResetOptions{Commit: ref.Hash(), Mode: git.HardReset}); err != nil {
-		return "", "", fmt.Errorf("checkout %s: %w", short(ref.Hash().String()), err)
+	if err := wt.Reset(&git.ResetOptions{Commit: target, Mode: git.HardReset}); err != nil {
+		return "", "", fmt.Errorf("checkout %s: %w", short(id), err)
 	}
-	return clone, ref.Hash().String(), nil
+	return clone, id, nil
+}
+
+// pinned returns the release recorded by the last successful install, if any.
+func (s *Store) pinned() string {
+	b, err := os.ReadFile(filepath.Join(s.root, "pin"))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+// releaseTags lists the repo's semver tags, newest first.
+func releaseTags(repo *git.Repository) ([]string, error) {
+	iter, err := repo.Tags()
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	_ = iter.ForEach(func(r *plumbing.Reference) error {
+		if name := r.Name().Short(); semverOf(name) != "" {
+			out = append(out, name)
+		}
+		return nil
+	})
+	sort.Slice(out, func(i, j int) bool { return semver.Compare(semverOf(out[i]), semverOf(out[j])) > 0 })
+	return out, nil
 }
 
 func (s *Store) prune(keep string) {

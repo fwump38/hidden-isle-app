@@ -46,11 +46,21 @@ func LoadSessions(path string) (*Sessions, error) {
 	return &Sessions{key: key}, nil
 }
 
-// Issue sets a signed cookie for userID. The cookie is only honored on the LAN listener.
-func (s *Sessions) Issue(w http.ResponseWriter, userID uint) {
-	payload := make([]byte, 16)
+// How a session was earned. Local sessions (PIN or the Seer's LAN password) only count at home;
+// SSO sessions (Sign in with Authentik) count anywhere.
+const (
+	KindLocal byte = 0
+	KindSSO   byte = 1
+)
+
+const payloadLen = 17 // user id (8) + expiry (8) + kind (1)
+
+// Issue sets a signed session cookie for userID.
+func (s *Sessions) Issue(w http.ResponseWriter, userID uint, kind byte) {
+	payload := make([]byte, payloadLen)
 	binary.BigEndian.PutUint64(payload[:8], uint64(userID))
-	binary.BigEndian.PutUint64(payload[8:], uint64(time.Now().Add(sessionTTL).Unix()))
+	binary.BigEndian.PutUint64(payload[8:16], uint64(time.Now().Add(sessionTTL).Unix()))
+	payload[16] = kind
 	v := base64.RawURLEncoding.EncodeToString(append(payload, s.mac(payload)...))
 	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: v, Path: "/", HttpOnly: true,
 		SameSite: http.SameSiteLaxMode, MaxAge: int(sessionTTL.Seconds())})
@@ -61,29 +71,46 @@ func (s *Sessions) Clear(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: "", Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: -1})
 }
 
-// UserID returns the user in a valid, unexpired cookie, or 0.
-func (s *Sessions) UserID(r *http.Request) uint {
+// UserID returns the user and session kind in a valid, unexpired cookie, or 0.
+func (s *Sessions) UserID(r *http.Request) (uint, byte) {
 	c, err := r.Cookie(cookieName)
 	if err != nil {
-		return 0
+		return 0, 0
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(c.Value)
-	if err != nil || len(raw) != 16+sha256.Size {
-		return 0
+	if err != nil || len(raw) != payloadLen+sha256.Size {
+		return 0, 0
 	}
-	payload, sig := raw[:16], raw[16:]
+	payload, sig := raw[:payloadLen], raw[payloadLen:]
 	if !hmac.Equal(sig, s.mac(payload)) {
-		return 0
+		return 0, 0
 	}
-	if time.Now().Unix() > int64(binary.BigEndian.Uint64(payload[8:])) {
-		return 0
+	if time.Now().Unix() > int64(binary.BigEndian.Uint64(payload[8:16])) {
+		return 0, 0
 	}
-	return uint(binary.BigEndian.Uint64(payload[:8]))
+	return uint(binary.BigEndian.Uint64(payload[:8])), payload[16]
 }
 
-func (s *Sessions) mac(b []byte) []byte {
+// Sign and Verify protect small values (the OIDC login state) with the session key.
+func (s *Sessions) Sign(v []byte) string {
+	return base64.RawURLEncoding.EncodeToString(append(append([]byte{}, v...), s.macWith("hi-sign-v1", v)...))
+}
+
+func (s *Sessions) Verify(token string) ([]byte, bool) {
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil || len(raw) < sha256.Size {
+		return nil, false
+	}
+	v, sig := raw[:len(raw)-sha256.Size], raw[len(raw)-sha256.Size:]
+	return v, hmac.Equal(sig, s.macWith("hi-sign-v1", v))
+}
+
+func (s *Sessions) mac(b []byte) []byte { return s.macWith("hi-session-v2", b) }
+
+// macWith keys the MAC by purpose, so a value signed for one use can't pass as another.
+func (s *Sessions) macWith(purpose string, b []byte) []byte {
 	m := hmac.New(sha256.New, s.key)
-	m.Write([]byte("hi-session-v1"))
+	m.Write([]byte(purpose + "\x00"))
 	m.Write(b)
 	return m.Sum(nil)
 }

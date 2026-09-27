@@ -41,8 +41,9 @@
       <div class="card-body">
         <h2 class="h5 card-title"><i class="bi bi-book"></i> Rules data</h2>
         {{with .Data.Snapshot}}
-        <p class="card-text mb-1">{{len .Classes.Classes}} classes, {{len .Cards.Vision}} vision cards, {{len .Cards.Pips}} pips.</p>
-        <p class="card-text small text-body-secondary">Snapshot <code>{{.Short}}</code>, loaded {{since .LoadedAt}}.</p>
+        <p class="card-text mb-1"><strong>{{.Label}}</strong>: {{len .Classes.Classes}} classes, {{len .Cards.Vision}} vision cards, {{len .Cards.Pips}} pips.</p>
+        <p class="card-text small text-body-secondary">Loaded {{since .LoadedAt}}.</p>
+        {{with $.Data.Updates}}<p class="card-text small"><i class="bi bi-stars text-info"></i> {{index . 0}} is available. <a href="/admin">Update in Admin</a></p>{{end}}
         {{else}}
         <p class="card-text text-warning">Rules data hasn't loaded yet.{{if $.User.IsSeer}} Check <a href="/admin">Admin</a>.{{end}}</p>
         {{end}}
