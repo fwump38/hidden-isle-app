@@ -37,9 +37,23 @@ type Limits struct {
 		} `yaml:"proficiency_clock"`
 	} `yaml:"agent"`
 	Creation struct {
-		TotalPoints int `yaml:"total_points"`
-		MaxSkill    int `yaml:"max_skill"`
-		Abilities   int `yaml:"abilities"`
+		Page                       string `yaml:"page"`
+		PrefilledPoints            int    `yaml:"prefilled_points"`
+		CoreSelfPoints             int    `yaml:"core_self_points"`
+		FreePoints                 int    `yaml:"free_points"`
+		TotalPoints                int    `yaml:"total_points"`
+		MaxSkill                   int    `yaml:"max_skill"`
+		Abilities                  int    `yaml:"abilities"`
+		AdeptProficiencies         int    `yaml:"adept_proficiencies"`
+		HomelandContactAffection   []int  `yaml:"homeland_contact_affection"`
+		DioscorianContactAffection int    `yaml:"dioscorian_contact_affection"`
+		Solo                       struct {
+			Page                      string `yaml:"page"`
+			TotalPoints               int    `yaml:"total_points"`
+			MaxSkill                  int    `yaml:"max_skill"`
+			MaxSkillsAt3              int    `yaml:"max_skills_at_3"`
+			OriginScenarioBonusPoints int    `yaml:"origin_scenario_bonus_points"`
+		} `yaml:"solo"`
 	} `yaml:"creation"`
 	Contact struct {
 		Affection Range `yaml:"affection"`

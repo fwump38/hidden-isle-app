@@ -246,7 +246,7 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 		s.done(w, r, err, back)
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/agents/%d", ag.ID), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf("/agents/%d/wizard", ag.ID), http.StatusSeeOther)
 }
 
 func (s *Server) assignAgent(w http.ResponseWriter, r *http.Request) {

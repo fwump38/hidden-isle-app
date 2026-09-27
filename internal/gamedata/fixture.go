@@ -61,6 +61,11 @@ func Fixture() *Snapshot {
 	l.Agent.HarmPerSuit.Max, l.Agent.HarmPerSuit.Types, l.Agent.HarmPerSuit.Page = 2, []string{"P", "S", "T"}, "p. 23"
 	l.Agent.Virtues.Max, l.Agent.Virtues.Page = 3, "p. 14"
 	l.Agent.ProficiencyClock.Segments, l.Agent.ProficiencyClock.Ranks = 6, []string{"Novice", "Adept", "Master"}
+	l.Creation.Page, l.Creation.PrefilledPoints, l.Creation.CoreSelfPoints, l.Creation.FreePoints = "pp. 40-41", 3, 2, 2
+	l.Creation.TotalPoints, l.Creation.MaxSkill, l.Creation.Abilities, l.Creation.AdeptProficiencies = 7, 2, 2, 1
+	l.Creation.HomelandContactAffection, l.Creation.DioscorianContactAffection = []int{2, 4, 6}, 1
+	l.Creation.Solo.Page, l.Creation.Solo.TotalPoints, l.Creation.Solo.MaxSkill = "p. 96", 9, 3
+	l.Creation.Solo.MaxSkillsAt3, l.Creation.Solo.OriginScenarioBonusPoints = 1, 1
 	l.Contact.Affection = Range{0, 6, "p. 66"}
 	l.Contact.Distance = Range{0, 3, "p. 66"}
 	l.Clock.Segments, l.Clock.Page = []int{3, 4, 6, 8}, "p. 86"

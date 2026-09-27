@@ -434,3 +434,107 @@ func svcSubs(st *site) int {
 	}
 	return 1
 }
+
+func TestCreationWizard(t *testing.T) {
+	st, _ := newSite(t)
+	ok := func(code int, flash string) {
+		t.Helper()
+		if code != http.StatusSeeOther || flash != "" {
+			t.Fatalf("post: %d %q", code, flash)
+		}
+	}
+	ok(st.post("Ana", "/agents", url.Values{"name": {"Ines"}, "class": {"prowler"}, "campaign_id": {"0"}}))
+
+	// Bram can't touch Ana's Agent or its wizard.
+	if code, _ := st.get("Bram", "/agents/1/wizard"); code != http.StatusForbidden && code != http.StatusNotFound {
+		t.Errorf("another player opened the wizard: %d", code)
+	}
+
+	if code, body := st.get("Ana", "/agents/1/wizard"); code != http.StatusOK || !strings.Contains(body, "As a child") {
+		t.Fatalf("wizard should start at step 1: %d", code)
+	}
+
+	ok(st.post("Ana", "/agents/1", url.Values{"set.child_phrase": {"Never looking back"}, "set.child_card": {"The Fool"}, "back": {"/agents/1/wizard?step=2"}}))
+	if _, body := st.get("Ana", "/agents/1/wizard"); !strings.Contains(body, "survived") {
+		t.Fatal("should auto-advance to step 2")
+	}
+	ok(st.post("Ana", "/agents/1", url.Values{"set.adult_phrase": {"My wild youth"}, "set.adult_card": {"The Chariot"}, "set.adult_verb": {"survived"}, "back": {"/agents/1/wizard?step=3"}}))
+	ok(st.post("Ana", "/agents/1", url.Values{"set.burden": {"Reckless"}, "set.burden_card": {"The Chariot"}, "back": {"/agents/1/wizard?step=4"}}))
+	ok(st.post("Ana", "/agents/1", url.Values{"set.ideal": {"Curious"}, "set.ideal_card": {"The Fool"}, "back": {"/agents/1/wizard?step=5"}}))
+
+	if _, body := st.get("Ana", "/agents/1/wizard"); !strings.Contains(body, "Abilities") || !strings.Contains(body, "WISP") {
+		t.Fatal("should be on step 5 with the class ability list")
+	}
+	ok(st.post("Ana", "/agents/1", url.Values{"ability.add": {"wisp"}, "back": {"/agents/1/wizard?step=5"}}))
+	if _, body := st.get("Ana", "/agents/1/wizard"); strings.Contains(body, `value="wisp"`) {
+		t.Error("an already-chosen ability shouldn't be offered again")
+	}
+	ok(st.post("Ana", "/agents/1", url.Values{"ability.add": {"burglar"}, "back": {"/agents/1/wizard?step=5"}}))
+	if _, body := st.get("Ana", "/agents/1/wizard"); !strings.Contains(body, "Skills") {
+		t.Fatal("should auto-advance to step 6 once 2 abilities are chosen")
+	}
+
+	// Prowler pre-fills Slip 2, Finesse 1 (3 points); add 4 more (7 total, cap 2/skill).
+	ok(st.post("Ana", "/agents/1", url.Values{"skill.Skirmish": {"2"}, "skill.Convince": {"2"}, "back": {"/agents/1/wizard?step=6"}}))
+	if _, body := st.get("Ana", "/agents/1/wizard?step=6"); !strings.Contains(body, "Ready to continue") {
+		t.Fatal("7 points should satisfy the skill step")
+	}
+	// Prowler has no magic: should skip straight to step 8.
+	if _, body := st.get("Ana", "/agents/1/wizard"); !strings.Contains(body, "Name, look, age, culture") {
+		t.Fatal("non-magical class should skip the magic step")
+	}
+	ok(st.post("Ana", "/agents/1", url.Values{"set.name": {"Ines"}, "set.age": {"24"}, "set.culture": {"Lisbon"}, "set.look": {"Sharp-eyed"}, "back": {"/agents/1/wizard?step=9"}}))
+	ok(st.post("Ana", "/agents/1", url.Values{"set.why": {"Fleeing famine, disaster or war"}, "back": {"/agents/1/wizard?step=10"}}))
+
+	ok(st.post("Ana", "/agents/1/contacts", url.Values{"set.kind": {"Homeland"}, "set.name": {"Mother Agnese"}, "set.card": {"Page of Cups"}, "set.affection": {"4"}, "back": {"/agents/1/wizard?step=10"}}))
+	if _, body := st.get("Ana", "/agents/1/wizard"); !strings.Contains(body, "Dioscorian contact") {
+		t.Fatal("should auto-advance to step 11 once the homeland contact exists")
+	}
+	ok(st.post("Ana", "/agents/1/contacts", url.Values{"set.kind": {"Dioscorian"}, "set.name": {"Old Marco"}, "set.affection": {"1"}, "back": {"/agents/1/wizard?step=11"}}))
+
+	if _, body := st.get("Ana", "/agents/1/wizard"); !strings.Contains(body, "is ready") || !strings.Contains(body, "Mother Agnese") {
+		t.Fatal("should finish at step 12 with a transcription checklist")
+	}
+}
+
+func TestWizardMagicStepAndDraw(t *testing.T) {
+	st, _ := newSite(t)
+	if code, _ := st.post("Ana", "/agents", url.Values{"name": {"Cyrus"}, "class": {"occultist"}, "campaign_id": {"0"}}); code != http.StatusSeeOther {
+		t.Fatal("create agent")
+	}
+	// Fast-forward past steps 1-6 to reach the magic step.
+	form := func(v url.Values) {
+		if code, flash := st.post("Ana", "/agents/1", v); code != http.StatusSeeOther || flash != "" {
+			t.Fatalf("post %v: %d %q", v, code, flash)
+		}
+	}
+	form(url.Values{"set.child_phrase": {"x"}, "set.child_card": {"The Fool"}})
+	form(url.Values{"set.adult_phrase": {"x"}, "set.adult_card": {"The Fool"}, "set.adult_verb": {"survived"}})
+	form(url.Values{"set.burden": {"Reckless"}})
+	form(url.Values{"set.ideal": {"Curious"}})
+	form(url.Values{"ability.add": {"evil-eye"}})
+	// Occultist creation.Abilities is 2 in the fixture but only 1 ability exists on the class;
+	// add a custom one to satisfy the count.
+	form(url.Values{"ability.custom_name": {"Extra"}, "ability.custom_text": {"test"}})
+	form(url.Values{"skill.Skirmish": {"2"}, "skill.Convince": {"2"}, "skill.Study": {"2"}}) // Unleash1+Channel2 prefilled + 6 = 9, over target but fine for this test
+
+	if _, body := st.get("Ana", "/agents/1/wizard?step=7"); !strings.Contains(body, "Occultists, Illusionists, Siphoners") {
+		t.Fatalf("occultist should see the magic step prompt: %s", body)
+	}
+	form(url.Values{"prof.add": {"Illusion"}, "prof.rank": {"Adept"}})
+	if _, body := st.get("Ana", "/agents/1/wizard?step=7"); !strings.Contains(body, "Illusion") || !strings.Contains(body, "Continue") {
+		t.Fatal("proficiency should be listed with a continue link")
+	}
+
+	// Digital draw: returns a card and re-renders the current step.
+	r := httptest.NewRequest(http.MethodPost, "/agents/1/wizard/draw", strings.NewReader(url.Values{"deck": {"vision"}, "count": {"1"}, "step": {"3"}, "for": {"burden"}}.Encode()))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.Header.Set("Sec-Fetch-Site", "same-origin")
+	r.RemoteAddr = "192.168.1.10:1"
+	r.AddCookie(st.cookies["Ana"])
+	w := httptest.NewRecorder()
+	st.h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "drawn:") {
+		t.Errorf("digital draw: %d %s", w.Code, w.Body.String())
+	}
+}

@@ -13,6 +13,7 @@
     {{with $d.Class}}<div class="small fst-italic text-body-secondary mt-1">“{{.Motto}}”</div>{{end}}
   </div>
   <div class="d-flex gap-2 d-print-none">
+    {{if $d.CanEdit}}<a class="btn btn-sm btn-outline-primary" href="{{$act}}/wizard"><i class="bi bi-magic"></i> Creation wizard</a>{{end}}
     <a class="btn btn-sm btn-outline-light" href="{{$act}}/print" hx-boost="false"><i class="bi bi-printer"></i> Print</a>
   </div>
 </div>
