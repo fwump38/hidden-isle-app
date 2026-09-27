@@ -9,15 +9,15 @@ It runs as a single Go binary in one container, with its state in SQLite.
 
 This repo holds **no game text**. The rules data (classes, abilities, cards, tables, limits) comes from a separate rules repository, which the app syncs on a timer through that repo's `hidden-isle-data.yaml` manifest.
 
-> **Status: Phase 2 (campaign tracking).** Working:
-> - campaigns with player membership;
-> - live character sheets that players edit themselves (skills, harm, tracks, XP, abilities with exact text, magic, inventory, contacts);
-> - clocks, adversaries (with Seer-only secrets), territories, sessions (with Seer-only prep), house rulings and Seer notes;
-> - a change log of every change, with undo;
-> - journals and recaps written by people;
-> - Markdown/JSON export and a printable sheet.
+> **Status: Phase 3 (MCP).** Working:
+> - sign-in (PIN at home, Authentik away);
+> - campaigns and player-owned Agents with live character sheets;
+> - clocks, adversaries, territories, sessions, house rulings, Seer notes and journals;
+> - a change log with undo; export and print;
+> - rules data by release;
+> - an MCP server with tools for all of this, rules search, and the plugin's skills as prompts.
 >
-> Every write is checked against the rules data's limits (the Seer can override, which records a house ruling). Next: the MCP tools for all of this, then the table tools (challenge helper, oracle, live push, TV view).
+> Next: table tools (challenge helper, oracle, live push, TV view).
 
 ## How it's put together
 
@@ -67,6 +67,25 @@ Everyone uses `https://<your domain>` through the Cloudflare Tunnel:
 - Never forward the LAN port (8390) to the internet.
 - The tunnel port (8391) must only be reachable through cloudflared, because the app trusts the `Cf-Connecting-IP` header there.
 - PIN sessions only work at home. Authentik sessions work anywhere.
+
+## Connect Claude (MCP)
+
+Setup is in [docs/authentik-setup.md](docs/authentik-setup.md): claude.ai uses OAuth through Authentik, and Claude Code uses an API token from Admin:
+```sh
+claude mcp add --transport http hidden-isle https://isle.example.com/mcp --header "Authorization: Bearer hi_…"
+```
+
+**What Claude gets.** Only the Seer can use MCP. Everything runs through the same checks as the web UI: limits from the rules data, permissions, and the change log (as "<Seer> (Claude)"). Every change can be undone.
+
+| Group | Tools |
+|---|---|
+| Campaign state | `list_campaigns`, `get_campaign`, `get_agent`, `list_records`, `get_record`, `get_log`, `list_entries` |
+| Changes | `create_campaign`, `create_agent`, `move_agent`, `create_record`, `update_record`, `delete_record`, `undo_change`, `write_entry` |
+| At the table | `add_harm`, `heal`, `award_xp`, `tick_clock`, `advance_adversary`, `drift_contacts`, `draw_cards` |
+| Rules | `search_rules`, `read_rules` (full text with page cites; adventures Seer-only), `get_class`, `lookup_card`, `get_table` |
+
+- **Prompts:** the rules repo's plugin skills are served as prompts (`create-agent`, `challenge`, `downtime`, `wrap-up`, …), so a claude.ai chat with only this connector has them.
+- **Refreshing:** prompts and the search index refresh when you install a new rules release.
 
 ## Configuration
 
