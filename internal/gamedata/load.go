@@ -47,6 +47,9 @@ func Load(dir, id string) (*Snapshot, error) {
 	if err := errors.Join(errs...); err != nil {
 		return nil, err
 	}
+	if err := s.loadPrompts(); err != nil {
+		return nil, err
+	}
 	if err := s.validate(); err != nil {
 		return nil, err
 	}
@@ -73,7 +76,51 @@ func (m *Manifest) paths() []string {
 	for _, t := range m.Text {
 		out = append(out, t.Path)
 	}
+	if m.Prompts != "" {
+		out = append(out, m.Prompts)
+	}
 	return out
+}
+
+// loadPrompts reads <dir>/<prompts>/*/SKILL.md: YAML front matter, then the skill's text.
+func (s *Snapshot) loadPrompts() error {
+	if s.Manifest.Prompts == "" {
+		return nil
+	}
+	root, err := within(s.Dir, s.Manifest.Prompts)
+	if err != nil {
+		return err
+	}
+	files, err := filepath.Glob(filepath.Join(root, "*", "SKILL.md"))
+	if err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			return err
+		}
+		text := string(b)
+		if !strings.HasPrefix(text, "---") {
+			return fmt.Errorf("%s: no front matter", f)
+		}
+		parts := strings.SplitN(text[3:], "\n---", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("%s: unterminated front matter", f)
+		}
+		var p Prompt
+		if err := yaml.Unmarshal([]byte(parts[0]), &p); err != nil {
+			return fmt.Errorf("%s: %w", f, err)
+		}
+		if p.Name == "" || seen[p.Name] {
+			return fmt.Errorf("%s: missing or duplicate name %q", f, p.Name)
+		}
+		seen[p.Name] = true
+		p.Body = strings.TrimSpace(strings.TrimPrefix(parts[1], "\n"))
+		s.Prompts = append(s.Prompts, p)
+	}
+	return nil
 }
 
 func (s *Snapshot) validate() error {

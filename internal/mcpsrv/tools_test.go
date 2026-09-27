@@ -163,6 +163,20 @@ func TestToolsPlayACampaign(t *testing.T) {
 		if secs := h.call("read_rules", map[string]any{"ref": ref})["items"].([]any); len(secs) != 1 {
 			t.Errorf("read_rules: %v", secs)
 		}
+
+		// The plugin's skills are served as prompts.
+		ps, err := h.cs.ListPrompts(context.Background(), nil)
+		if err != nil || len(ps.Prompts) < 10 {
+			t.Fatalf("prompts: %v %v", len(ps.Prompts), err)
+		}
+		got, err := h.cs.GetPrompt(context.Background(), &mcp.GetPromptParams{Name: "challenge", Arguments: map[string]string{"request": "Ines picks the lock"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := got.Messages[0].Content.(*mcp.TextContent).Text
+		if !strings.Contains(text, "# Run a challenge") || !strings.Contains(text, "Ines picks the lock") || strings.Contains(strings.ToLower(text), "notion") {
+			t.Errorf("challenge prompt text: %.300s", text)
+		}
 	}
 }
 

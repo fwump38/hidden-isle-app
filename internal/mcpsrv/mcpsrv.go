@@ -40,6 +40,7 @@ type Server struct {
 	build string
 
 	testUser *db.User // tests only: the user when there's no bearer token
+	prompts  []string // names of the registered prompts
 }
 
 func New(g *gorm.DB, cfg *config.Config, data *gamedata.Store, svc *campaign.Service, idx *rules.Index, build string) *Server {
@@ -50,6 +51,8 @@ func New(g *gorm.DB, cfg *config.Config, data *gamedata.Store, svc *campaign.Ser
 	s.mcp = mcp.NewServer(&mcp.Implementation{Name: "hidden-isle", Title: "The Hidden Isle", Version: build},
 		&mcp.ServerOptions{Instructions: instructions})
 	s.addTools()
+	s.syncPrompts(data.Current())
+	data.OnLoad(s.syncPrompts)
 	return s
 }
 

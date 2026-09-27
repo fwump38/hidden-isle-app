@@ -18,6 +18,7 @@ type Manifest struct {
 		Hand      map[string]string `yaml:"hand"`
 	} `yaml:"data"`
 	Text       []TextSource      `yaml:"text"`
+	Prompts    string            `yaml:"prompts"` // folder of <skill>/SKILL.md files, served as MCP prompts
 	Citations  map[string]string `yaml:"citations"`
 	Precedence []string          `yaml:"precedence"`
 }
@@ -138,6 +139,14 @@ type Campaign struct {
 	Visibility      []string `yaml:"visibility"`
 }
 
+// Prompt is one plugin skill (SKILL.md), served as an MCP prompt.
+type Prompt struct {
+	Name         string `yaml:"name"`
+	Description  string `yaml:"description"`
+	ArgumentHint string `yaml:"argument-hint"`
+	Body         string `yaml:"-"`
+}
+
 // Snapshot is one validated copy of the game data, read-only once loaded.
 type Snapshot struct {
 	ID       string // git commit (or "local-…" for a local path source)
@@ -151,6 +160,7 @@ type Snapshot struct {
 	Campaign   Campaign
 	Adventures Adventures
 	Limits     Limits
+	Prompts    []Prompt
 	// Tables the app doesn't type yet (limits, setting, oracle, downtime), keyed by manifest name.
 	Raw map[string]map[string]any
 }
