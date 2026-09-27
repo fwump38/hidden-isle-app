@@ -562,3 +562,53 @@ func TestTableOps(t *testing.T) {
 		t.Errorf("player created a clock: %v", err)
 	}
 }
+
+func TestTableViewAndHandouts(t *testing.T) {
+	w := setup(t)
+	must(t, w.s.Create(w.seer, "clock", &db.Clock{CampaignID: w.camp.ID, Name: "Public", Segments: 4, Status: "Running", Visibility: db.VisParty}, Opts{}))
+	must(t, w.s.Create(w.seer, "clock", &db.Clock{CampaignID: w.camp.ID, Name: "SECRET", Segments: 4, Status: "Running", Visibility: db.VisSeer}, Opts{}))
+	must(t, w.s.Create(w.seer, "adversary", &db.Adversary{CampaignID: w.camp.ID, Name: "Cult", Status: "Active", Secrets: "SECRET-LEADER"}, Opts{}))
+	must(t, w.s.Create(w.seer, "adversary", &db.Adversary{CampaignID: w.camp.ID, Name: "SECRET-FOE", Status: "Rumored", Hidden: true}, Opts{}))
+	must(t, w.s.Create(w.seer, "session", &db.Session{CampaignID: w.camp.ID, Number: 1, Title: "Arrival", Status: "Prep", Prep: "SECRET-PREP", Summary: "Find the score"}, Opts{}))
+
+	if _, err := w.s.TableKey(w.ana, w.camp.ID, false); !IsForbidden(err) {
+		t.Errorf("player got the table key: %v", err)
+	}
+	key, err := w.s.TableKey(w.seer, w.camp.ID, false)
+	must(t, err)
+	if !w.s.CheckTableKey(w.camp.ID, key) || w.s.CheckTableKey(w.camp.ID, key+"x") || w.s.CheckTableKey(w.camp.ID, "") {
+		t.Error("table key check")
+	}
+	again, _ := w.s.TableKey(w.seer, w.camp.ID, false)
+	rotated, _ := w.s.TableKey(w.seer, w.camp.ID, true)
+	if again != key || rotated == key || w.s.CheckTableKey(w.camp.ID, key) {
+		t.Error("key should be stable until rotated, and old keys stop working")
+	}
+	ps, err := w.s.PublicState(w.camp.ID)
+	must(t, err)
+	b, _ := json.Marshal(ps)
+	if strings.Contains(string(b), "SECRET") {
+		t.Errorf("TV view leaks: %s", b)
+	}
+	if len(ps.Clocks) != 1 || len(ps.Adversaries) != 1 || ps.Session.Summary != "Find the score" || len(ps.Agents) != 2 {
+		t.Errorf("TV view content: %d clocks, %d adversaries, %+v, %d agents", len(ps.Clocks), len(ps.Adversaries), ps.Session, len(ps.Agents))
+	}
+
+	if err := w.s.PushHandout(w.ana, &db.Handout{CampaignID: w.camp.ID, Title: "x"}); !IsForbidden(err) {
+		t.Errorf("player pushed: %v", err)
+	}
+	must(t, w.s.PushHandout(w.seer, &db.Handout{CampaignID: w.camp.ID, Title: "A letter", OnTable: true}))
+	must(t, w.s.PushHandout(w.seer, &db.Handout{CampaignID: w.camp.ID, Title: "For Ana only", ToUserID: &w.ana.User.ID, OnTable: true}))
+	if err := w.s.PushHandout(w.seer, &db.Handout{CampaignID: w.camp.ID, Title: "x", ToUserID: &w.eve.User.ID}); err == nil {
+		t.Error("pushed to a non-member")
+	}
+	ana, _ := w.s.Handouts(w.ana, w.camp.ID, 0)
+	bram, _ := w.s.Handouts(w.bram, w.camp.ID, 0)
+	if len(ana) != 2 || len(bram) != 1 {
+		t.Errorf("handouts: ana %d, bram %d", len(ana), len(bram))
+	}
+	ps, _ = w.s.PublicState(w.camp.ID)
+	if ps.Handout == nil || ps.Handout.Title != "A letter" {
+		t.Errorf("TV shows the latest public handout, not the private one: %+v", ps.Handout)
+	}
+}

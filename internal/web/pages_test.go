@@ -10,12 +10,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/fwump38/hidden-isle-app/internal/auth"
 	"github.com/fwump38/hidden-isle-app/internal/campaign"
 	"github.com/fwump38/hidden-isle-app/internal/config"
 	"github.com/fwump38/hidden-isle-app/internal/db"
 	"github.com/fwump38/hidden-isle-app/internal/gamedata"
+	"github.com/fwump38/hidden-isle-app/internal/live"
 )
 
 type site struct {
@@ -71,6 +73,8 @@ func newSite(t *testing.T) (*site, *campaign.Service) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	srv.Live = live.New()
+	svc.OnEvent = func(ev db.Event) { PublishEvent(srv.Live, ev) }
 	mux := http.NewServeMux()
 	srv.Register(mux)
 	st := &site{t: t, h: http.NewCrossOriginProtection().Handler(srv.Auth.Middleware(auth.LAN)(mux)), cookies: map[string]*http.Cookie{}}
@@ -329,4 +333,104 @@ func TestOraclePage(t *testing.T) {
 	if code, _ := st.get("Ana", "/c/1/oracle"); code != http.StatusForbidden {
 		t.Errorf("non-member opened the oracle: %d", code)
 	}
+}
+
+func TestLiveTableAndHandouts(t *testing.T) {
+	st, svc := newSite(t)
+	st.post("Seer", "/campaigns", url.Values{"name": {"C"}, "mode": {"group"}})
+	for _, uid := range []string{"2", "3"} {
+		st.post("Seer", "/c/1/members", url.Values{"user_id": {uid}, "member": {"on"}})
+	}
+	if code, _ := st.get("Seer", "/c/1/play"); code != http.StatusOK {
+		t.Fatalf("dashboard: %d", code)
+	}
+	if code, _ := st.get("Ana", "/c/1/play"); code != http.StatusForbidden {
+		t.Errorf("player opened the dashboard: %d", code)
+	}
+
+	// Ana listens on the live stream through a real server.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.RemoteAddr = "192.168.1.10:1"
+		st.h.ServeHTTP(w, r)
+	}))
+	defer ts.Close()
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/c/1/live", nil)
+	req.AddCookie(st.cookies["Ana"])
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("live stream: %v %v", err, resp)
+	}
+	defer resp.Body.Close()
+	lines := make(chan string, 100)
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := resp.Body.Read(buf)
+			if n > 0 {
+				lines <- string(buf[:n])
+			}
+			if err != nil {
+				close(lines)
+				return
+			}
+		}
+	}()
+	for svcSubs(st) == 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	st.post("Seer", "/c/1/r/clock", url.Values{"set.name": {"SECRET-CLOCK"}, "set.segments": {"4"}, "set.scope": {"Scenario"}, "set.visibility": {"seer"}})
+	st.post("Seer", "/c/1/handouts", url.Values{"title": {"For Bram only"}, "to": {"3"}})
+	st.post("Seer", "/c/1/r/clock", url.Values{"set.name": {"Guards"}, "set.segments": {"4"}, "set.scope": {"Scenario"}, "set.visibility": {"party"}})
+	st.post("Seer", "/c/1/handouts", url.Values{"title": {"A sealed letter"}, "body": {"Meet at dawn."}, "card": {"Page of Cups"}, "on_table": {"on"}})
+
+	var got strings.Builder
+	deadline := time.After(3 * time.Second)
+	for !strings.Contains(got.String(), "A sealed letter") {
+		select {
+		case l, ok := <-lines:
+			if !ok {
+				t.Fatal("stream closed")
+			}
+			got.WriteString(l)
+		case <-deadline:
+			t.Fatalf("no handout on the stream: %q", got.String())
+		}
+	}
+	stream := got.String()
+	if !strings.Contains(stream, "event: changed") {
+		t.Error("public change not announced")
+	}
+	if strings.Contains(stream, "For Bram only") || strings.Count(stream, "event: changed") != 1 {
+		t.Errorf("Ana's stream got something she shouldn't: %q", stream)
+	}
+
+	// The TV view: only with the key, and only public things.
+	var seer db.User
+	svc.DB.First(&seer, 1)
+	key, _ := svc.TableKey(campaign.Actor{User: &seer}, 1, false)
+	if code, _ := st.get("Ana", "/table/1?key=wrong"); code != http.StatusNotFound {
+		t.Errorf("TV with a bad key: %d", code)
+	}
+	r := httptest.NewRequest(http.MethodGet, "/table/1?key="+key, nil)
+	r.RemoteAddr = "192.168.1.50:1"
+	w := httptest.NewRecorder()
+	st.h.ServeHTTP(w, r) // no cookie: the TV isn't signed in
+	tv := w.Body.String()
+	if w.Code != http.StatusOK || !strings.Contains(tv, "Guards") || !strings.Contains(tv, "A sealed letter") || strings.Contains(tv, "SECRET") || strings.Contains(tv, "For Bram only") {
+		t.Errorf("TV view (%d): %s", w.Code, tv)
+	}
+	_, over := st.get("Ana", "/c/1")
+	if !strings.Contains(over, "A sealed letter") || strings.Contains(over, "For Bram only") {
+		t.Error("Ana's handouts list")
+	}
+}
+
+func svcSubs(st *site) int {
+	// The stream is registered once the handler starts; poll through the dashboard's count.
+	_, body := st.get("Seer", "/c/1/play")
+	if strings.Contains(body, "</i> 0 connected") {
+		return 0
+	}
+	return 1
 }

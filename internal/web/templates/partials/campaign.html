@@ -13,6 +13,7 @@
     <li class="nav-item"><a class="nav-link {{if eq $sec "rulings"}}active{{end}}" href="/c/{{$c.ID}}/rulings">Rulings</a></li>
     <li class="nav-item"><a class="nav-link {{if eq $sec "log"}}active{{end}}" href="/c/{{$c.ID}}/log">Log</a></li>
     {{if $.User.IsSeer}}
+    <li class="nav-item"><a class="nav-link text-info {{if eq $sec "play"}}active{{end}}" href="/c/{{$c.ID}}/play"><i class="bi bi-controller"></i> Play</a></li>
     <li class="nav-item"><a class="nav-link text-warning {{if eq $sec "notes"}}active{{end}}" href="/c/{{$c.ID}}/notes"><i class="bi bi-eye-slash"></i> Notes</a></li>
     <li class="nav-item"><a class="nav-link {{if eq $sec "settings"}}active{{end}}" href="/c/{{$c.ID}}/settings"><i class="bi bi-sliders"></i></a></li>
     {{end}}

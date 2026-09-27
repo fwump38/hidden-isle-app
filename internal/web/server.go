@@ -20,6 +20,7 @@ import (
 	"github.com/fwump38/hidden-isle-app/internal/config"
 	"github.com/fwump38/hidden-isle-app/internal/db"
 	"github.com/fwump38/hidden-isle-app/internal/gamedata"
+	"github.com/fwump38/hidden-isle-app/internal/live"
 )
 
 //go:embed templates static
@@ -31,6 +32,7 @@ type Server struct {
 	Auth  *auth.Authenticator
 	Data  *gamedata.Store
 	Svc   *campaign.Service
+	Live  *live.Hub // live updates; nil disables them
 	Build string
 
 	pages map[string]*template.Template
@@ -68,6 +70,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.Handle("GET /{$}", s.requireUser(http.HandlerFunc(s.home)))
 
 	s.registerCampaign(mux)
+	s.registerPlay(mux)
 
 	mux.Handle("GET /admin", s.requireSeer(http.HandlerFunc(s.admin)))
 	mux.Handle("POST /admin/gamedata/sync", s.requireSeer(http.HandlerFunc(s.syncGameData)))
@@ -97,10 +100,12 @@ type pageData struct {
 	Error string
 	Data  any
 	Nav   *campaignNav // set on campaign pages
+	Live  bool         // subscribe to the campaign's live updates
 }
 
 func (s *Server) render(w http.ResponseWriter, r *http.Request, page string, status int, pd pageData) {
 	pd.User = auth.User(r.Context())
+	pd.Live = s.Live != nil && pd.Nav != nil && pd.Nav.Campaign != nil
 	pd.Info = auth.Info(r.Context())
 	pd.Build = s.Build
 	t, ok := s.pages[page]

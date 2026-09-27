@@ -1,0 +1,107 @@
+{{define "content"}}
+{{$d := .Data}}{{$c := .Nav.Campaign}}{{$back := printf "/c/%d/play" $c.ID}}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+  <h1 class="h4 mb-0"><i class="bi bi-controller"></i> At the table</h1>
+  <div class="d-flex flex-wrap gap-2 small align-items-center">
+    <span class="text-body-secondary" title="Open pages receiving live updates"><i class="bi bi-broadcast"></i> {{$d.Watching}} connected</span>
+    {{with $d.TableURL}}<a class="btn btn-sm btn-outline-light" href="{{.}}" target="_blank" rel="noopener" hx-boost="false"><i class="bi bi-tv"></i> TV view</a>{{end}}
+    <a class="btn btn-sm btn-outline-light" href="/c/{{$c.ID}}/oracle"><i class="bi bi-stars"></i> Oracle</a>
+  </div>
+</div>
+<p class="small text-body-secondary">Everything here updates players' phones and the TV as you change it. {{help "The TV view is a secret link that needs no sign-in and shows only what players may see. Open it on the TV's browser. 'New TV link' makes the old one stop working."}}</p>
+{{template "why" $}}
+
+<div class="row g-3" hx-include="#why">
+  <div class="col-12 col-xl-8">
+    <div class="row g-2">
+      {{range $d.Agents}}
+      <div class="col-12 col-md-6">
+        <div class="card h-100"><div class="card-body py-2">
+          <div class="d-flex justify-content-between align-items-center">
+            <a class="fw-semibold text-decoration-none" href="/agents/{{.ID}}">{{.Name}}</a>
+            <span class="small text-body-secondary">{{with .Player}}{{.}} · {{end}}{{.Status}}</span>
+          </div>
+          <div class="small d-flex flex-wrap gap-2 my-1">
+            {{$h := .Harm}}
+            {{range $suit := list "Swords" "Wands" "Cups" "Pentacles"}}<span class="hi-suit-{{$suit}}">{{$suit}} <span class="badge {{if index $h $suit}}text-bg-danger{{else}}text-bg-secondary{{end}}">{{with index $h $suit}}{{join . " "}}{{else}}—{{end}}</span></span>{{end}}
+          </div>
+          <div class="small text-body-secondary">load {{.LoadUsed}}/5 · burden {{.BurdenTrack}}/7 · ideal {{.IdealTrack}}/7</div>
+          <form method="post" action="/c/{{$c.ID}}/play/harm" class="input-group input-group-sm mt-1">
+            <input type="hidden" name="agent_id" value="{{.ID}}"><input type="hidden" name="back" value="{{$back}}">
+            <select class="form-select" name="suit" aria-label="Suit"><option>Swords</option><option>Wands</option><option>Cups</option><option>Pentacles</option></select>
+            <select class="form-select" name="type" aria-label="Type"><option value="P">P</option><option value="S">S</option><option value="T">T</option></select>
+            <button class="btn btn-outline-danger" type="submit" name="op" value="harm" title="Add 1 harm">+ harm</button>
+            <button class="btn btn-outline-success" type="submit" name="op" value="heal" title="Heal 1 of this type in this suit">heal</button>
+          </form>
+        </div></div>
+      </div>
+      {{else}}<div class="col-12"><p class="text-body-secondary">No active Agents.</p></div>{{end}}
+    </div>
+
+    <div class="row g-2 mt-1">
+      <div class="col-12 col-md-6">
+        <div class="card h-100"><div class="card-body">
+          <h2 class="h6"><i class="bi bi-pie-chart"></i> Running clocks</h2>
+          {{range $d.Clocks}}{{$u := printf "/r/clock/%d" .ID}}
+          <form method="post" action="{{$u}}" class="d-flex align-items-center gap-2 mb-1">
+            <input type="hidden" name="back" value="{{$back}}">
+            {{clock .Filled .Segments 30}}
+            <span class="small flex-grow-1">{{if isSeerVis .Visibility}}<i class="bi bi-eye-slash text-warning" title="Seer only"></i> {{end}}{{.Name}} <span class="text-body-secondary">{{.Filled}}/{{.Segments}}</span></span>
+            <button class="btn btn-sm btn-outline-light" type="submit" name="inc.filled" value="-1" aria-label="Unfill">−</button>
+            <button class="btn btn-sm btn-outline-light" type="submit" name="inc.filled" value="1" aria-label="Fill">+</button>
+            {{if isSeerVis .Visibility}}<button class="btn btn-sm btn-outline-info" type="submit" name="set.visibility" value="party" title="Show it to the players">Reveal</button>{{end}}
+          </form>
+          {{else}}<p class="small text-body-secondary mb-0">None. <a href="/c/{{$c.ID}}/clocks">Add one</a>.</p>{{end}}
+        </div></div>
+      </div>
+      <div class="col-12 col-md-6">
+        <div class="card h-100"><div class="card-body">
+          <h2 class="h6"><i class="bi bi-incognito"></i> Adversaries</h2>
+          {{range $d.Adversaries}}
+          <div class="d-flex flex-wrap align-items-center gap-1 mb-1 small">
+            <span class="flex-grow-1">{{if .Hidden}}<i class="bi bi-eye-slash text-warning"></i> {{end}}{{.Name}} <span class="text-body-secondary">{{.Progress}}/{{.TrackLength}}</span></span>
+            {{if .Hidden}}
+            <form method="post" action="/r/adversary/{{.ID}}"><input type="hidden" name="back" value="{{$back}}"><input type="hidden" name="set.hidden" value=""><button class="btn btn-sm btn-outline-info" type="submit" title="Put them on the players' Adversary Sheet">Reveal</button></form>
+            {{else}}
+            <form method="post" action="/c/{{$c.ID}}/play/advance" class="d-flex gap-1"><input type="hidden" name="adversary_id" value="{{.ID}}"><input type="hidden" name="back" value="{{$back}}">
+              <button class="btn btn-sm btn-outline-light" type="submit" name="step" value="setback" title="Setback">−1</button>
+              <button class="btn btn-sm btn-outline-light" type="submit" name="step" value="steady" title="Steady">+1</button>
+              <button class="btn btn-sm btn-outline-light" type="submit" name="step" value="rapid" title="Rapid">+2</button></form>
+            {{end}}
+          </div>
+          {{else}}<p class="small text-body-secondary mb-0">None.</p>{{end}}
+        </div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-4">
+    <form method="post" action="/c/{{$c.ID}}/handouts" class="card card-body mb-3">
+      <input type="hidden" name="back" value="{{$back}}">
+      <h2 class="h6"><i class="bi bi-send"></i> Push to players {{help "Pops up on players' open pages right away and stays in their Handouts list. A handout to one player never shows on the TV."}}</h2>
+      <div class="row g-2 small">
+        <div class="col-6"><select class="form-select form-select-sm" name="to" aria-label="To"><option value="">Everyone</option>{{range $d.Players}}<option value="{{.ID}}">{{.Name}} only</option>{{end}}</select></div>
+        <div class="col-6 d-flex align-items-center"><div class="form-check mb-0"><input class="form-check-input" type="checkbox" name="on_table" id="on-table" checked><label class="form-check-label" for="on-table">Also on the TV</label></div></div>
+        <div class="col-12"><input class="form-control form-control-sm" name="title" placeholder="Title, e.g. A sealed letter" aria-label="Title"></div>
+        <div class="col-12"><textarea class="form-control form-control-sm" name="body" rows="3" placeholder="Text they read" aria-label="Text"></textarea></div>
+        <div class="col-12"><select class="form-select form-select-sm" name="card" aria-label="Vision card"><option value="">No card</option>{{range $d.Vision}}<option>{{.}}</option>{{end}}</select></div>
+        <div class="col-12"><input class="form-control form-control-sm" name="image_url" placeholder="Image link (https://…), optional" aria-label="Image link"></div>
+        <div class="col-12"><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-send"></i> Push</button></div>
+      </div>
+    </form>
+    <form method="post" action="/c/{{$c.ID}}/entries" class="card card-body mb-3">
+      <input type="hidden" name="kind" value="note"><input type="hidden" name="visibility" value="seer"><input type="hidden" name="back" value="{{$back}}">
+      <h2 class="h6"><i class="bi bi-pencil"></i> Quick note <span class="small text-warning">Seer only</span></h2>
+      <textarea class="form-control form-control-sm mb-2" name="body" rows="3" required placeholder="What just happened, for the session log later" aria-label="Note"></textarea>
+      <input type="hidden" name="title" value="Table note">
+      <button class="btn btn-sm btn-outline-light" type="submit">Save note</button>
+    </form>
+    <div class="card mb-3"><div class="card-body">
+      <h2 class="h6"><i class="bi bi-clock-history"></i> Recent changes</h2>
+      {{template "events" $d.Events}}
+    </div></div>
+    <form method="post" action="/c/{{$c.ID}}/table-key" class="small text-body-secondary"><input type="hidden" name="back" value="{{$back}}">
+      <button class="btn btn-sm btn-link p-0" type="submit" hx-confirm="Make a new TV link? The current one stops working.">New TV link</button></form>
+  </div>
+</div>
+{{end}}

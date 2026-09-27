@@ -31,6 +31,7 @@ type Campaign struct {
 	Options         string    `json:"options"` // optional rules in use
 	OpenThreads     string    `json:"open_threads"`
 	Archived        bool      `json:"archived"`
+	TableKey        string    `json:"-"` // secret for the read-only TV view link
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }
@@ -267,4 +268,17 @@ type Entry struct {
 	Events     []Event    `gorm:"many2many:entry_events" json:"-"`
 	CreatedAt  time.Time  `json:"created_at"`
 	UpdatedAt  time.Time  `json:"updated_at"`
+}
+
+// Handout is something the Seer pushed to players' screens: text, a vision card, an image.
+type Handout struct {
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	CampaignID uint      `gorm:"not null;index" json:"campaign_id"`
+	ToUserID   *uint     `gorm:"index" json:"to_user_id,omitempty"` // nil = everyone
+	OnTable    bool      `json:"on_table"`                          // also shown on the TV view
+	Title      string    `json:"title"`
+	Body       string    `json:"body"`
+	Card       string    `json:"card"`
+	ImageURL   string    `json:"image_url"`
+	CreatedAt  time.Time `json:"created_at"`
 }

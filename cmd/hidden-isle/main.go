@@ -24,6 +24,7 @@ import (
 	"github.com/fwump38/hidden-isle-app/internal/config"
 	"github.com/fwump38/hidden-isle-app/internal/db"
 	"github.com/fwump38/hidden-isle-app/internal/gamedata"
+	"github.com/fwump38/hidden-isle-app/internal/live"
 	"github.com/fwump38/hidden-isle-app/internal/mcpsrv"
 	"github.com/fwump38/hidden-isle-app/internal/rules"
 	"github.com/fwump38/hidden-isle-app/internal/web"
@@ -85,11 +86,14 @@ func run() error {
 	go db.RunBackups(ctx, g, filepath.Join(cfg.DataDir, "backup", "hidden-isle.db"), cfg.BackupInterval)
 
 	svc := campaign.New(g, data)
+	hub := live.New()
+	svc.OnEvent = func(ev db.Event) { web.PublishEvent(hub, ev) }
 	ui, err := web.New(g, cfg, authn, data, svc, build)
 	if err != nil {
 		return err
 	}
 	mux := http.NewServeMux()
+	ui.Live = hub
 	ui.Register(mux)
 	idx, err := rules.New(g)
 	if err != nil {

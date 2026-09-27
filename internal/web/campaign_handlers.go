@@ -140,6 +140,7 @@ func (s *Server) createCampaign(w http.ResponseWriter, r *http.Request) {
 }
 
 type dashboardData struct {
+	Handouts    []db.Handout
 	AllPlayers  []db.User // Seer: every active player (for "add a player" and "played by")
 	Members     map[uint]bool
 	MyOther     []db.Agent // the player's Agents not in this campaign
@@ -172,6 +173,7 @@ func (s *Server) campaignPage(w http.ResponseWriter, r *http.Request) {
 	_ = s.Svc.List(a, "session", c.ID, &d.Sessions, "number desc")
 	d.Events, _ = s.Svc.Events(a, c.ID, campaign.EventFilter{Limit: 12})
 	d.Recaps, _ = s.Svc.Entries(a, c.ID, "recap", 0)
+	d.Handouts, _ = s.Svc.Handouts(a, c.ID, 10)
 	d.Players, _ = s.Svc.Members(a, c.ID)
 	d.Members = map[uint]bool{}
 	for _, m := range d.Players {

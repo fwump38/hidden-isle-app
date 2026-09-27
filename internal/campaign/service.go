@@ -65,6 +65,8 @@ func (a Actor) name() string {
 type Service struct {
 	DB   *gorm.DB
 	Data *gamedata.Store
+	// OnEvent, if set, is told about every recorded change (for live updates). It must not block.
+	OnEvent func(db.Event)
 }
 
 func New(g *gorm.DB, data *gamedata.Store) *Service { return &Service{DB: g, Data: data} }

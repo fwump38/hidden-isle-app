@@ -85,3 +85,85 @@ function initTooltips(root) {
   root.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((el) => bootstrap.Tooltip.getOrCreateInstance(el, { trigger: "hover focus" }));
 }
 document.addEventListener("DOMContentLoaded", () => initTooltips(document));
+
+// ---------------------------------------------------------------- live updates
+// Campaign pages subscribe to the campaign's event stream. Someone else's change refreshes the
+// page, unless you're in the middle of something (typing, a challenge or oracle result on
+// screen), in which case a notice offers to refresh. Handouts from the Seer open in a dialog.
+let liveSource = null, liveURL = null, refreshTimer = null;
+
+function connectLive() {
+  const main = document.getElementById("main");
+  const url = main ? main.dataset.live || null : null;
+  if (url === liveURL) return;
+  if (liveSource) liveSource.close();
+  liveSource = null;
+  liveURL = url;
+  if (!url) return;
+  liveSource = new EventSource(url);
+  liveSource.addEventListener("changed", (e) => {
+    const d = JSON.parse(e.data || "{}");
+    if (String(d.actor) === (document.getElementById("main").dataset.user || "")) return; // our own change
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(refreshOrNotify, 400);
+  });
+  liveSource.addEventListener("handout", (e) => showHandout(JSON.parse(e.data || "{}")));
+}
+
+function busy() {
+  const a = document.activeElement;
+  if (a && a.matches("input:not([type=checkbox]):not([type=radio]), textarea, select")) return true;
+  const why = document.getElementById("why-input");
+  if (why && why.value) return true;
+  return !!document.querySelector("#challenge-out .alert, #challenge-out .border, #oracle-out .card");
+}
+
+function refreshOrNotify() {
+  if (busy()) {
+    toast("Something changed.", "Refresh", () => refreshPage());
+  } else {
+    refreshPage();
+  }
+}
+
+function refreshPage() {
+  htmx.ajax("GET", location.pathname + location.search, { target: "#main", select: "#main", swap: "outerHTML show:none" });
+}
+
+function toast(text, action, onAction) {
+  const box = document.getElementById("toasts");
+  if (!box || !window.bootstrap) return;
+  box.innerHTML = "";
+  const el = document.createElement("div");
+  el.className = "toast align-items-center text-bg-secondary border-0";
+  el.setAttribute("role", "status");
+  el.innerHTML = '<div class="d-flex"><div class="toast-body"></div><button type="button" class="btn btn-sm btn-light me-2 my-auto"></button><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button></div>';
+  el.querySelector(".toast-body").textContent = text;
+  const btn = el.querySelector(".btn-light");
+  btn.textContent = action;
+  btn.addEventListener("click", () => { bootstrap.Toast.getOrCreateInstance(el).hide(); onAction(); });
+  box.appendChild(el);
+  bootstrap.Toast.getOrCreateInstance(el, { autohide: false }).show();
+}
+
+function showHandout(h) {
+  const modal = document.getElementById("handout-modal");
+  if (!modal || !window.bootstrap) return;
+  modal.querySelector("#handout-title").textContent = h.title || h.card || "From the Seer";
+  const body = modal.querySelector("#handout-body");
+  body.innerHTML = "";
+  if (h.card) {
+    const c = document.createElement("p");
+    c.className = "fs-5";
+    c.innerHTML = '<i class="bi bi-suit-diamond"></i> ';
+    c.append(h.card);
+    if (h.meaning) { const m = document.createElement("span"); m.className = "d-block small text-body-secondary"; m.textContent = h.meaning; c.appendChild(m); }
+    body.appendChild(c);
+  }
+  if (h.body) { const p = document.createElement("p"); p.className = "hi-prose"; p.textContent = h.body; body.appendChild(p); }
+  if (h.image_url) { const img = document.createElement("img"); img.src = h.image_url; img.alt = h.title || "handout"; img.className = "img-fluid rounded"; body.appendChild(img); }
+  bootstrap.Modal.getOrCreateInstance(modal).show();
+}
+
+document.addEventListener("DOMContentLoaded", connectLive);
+document.addEventListener("htmx:afterSettle", connectLive);

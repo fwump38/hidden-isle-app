@@ -1,0 +1,81 @@
+{{define "content"}}{{end}}
+
+{{define "tv"}}<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>{{.State.Campaign.Name}} · The Hidden Isle</title>
+  <link rel="stylesheet" href="/static/vendor/bootstrap.min.css">
+  <link rel="stylesheet" href="/static/vendor/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/static/app.css">
+  <style>
+    body { font-size: 1.35rem; }
+    .tv-card { background: var(--bs-tertiary-bg); border-radius: .75rem; padding: 1rem 1.25rem; height: 100%; }
+    .tv-card h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: .08em; color: var(--bs-secondary-color); }
+  </style>
+</head>
+<body class="p-3 p-lg-4" data-state="/table/{{.State.Campaign.ID}}/state?key={{.Key}}" data-live="/table/{{.State.Campaign.ID}}/live?key={{.Key}}">
+  <div id="tv-state">{{template "tv-state" .}}</div>
+  <script>
+    // Refresh on any change; reconnects on its own if the stream drops.
+    const body = document.body;
+    let timer = null;
+    function refresh() {
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        const r = await fetch(body.dataset.state, { cache: "no-store" });
+        if (r.ok) document.getElementById("tv-state").innerHTML = await r.text();
+      }, 300);
+    }
+    const es = new EventSource(body.dataset.live);
+    es.addEventListener("changed", refresh);
+    es.addEventListener("handout", refresh);
+    setInterval(refresh, 5 * 60 * 1000); // belt and braces
+  </script>
+</body>
+</html>{{end}}
+
+{{define "tv-state"}}
+{{$s := .State}}
+<div class="d-flex justify-content-between align-items-baseline mb-3">
+  <h1 class="display-6 mb-0"><i class="bi bi-moon-stars" style="color: var(--hi-accent)"></i> {{$s.Campaign.Name}}</h1>
+  <div class="text-body-secondary">{{with $s.Campaign.HandName}}{{.}} · {{end}}season {{$s.Campaign.Season}}</div>
+</div>
+<div class="row g-3">
+  {{with $s.Session}}
+  <div class="col-12"><div class="tv-card"><h2>{{.Number}}. {{.Title}}</h2><div class="fs-4">{{.Summary}}</div></div></div>
+  {{end}}
+  {{with $.Handout}}
+  <div class="col-12 col-lg-6"><div class="tv-card border border-info">
+    <h2><i class="bi bi-send"></i> {{or .Title "From the Seer"}}</h2>
+    {{with .Card}}<div class="fs-3"><i class="bi bi-suit-diamond"></i> {{.}}</div>{{end}}
+    {{with .Meaning}}<div class="text-body-secondary">{{.}}</div>{{end}}
+    {{with .Body}}<div class="hi-prose mt-2">{{.}}</div>{{end}}
+    {{with .ImageURL}}<img src="{{.}}" alt="handout" class="img-fluid rounded mt-2" style="max-height: 50vh">{{end}}
+  </div></div>
+  {{end}}
+  <div class="col-12 col-lg-6"><div class="tv-card">
+    <h2>Clocks</h2>
+    {{range $s.Clocks}}<div class="d-flex align-items-center gap-3 mb-2">{{clock .Filled .Segments 64}}<div><div>{{.Name}}</div><div class="text-body-secondary fs-6">{{.Filled}}/{{.Segments}}</div></div></div>
+    {{else}}<div class="text-body-secondary">No clocks running.</div>{{end}}
+  </div></div>
+  <div class="col-12 col-lg-6"><div class="tv-card">
+    <h2>The Hand</h2>
+    {{range $s.Agents}}
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <span>{{.Name}} <span class="text-body-secondary fs-6">{{className $.Snap .Class}}{{if ne .Status "Active"}} · {{.Status}}{{end}}</span></span>
+      <span class="fs-6">{{$h := .Harm}}{{range $suit := list "Swords" "Wands" "Cups" "Pentacles"}}<span class="hi-suit-{{$suit}} ms-2" title="{{$suit}}">{{with index $h $suit}}{{join . ""}}{{else}}·{{end}}</span>{{end}}</span>
+    </div>
+    {{else}}<div class="text-body-secondary">No Agents yet.</div>{{end}}
+  </div></div>
+  <div class="col-12 col-lg-6"><div class="tv-card">
+    <h2>Adversaries</h2>
+    {{range $s.Adversaries}}
+    <div class="mb-2"><div>{{.Name}} <span class="text-body-secondary fs-6">{{.Status}}</span></div>
+      {{if .TrackLength}}<div class="hi-track">{{$p := .Progress}}{{range $i := seq 1 .TrackLength}}<span class="{{if le $i $p}}on{{end}}"></span>{{end}}</div>{{end}}</div>
+    {{else}}<div class="text-body-secondary">None on the sheet.</div>{{end}}
+  </div></div>
+</div>
+{{end}}

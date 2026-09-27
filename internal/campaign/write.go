@@ -365,6 +365,9 @@ func (s *Service) record(tx *gorm.DB, a Actor, k *kind, obj any, action string, 
 		if err := tx.Create(ev).Error; err != nil {
 			return nil, err
 		}
+		if s.OnEvent != nil {
+			s.OnEvent(*ev)
+		}
 	}
 	return events[0], nil
 }
