@@ -43,7 +43,12 @@ type Store struct {
 
 	statusMu sync.Mutex
 	status   Status
+
+	onLoad []func(*Snapshot)
 }
+
+// OnLoad registers fn to run (in the background) whenever a new snapshot is swapped in.
+func (s *Store) OnLoad(fn func(*Snapshot)) { s.onLoad = append(s.onLoad, fn) }
 
 // Status is shown on the Seer's admin page.
 type Status struct {
@@ -258,6 +263,9 @@ func (s *Store) sync(ctx context.Context, want string) (err error) {
 		return err
 	}
 	s.cur.Store(snap)
+	for _, fn := range s.onLoad {
+		go fn(snap)
+	}
 	if s.Mode() == "release" {
 		if err := writeAtomic(filepath.Join(s.root, "pin"), []byte(id+"\n")); err != nil {
 			return err

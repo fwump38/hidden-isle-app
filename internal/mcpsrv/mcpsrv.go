@@ -19,10 +19,11 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/fwump38/hidden-isle-app/internal/auth"
-	"github.com/fwump38/hidden-isle-app/internal/cards"
+	"github.com/fwump38/hidden-isle-app/internal/campaign"
 	"github.com/fwump38/hidden-isle-app/internal/config"
 	"github.com/fwump38/hidden-isle-app/internal/db"
 	"github.com/fwump38/hidden-isle-app/internal/gamedata"
+	"github.com/fwump38/hidden-isle-app/internal/rules"
 )
 
 // TokenPrefix starts every API token, so the verifier can tell them from JWTs.
@@ -32,19 +33,22 @@ type Server struct {
 	db    *gorm.DB
 	cfg   *config.Config
 	data  *gamedata.Store
+	svc   *campaign.Service
+	rules *rules.Index
 	oidc  *auth.JWTVerifier // nil when HI_OAUTH_ISSUER isn't set
 	mcp   *mcp.Server
 	build string
+
+	testUser *db.User // tests only: the user when there's no bearer token
 }
 
-func New(g *gorm.DB, cfg *config.Config, data *gamedata.Store, build string) *Server {
-	s := &Server{db: g, cfg: cfg, data: data, build: build}
+func New(g *gorm.DB, cfg *config.Config, data *gamedata.Store, svc *campaign.Service, idx *rules.Index, build string) *Server {
+	s := &Server{db: g, cfg: cfg, data: data, svc: svc, rules: idx, build: build}
 	if cfg.OAuthIssuer != "" {
 		s.oidc = auth.NewOIDC(cfg.OAuthIssuer, cfg.OAuthAudience)
 	}
 	s.mcp = mcp.NewServer(&mcp.Implementation{Name: "hidden-isle", Title: "The Hidden Isle", Version: build},
-		&mcp.ServerOptions{Instructions: "Campaign state and rules data for The Hidden Isle tarot RPG. " +
-			"The table draws real tarot cards: ask the Seer what was drawn and use draw_cards only when asked for a digital draw."})
+		&mcp.ServerOptions{Instructions: instructions})
 	s.addTools()
 	return s
 }
@@ -111,80 +115,21 @@ func (s *Server) snapshot() (*gamedata.Snapshot, error) {
 	return snap, nil
 }
 
-func (s *Server) seer(ctx context.Context, req *mcp.CallToolRequest) (*db.User, error) {
-	if req.Extra == nil || req.Extra.TokenInfo == nil {
-		return nil, errors.New("not authenticated")
-	}
+// actor is the Seer behind this request (MCP is Seer-only).
+func (s *Server) actor(ctx context.Context, req *mcp.CallToolRequest) (campaign.Actor, error) {
 	var u db.User
-	if err := s.db.WithContext(ctx).First(&u, "id = ?", req.Extra.TokenInfo.UserID).Error; err != nil {
-		return nil, err
+	switch {
+	case req != nil && req.Extra != nil && req.Extra.TokenInfo != nil:
+		if err := s.db.WithContext(ctx).First(&u, "id = ?", req.Extra.TokenInfo.UserID).Error; err != nil {
+			return campaign.Actor{}, err
+		}
+	case s.testUser != nil:
+		u = *s.testUser
+	default:
+		return campaign.Actor{}, errors.New("not authenticated")
 	}
-	return &u, nil
-}
-
-type empty struct{}
-
-type whoamiOut struct {
-	Name     string `json:"name"`
-	Role     string `json:"role"`
-	Build    string `json:"build"`
-	GameData string `json:"game_data" jsonschema:"rules data version in use"`
-}
-
-type classIn struct {
-	Class string `json:"class" jsonschema:"class id or name, e.g. hunter or Hunter"`
-}
-
-type drawIn struct {
-	Deck  string          `json:"deck" jsonschema:"vision (22 Majors + 16 Courts) or pips (Ace-10 in four suits)"`
-	Hands []cards.Request `json:"hands" jsonschema:"one entry per hand, e.g. [{name: agent, count: 3}, {name: seer, count: 4}]"`
-}
-
-type drawOut struct {
-	Hands []cards.Hand `json:"hands"`
-	Note  string       `json:"note"`
-}
-
-func (s *Server) addTools() {
-	mcp.AddTool(s.mcp, &mcp.Tool{Name: "whoami", Description: "Who this connection is, the app build and the game data in use. Use it to check the connection."},
-		func(ctx context.Context, req *mcp.CallToolRequest, _ empty) (*mcp.CallToolResult, whoamiOut, error) {
-			u, err := s.seer(ctx, req)
-			if err != nil {
-				return nil, whoamiOut{}, err
-			}
-			out := whoamiOut{Name: u.Name, Role: string(u.Role), Build: s.build}
-			if snap := s.data.Current(); snap != nil {
-				out.GameData = snap.Label()
-			}
-			return nil, out, nil
-		})
-
-	mcp.AddTool(s.mcp, &mcp.Tool{Name: "get_class", Description: "A class with its motto, pre-filled skills, items and every ability. Ability text is verbatim from Rulebook 1.4 (with page); sheet_text is the Character Sheets 1.3 wording where it differs. Quote abilities exactly."},
-		func(ctx context.Context, req *mcp.CallToolRequest, in classIn) (*mcp.CallToolResult, gamedata.Class, error) {
-			snap, err := s.snapshot()
-			if err != nil {
-				return nil, gamedata.Class{}, err
-			}
-			c := snap.Class(strings.ToLower(in.Class))
-			if c == nil {
-				c = snap.Class(in.Class)
-			}
-			if c == nil {
-				return nil, gamedata.Class{}, fmt.Errorf("no class %q", in.Class)
-			}
-			return nil, *c, nil
-		})
-
-	mcp.AddTool(s.mcp, &mcp.Tool{Name: "draw_cards", Description: "Digital card draw, only when the Seer asks for one (the table normally draws real cards). Hands come from one shuffled deck, so no card is in two hands. Ace = 11 in challenges, 1 for fate numbers."},
-		func(ctx context.Context, req *mcp.CallToolRequest, in drawIn) (*mcp.CallToolResult, drawOut, error) {
-			snap, err := s.snapshot()
-			if err != nil {
-				return nil, drawOut{}, err
-			}
-			hands, err := cards.Draw(snap, in.Deck, in.Hands)
-			if err != nil {
-				return nil, drawOut{}, err
-			}
-			return nil, drawOut{Hands: hands, Note: "The Seer picks the Seer's card; each player picks their own."}, nil
-		})
+	if !u.IsSeer() || !u.Active {
+		return campaign.Actor{}, errors.New("only the Seer may use MCP")
+	}
+	return campaign.Actor{User: &u, Via: "mcp"}, nil
 }

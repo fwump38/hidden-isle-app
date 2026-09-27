@@ -33,7 +33,7 @@ func fixtureSnap(t *testing.T) *gamedata.Snapshot {
 	s.Classes.Classes = []gamedata.Class{{ID: "hunter", Name: "Hunter", PrefilledSkills: map[string]int{"Skirmish": 1, "Unleash": 2},
 		Abilities: []gamedata.Ability{{ID: "butcher", Name: "BUTCHER", Text: "…", Page: 49}}}}
 	s.Campaign = gamedata.Campaign{
-		AgentStatus: []string{"Active", "Dead"}, ContactKind: []string{"Homeland", "Dioscorian"}, SessionStatus: []string{"Prep", "Played"},
+		AgentStatus: []string{"Active", "Dead"}, ContactKind: []string{"Homeland", "Dioscorian", "Deity (The Old Ways)", "Fellow Agent"}, SessionStatus: []string{"Prep", "Played"},
 		AdversaryStatus: []string{"Rumored", "Active"}, ClockScope: []string{"Scenario", "Ability"}, ClockStatus: []string{"Running", "Filled"},
 		Territories: []string{"Dioscoria", "Venice"}, CampaignMode: []string{"group", "solitaire"},
 	}
@@ -484,5 +484,81 @@ func TestDeleteCampaignAndUser(t *testing.T) {
 	w.s.DB.Model(&db.Entry{}).Where("title = ?", "diary").Count(&n)
 	if n != 0 {
 		t.Error("private journal should be deleted")
+	}
+}
+
+func TestTableOps(t *testing.T) {
+	w := setup(t)
+	id := w.anaAgent.ID
+	ag, err := w.s.AddHarm(w.seer, id, "cups", "P", 2, Opts{Reason: "fell"})
+	must(t, err)
+	if strings.Join(ag.Harm["Cups"], "") != "PP" {
+		t.Fatalf("harm = %v", ag.Harm)
+	}
+	if _, err := w.s.AddHarm(w.seer, id, "Cups", "S", 1, Opts{}); err == nil || !strings.Contains(err.Error(), "Swords") {
+		t.Errorf("full suit should name suits with room: %v", err)
+	}
+	ag, err = w.s.AddHarm(w.seer, id, "Cups", "T", 1, Opts{})
+	must(t, err)
+	if strings.Join(ag.Harm["Cups"], "") != "TP" {
+		t.Errorf("trauma should upgrade a mark: %v", ag.Harm["Cups"])
+	}
+	ag, healed, err := w.s.Heal(w.seer, id, "any", 3, "", Opts{})
+	must(t, err)
+	if healed != 1 || strings.Join(ag.Harm["Cups"], "") != "T" {
+		t.Errorf("heal any should leave trauma: healed %d, %v", healed, ag.Harm)
+	}
+
+	ag, note, err := w.s.AwardXP(w.seer, id, "Cups", 9, Opts{})
+	must(t, err)
+	if ag.XPCups != 7 || !strings.Contains(note, "Track full") || !strings.Contains(note, "2 XP didn't fit") {
+		t.Errorf("xp %d, note %q", ag.XPCups, note)
+	}
+
+	clock := &db.Clock{CampaignID: w.camp.ID, Name: "Guards arrive", Segments: 4, Status: "Running", Visibility: db.VisParty}
+	must(t, w.s.Create(w.seer, "clock", clock, Opts{}))
+	c, note, err := w.s.TickClock(w.seer, clock.ID, 9, Opts{})
+	must(t, err)
+	if c.Filled != 4 || !strings.Contains(note, "full") {
+		t.Errorf("tick: %d %q", c.Filled, note)
+	}
+
+	adv := &db.Adversary{CampaignID: w.camp.ID, Name: "Cult", Status: "Active", TrackLength: 6}
+	must(t, w.s.Create(w.seer, "adversary", adv, Opts{}))
+	ad, _, err := w.s.AdvanceAdversary(w.seer, adv.ID, "rapid", Opts{})
+	must(t, err)
+	if ad.Progress != 2 {
+		t.Errorf("progress %d", ad.Progress)
+	}
+	hidden := &db.Adversary{CampaignID: w.camp.ID, Name: "Hidden", Status: "Rumored", Hidden: true}
+	must(t, w.s.Create(w.seer, "adversary", hidden, Opts{}))
+	if _, _, err := w.s.AdvanceAdversary(w.seer, hidden.ID, "steady", Opts{}); err == nil {
+		t.Error("advanced a hidden adversary")
+	}
+
+	must(t, w.s.Create(w.ana, "contact", &db.Contact{CampaignID: w.camp.ID, AgentID: id, Name: "Near", Kind: "Homeland", Affection: 3, Distance: 1}, Opts{}))
+	must(t, w.s.Create(w.ana, "contact", &db.Contact{CampaignID: w.camp.ID, AgentID: id, Name: "Far", Kind: "Homeland", Affection: 1, Distance: 2}, Opts{}))
+	must(t, w.s.Create(w.ana, "contact", &db.Contact{CampaignID: w.camp.ID, AgentID: id, Name: "Old god", Kind: "Deity (The Old Ways)", Affection: 6}, Opts{}))
+	notes, err := w.s.DriftContacts(w.seer, id, Opts{})
+	must(t, err)
+	cs, _ := w.s.Contacts(w.seer, id)
+	got := map[string][2]int{}
+	for _, c := range cs {
+		got[c.Name] = [2]int{c.Affection, c.Distance}
+	}
+	if got["Near"] != [2]int{3, 2} || got["Far"] != [2]int{0, 0} || got["Old god"] != [2]int{6, 0} {
+		t.Errorf("drift: %v (%v)", got, notes)
+	}
+
+	sess, err := w.s.CreateRecord(w.seer, "session", w.camp.ID, patch(t, map[string]any{"title": "Arrival"}), Opts{})
+	must(t, err)
+	if sess.(*db.Session).Number != 1 {
+		t.Errorf("session number %d", sess.(*db.Session).Number)
+	}
+	if _, err := w.s.CreateRecord(w.seer, "contact", w.camp.ID, patch(t, map[string]any{"name": "No agent"}), Opts{}); err == nil {
+		t.Error("contact without agent_id accepted")
+	}
+	if _, err := w.s.CreateRecord(w.ana, "clock", w.camp.ID, patch(t, map[string]any{"name": "x", "segments": 4}), Opts{}); !IsForbidden(err) {
+		t.Errorf("player created a clock: %v", err)
 	}
 }

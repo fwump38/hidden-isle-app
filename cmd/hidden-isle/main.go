@@ -25,6 +25,7 @@ import (
 	"github.com/fwump38/hidden-isle-app/internal/db"
 	"github.com/fwump38/hidden-isle-app/internal/gamedata"
 	"github.com/fwump38/hidden-isle-app/internal/mcpsrv"
+	"github.com/fwump38/hidden-isle-app/internal/rules"
 	"github.com/fwump38/hidden-isle-app/internal/web"
 )
 
@@ -90,7 +91,18 @@ func run() error {
 	}
 	mux := http.NewServeMux()
 	ui.Register(mux)
-	mcpsrv.New(g, cfg, data, build).Register(mux)
+	idx, err := rules.New(g)
+	if err != nil {
+		return err
+	}
+	index := func(snap *gamedata.Snapshot) {
+		if err := idx.Build(snap); err != nil {
+			slog.Error("rules index", "err", err)
+		}
+	}
+	data.OnLoad(index)
+	go index(data.Current())
+	mcpsrv.New(g, cfg, data, svc, idx, build).Register(mux)
 
 	// CSRF: reject cross-site browser writes. /mcp uses bearer tokens, not cookies, so it's exempt.
 	cop := http.NewCrossOriginProtection()
