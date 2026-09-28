@@ -298,7 +298,7 @@
       <div class="card-body">
         <h2 class="h5 card-title">Contacts</h2>
         {{range $d.Contacts}}{{$cu := printf "/r/contact/%d" .ID}}
-        <div class="border rounded px-2 py-1 mb-2">
+        <div class="border rounded px-2 py-1 mb-2" id="contact-{{.ID}}">
           <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
             <button class="btn btn-link p-0 fw-semibold text-start text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#ct-{{.ID}}"><i class="bi bi-chevron-down small"></i> {{.Name}}</button>
             <span class="small text-body-secondary">{{.Kind}}{{with .Card}} · {{.}}{{end}}{{with .Land}} · {{.}}{{end}}</span>
@@ -417,7 +417,7 @@
       <div class="card-body">
         <h2 class="h5 card-title"><i class="bi bi-feather"></i> History</h2>
         {{range $d.History}}
-        <div class="mb-2"><div class="small text-body-secondary">{{date .CreatedAt}} · {{.Title}}</div><div class="hi-prose small">{{.Body}}</div></div>
+        <div class="mb-2"><div class="small text-body-secondary">{{date .CreatedAt}} · {{.Title}}</div><div class="hi-prose small">{{mentions .Body $a.CampaignID}}</div></div>
         {{else}}<p class="small text-body-secondary">The story so far, in your own words.</p>{{end}}
         {{if $d.CanEdit}}
         <form method="post" action="/c/{{$a.CampaignID}}/entries" class="mt-2">
@@ -425,7 +425,7 @@
           <input type="hidden" name="visibility" value="party"><input type="hidden" name="published" value="on">
           <input type="hidden" name="back" value="{{$act}}">
           <input class="form-control form-control-sm mb-1" name="title" placeholder="Title, e.g. Session 4: the harbor" aria-label="Title">
-          <textarea class="form-control form-control-sm mb-1" id="history-body" name="body" rows="3" placeholder="What happened, and why it mattered" required aria-label="History entry"></textarea>
+          <textarea class="form-control form-control-sm mb-1" id="history-body" name="body" rows="3" placeholder="What happened, and why it mattered" required aria-label="History entry" data-mentions="{{$a.CampaignID}}"></textarea>
           {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "agent_history" "Target" "history-body" "AgentID" $a.ID "CampaignID" $a.CampaignID "SessionID" 0 "Draft" false)}}{{end}}
           <button class="btn btn-sm btn-outline-light" type="submit">Add to history</button>
         </form>

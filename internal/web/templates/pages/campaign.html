@@ -134,7 +134,7 @@
         {{range $d.Handouts}}
         <details class="mb-2"><summary>{{or .Title .Card "Handout"}} <span class="small text-body-secondary">{{when .CreatedAt}}{{if .ToUserID}} · just for {{if $seer}}one player{{else}}you{{end}}{{end}}</span></summary>
           {{with .Card}}<div class="small"><i class="bi bi-suit-diamond"></i> {{.}}</div>{{end}}
-          {{with .Body}}<div class="hi-prose small">{{.}}</div>{{end}}
+          {{with .Body}}<div class="hi-prose small">{{mentions . $c.ID}}</div>{{end}}
           {{with .ImageURL}}<img src="{{.}}" alt="handout" class="img-fluid rounded mt-1">{{end}}
         </details>
         {{end}}
@@ -146,7 +146,7 @@
       <div class="card-body">
         <h2 class="h5 card-title"><i class="bi bi-journal-text"></i> Recaps</h2>
         {{range $d.Recaps}}{{if .Published}}
-        <details class="mb-2"><summary>{{.Title}} <span class="small text-body-secondary">{{date .CreatedAt}}</span></summary><div class="hi-prose small mt-1">{{.Body}}</div></details>
+        <details class="mb-2"><summary>{{.Title}} <span class="small text-body-secondary">{{date .CreatedAt}}</span></summary><div class="hi-prose small mt-1">{{mentions .Body $c.ID}}</div></details>
         {{end}}{{else}}<p class="small text-body-secondary mb-0">No recaps published yet.</p>{{end}}
       </div>
     </div>

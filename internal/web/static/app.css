@@ -65,6 +65,11 @@ body, main { overflow-anchor: none; }
 /* Writing assistant (partials/choices.html "write-assist", app.js .hi-assist). */
 .hi-assist-result { border-color: var(--hi-accent); }
 
+/* @mentions (app.js, internal/web/mentions.go). */
+.hi-mention-list { z-index: 1060; max-height: 14rem; overflow-y: auto; display: none; background: var(--bs-body-bg); }
+a.hi-mention { font-weight: 600; }
+.hi-mention-user { font-weight: 600; color: var(--bs-secondary-color); }
+
 /* Rule browser (/rules). */
 .hi-rules-tabs { scrollbar-width: thin; }
 .hi-rules-search input { width: 14rem; max-width: 55vw; }

@@ -333,7 +333,10 @@ function showHandout(h) {
     if (h.meaning) { const m = document.createElement("span"); m.className = "d-block small text-body-secondary"; m.textContent = h.meaning; c.appendChild(m); }
     body.appendChild(c);
   }
-  if (h.body) { const p = document.createElement("p"); p.className = "hi-prose"; p.textContent = h.body; body.appendChild(p); }
+  // The live popup is plain text (textContent), not server-rendered HTML, so an @mention token
+  // here can't become a real link; strip it down to its plain "@Name" instead of showing the raw
+  // markup. The persisted copy on the campaign page is server-rendered and does link it.
+  if (h.body) { const p = document.createElement("p"); p.className = "hi-prose"; p.textContent = h.body.replace(/@\[([^\]]+)\]\(\w+:[\w.]+\)/g, "@$1"); body.appendChild(p); }
   if (h.image_url) { const img = document.createElement("img"); img.src = h.image_url; img.alt = h.title || "handout"; img.className = "img-fluid rounded"; body.appendChild(img); }
   bootstrap.Modal.getOrCreateInstance(modal).show();
 }
@@ -468,3 +471,122 @@ document.addEventListener("click", (e) => {
   }
   if (out) out.innerHTML = "";
 });
+
+// ---------------------------------------------------------------- @mentions
+// [data-mentions="<campaign id>"]: typing "@" then letters shows a dropdown of matching people,
+// Agents, contacts, adversaries and territories (GET /c/{cid}/mentions?q=, already filtered to
+// what the signed-in viewer may see). Picking one inserts @[Name](kind:id) at the "@"; app.js's
+// own `mentions` template func turns that into a link wherever the text is later shown.
+let mentionBox = null, mentionTarget = null, mentionItems = [], mentionActive = -1, mentionTimer = null;
+
+function mentionRange(ta) {
+  const v = ta.value, pos = ta.selectionStart;
+  const at = v.lastIndexOf("@", pos - 1);
+  if (at === -1) return null;
+  const between = v.slice(at + 1, pos);
+  if (/[\s@]/.test(between)) return null; // no space or another @ since the last one
+  return { start: at, query: between };
+}
+
+function closeMentions() {
+  if (mentionBox) mentionBox.style.display = "none";
+  mentionTarget = null;
+  mentionItems = [];
+  mentionActive = -1;
+}
+
+function mentionListBox() {
+  if (!mentionBox) {
+    mentionBox = document.createElement("div");
+    mentionBox.className = "hi-mention-list list-group shadow-sm";
+    document.body.appendChild(mentionBox);
+  }
+  return mentionBox;
+}
+
+function renderMentionBox(ta) {
+  const box = mentionListBox();
+  box.innerHTML = "";
+  if (!mentionItems.length) {
+    box.style.display = "none";
+    return;
+  }
+  mentionItems.forEach((it, i) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "list-group-item list-group-item-action py-1 small" + (i === mentionActive ? " active" : "");
+    btn.textContent = it.label;
+    btn.addEventListener("mousedown", (e) => { e.preventDefault(); pickMention(ta, it); });
+    box.appendChild(btn);
+  });
+  const r = ta.getBoundingClientRect();
+  box.style.position = "absolute";
+  box.style.left = (r.left + window.scrollX) + "px";
+  box.style.top = (r.bottom + window.scrollY) + "px";
+  box.style.width = Math.min(Math.max(r.width, 220), 360) + "px";
+  box.style.display = "block";
+}
+
+function pickMention(ta, item) {
+  const range = mentionRange(ta);
+  if (!range) return;
+  const name = item.label.replace(/\s*\([^)]*\)\s*$/, ""); // drop a trailing "(…)" hint
+  const token = `@[${name}](${item.kind}:${item.id})`;
+  const before = ta.value.slice(0, range.start);
+  const after = ta.value.slice(ta.selectionStart);
+  ta.value = before + token + " " + after;
+  const pos = (before + token + " ").length;
+  ta.setSelectionRange(pos, pos);
+  ta.dispatchEvent(new Event("input", { bubbles: true }));
+  closeMentions();
+  ta.focus();
+}
+
+function fetchMentions(ta, campaignID, query) {
+  fetch(`/c/${campaignID}/mentions?q=${encodeURIComponent(query)}`)
+    .then((r) => (r.ok ? r.json() : { items: [] }))
+    .then((data) => {
+      if (mentionTarget !== ta) return; // the caret moved on while this was in flight
+      mentionItems = data.items || [];
+      mentionActive = mentionItems.length ? 0 : -1;
+      renderMentionBox(ta);
+    })
+    .catch(() => closeMentions());
+}
+
+document.addEventListener("input", (e) => {
+  const ta = e.target;
+  if (!ta.matches?.("[data-mentions]")) return;
+  const range = mentionRange(ta);
+  if (!range) {
+    closeMentions();
+    return;
+  }
+  mentionTarget = ta;
+  clearTimeout(mentionTimer);
+  mentionTimer = setTimeout(() => fetchMentions(ta, ta.dataset.mentions, range.query), 150);
+});
+
+document.addEventListener("keydown", (e) => {
+  if (!mentionTarget || e.target !== mentionTarget || !mentionItems.length) return;
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    mentionActive = Math.min(mentionActive + 1, mentionItems.length - 1);
+    renderMentionBox(mentionTarget);
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    mentionActive = Math.max(mentionActive - 1, 0);
+    renderMentionBox(mentionTarget);
+  } else if ((e.key === "Enter" || e.key === "Tab") && mentionActive >= 0) {
+    e.preventDefault();
+    pickMention(mentionTarget, mentionItems[mentionActive]);
+  } else if (e.key === "Escape") {
+    closeMentions();
+  }
+});
+
+document.addEventListener("blur", (e) => {
+  if (e.target === mentionTarget) setTimeout(closeMentions, 150); // let a mousedown pick land first
+}, true);
+
+document.addEventListener("htmx:afterSettle", closeMentions);

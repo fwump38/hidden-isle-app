@@ -84,7 +84,7 @@
         <div class="col-6"><select class="form-select form-select-sm" name="to" aria-label="To"><option value="">Everyone</option>{{range $d.Players}}<option value="{{.ID}}">{{.Name}} only</option>{{end}}</select></div>
         <div class="col-6 d-flex align-items-center"><div class="form-check mb-0"><input class="form-check-input" type="checkbox" name="on_table" id="on-table" checked><label class="form-check-label" for="on-table">Also on the TV</label></div></div>
         <div class="col-12"><input class="form-control form-control-sm" name="title" placeholder="Title, e.g. A sealed letter" aria-label="Title"></div>
-        <div class="col-12"><textarea class="form-control form-control-sm" id="handout-body" name="body" rows="3" placeholder="Text they read" aria-label="Text"></textarea>
+        <div class="col-12"><textarea class="form-control form-control-sm" id="handout-body" name="body" rows="3" placeholder="Text they read" aria-label="Text" data-mentions="{{$c.ID}}"></textarea>
         {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "handout" "Target" "handout-body" "AgentID" 0 "CampaignID" $c.ID "SessionID" 0 "Draft" false)}}{{end}}</div>
         <div class="col-12"><select class="form-select form-select-sm" name="card" aria-label="Vision card"><option value="">No card</option>{{range $d.Vision}}<option>{{.}}</option>{{end}}</select></div>
         <div class="col-12"><input class="form-control form-control-sm" name="image_url" placeholder="Image link (https://…), optional" aria-label="Image link"></div>
@@ -94,7 +94,7 @@
     <form method="post" action="/c/{{$c.ID}}/r/seer_note" class="card card-body mb-3">
       <input type="hidden" name="back" value="{{$back}}">
       <h2 class="h6"><i class="bi bi-pencil"></i> Quick note <span class="small text-warning">Seer only</span></h2>
-      <textarea class="form-control form-control-sm mb-2" id="quick-note-body" name="set.body" rows="3" required placeholder="What just happened, for the session log later" aria-label="Note"></textarea>
+      <textarea class="form-control form-control-sm mb-2" id="quick-note-body" name="set.body" rows="3" required placeholder="What just happened, for the session log later" aria-label="Note" data-mentions="{{$c.ID}}"></textarea>
       {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "seer_note" "Target" "quick-note-body" "AgentID" 0 "CampaignID" $c.ID "SessionID" 0 "Draft" false)}}{{end}}
       <input type="hidden" name="set.title" value="Table note">
       <button class="btn btn-sm btn-outline-light" type="submit">Save note</button>

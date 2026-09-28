@@ -4,7 +4,7 @@
   <h1 class="h4 mb-0">Journal</h1>
   <div class="small">Show: <a href="{{$back}}">all</a> · <a href="{{$back}}?kind=recap">recaps</a> · <a href="{{$back}}?kind=session_log">session logs</a> · <a href="{{$back}}?kind=history">histories</a> · <a href="{{$back}}?kind=journal">journals</a></div>
 </div>
-<p class="small text-body-secondary">Written by people, not generated — use Enhance below to add detail, not to invent events. “Only me” is private even from the Seer; “me and the Seer” shares it with the Seer; “everyone” can be saved as a draft first. The Seer's own private notes live under <a href="/c/{{$c.ID}}/notes">Seer notes</a>, not here.</p>
+<p class="small text-body-secondary">Written by people, not generated — use Enhance below to add detail, not to invent events. Type <code>@</code> to mention the Seer, another player, an Agent or a contact. “Only me” is private even from the Seer; “me and the Seer” shares it with the Seer; “everyone” can be saved as a draft first. The Seer's own private notes live under <a href="/c/{{$c.ID}}/notes">Seer notes</a>, not here.</p>
 <div class="row g-3">
   <div class="col-12 col-lg-7">
     {{range $d.Entries}}
@@ -18,14 +18,14 @@
         {{if eq .Visibility "private"}}<i class="bi bi-lock"></i> only the author{{else if eq .Visibility "owner"}}author + Seer{{else if eq .Visibility "seer"}}<span class="text-warning">Seer only</span>{{else}}everyone{{end}}
         {{if not .Published}}· draft{{end}}
       </div>
-      <div class="hi-prose small">{{.Body}}</div>
+      <div class="hi-prose small">{{mentions .Body $c.ID}}</div>
       {{if or $seer (eq .AuthorID $d.Me)}}
       <details class="small mt-1"><summary class="text-body-secondary">Edit</summary>
         <form method="post" action="/c/{{$c.ID}}/entries" class="row g-1 mt-1">
           <input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="kind" value="{{.Kind}}"><input type="hidden" name="back" value="{{$back}}">
           {{with .SessionID}}<input type="hidden" name="session_id" value="{{.}}">{{end}}{{with .AgentID}}<input type="hidden" name="agent_id" value="{{.}}">{{end}}
           <div class="col-12"><input class="form-control form-control-sm" name="title" value="{{.Title}}" aria-label="Title"></div>
-          <div class="col-12"><textarea class="form-control form-control-sm" id="body-{{.ID}}" name="body" rows="4" aria-label="Text">{{.Body}}</textarea>
+          <div class="col-12"><textarea class="form-control form-control-sm" id="body-{{.ID}}" name="body" rows="4" aria-label="Text" data-mentions="{{$c.ID}}">{{.Body}}</textarea>
           {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "journal" "Target" (printf "body-%d" .ID) "AgentID" (uintv .AgentID) "CampaignID" $c.ID "SessionID" (uintv .SessionID) "Draft" false)}}{{end}}</div>
           <div class="col-8"><select class="form-select form-select-sm" name="visibility" aria-label="Who can see this" data-vis-select>{{$v := .Visibility}}
             <option value="private" {{if eq $v "private"}}selected{{end}}>Only me</option><option value="owner" {{if eq $v "owner"}}selected{{end}}>Me and the Seer</option><option value="party" {{if eq $v "party"}}selected{{end}}>Everyone</option>{{if $seer}}<option value="seer" {{if eq $v "seer"}}selected{{end}}>Seer only</option>{{end}}</select></div>
@@ -48,7 +48,7 @@
           {{if $seer}}<option value="recap">Player-safe recap</option><option value="session_log">Session log</option>{{end}}</select></div>
         <div class="col-6"><select class="form-select form-select-sm" name="session_id" aria-label="Session"><option value="">No session</option>{{range $d.Sessions}}<option value="{{.ID}}">{{.Number}}. {{.Title}}</option>{{end}}</select></div>
         <div class="col-12"><input class="form-control form-control-sm" name="title" placeholder="Title" aria-label="Title"></div>
-        <div class="col-12"><textarea class="form-control form-control-sm" id="body-new" name="body" rows="6" required placeholder="What happened, in your words" aria-label="Text"></textarea>
+        <div class="col-12"><textarea class="form-control form-control-sm" id="body-new" name="body" rows="6" required placeholder="What happened, in your words" aria-label="Text" data-mentions="{{$c.ID}}"></textarea>
         {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "journal" "Target" "body-new" "AgentID" 0 "CampaignID" $c.ID "SessionID" 0 "Draft" false)}}{{end}}</div>
         <div class="col-8"><select class="form-select form-select-sm" name="visibility" aria-label="Who can see this" data-vis-select>
           <option value="private">Only me</option><option value="owner" selected>Me and the Seer</option><option value="party">Everyone</option>{{if $seer}}<option value="seer">Seer only</option>{{end}}</select></div>

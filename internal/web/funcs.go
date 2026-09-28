@@ -71,6 +71,7 @@ func templateFuncs() template.FuncMap {
 			return template.HTML(`<i class="bi bi-question-circle hi-help" tabindex="0" role="button" data-hi-help="` +
 				template.HTMLEscapeString(text) + `" aria-label="` + template.HTMLEscapeString(text) + `"></i>`)
 		},
+		"mentions": mentions,
 		"add":      func(a, b int) int { return a + b },
 		"sub":      func(a, b int) int { return a - b },
 		"contains": func(list []string, s string) bool { return slices.Contains(list, s) },

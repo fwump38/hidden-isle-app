@@ -168,7 +168,7 @@ type writeEntryIn struct {
 	ID         uint   `json:"id,omitempty" jsonschema:"to edit an existing entry"`
 	Kind       string `json:"kind" jsonschema:"session_log, recap, history (needs agent_id) or journal"`
 	Title      string `json:"title"`
-	Body       string `json:"body" jsonschema:"what a person wrote (lightly tidied if asked); never invented events"`
+	Body       string `json:"body" jsonschema:"what a person wrote (lightly tidied if asked); never invented events. To @mention the Seer, a player, an Agent or a contact, copy the exact @[Name](kind:id) token the app's own picker would insert (kind: user, agent, or contact with id 'agent_id.contact_id') from list_records/list_campaigns/get_agent — never write one from scratch"`
 	Visibility string `json:"visibility" jsonschema:"party (everyone, once published), seer (Seer only) or owner"`
 	Draft      bool   `json:"draft,omitempty" jsonschema:"party visibility only: keep it a draft (not yet shared) instead of publishing it right away"`
 	Published  bool   `json:"published,omitempty" jsonschema:"deprecated, use draft instead (the opposite sense); ignored if draft is true"`

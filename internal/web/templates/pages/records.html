@@ -68,7 +68,7 @@
 <p class="small text-body-secondary">The Adversary Sheet: players can read it any time (p. 28). Progress +1 steady, +2 rapid, −1 setback (p. 81). The track has three sections: identity revealed, final phase, plan in motion.</p>
 <div class="row g-3">
   {{range $d.Records}}{{$u := printf "/r/adversary/%d" .ID}}
-  <div class="col-12 col-lg-6">
+  <div class="col-12 col-lg-6" id="adversary-{{.ID}}">
     <div class="card h-100 {{if .Hidden}}border-warning-subtle{{end}}">
       <div class="card-body">
         <div class="d-flex justify-content-between align-items-start">
@@ -147,7 +147,7 @@
 <p class="small text-body-secondary">The Territory Sheet, updated in “the world changes” (p. 82).</p>
 <div class="row g-3">
   {{range $d.Records}}{{$u := printf "/r/territory/%d" .ID}}
-  <div class="col-12 col-md-6">
+  <div class="col-12 col-md-6" id="territory-{{.ID}}">
     <div class="card h-100"><div class="card-body">
       <h2 class="h5">{{.Name}}</h2>
       {{if $seer}}
@@ -213,7 +213,7 @@
 <form method="post" action="{{$u}}" class="card card-body mb-3">
   <input type="hidden" name="back" value="{{$back}}">
   <input class="form-control fw-semibold mb-2" name="set.title" value="{{.Title}}" aria-label="Title">
-  <textarea class="form-control mb-2" id="note-body-{{.ID}}" name="set.body" rows="6" aria-label="Note">{{.Body}}</textarea>
+  <textarea class="form-control mb-2" id="note-body-{{.ID}}" name="set.body" rows="6" aria-label="Note" data-mentions="{{$c.ID}}">{{.Body}}</textarea>
   {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "seer_note" "Target" (printf "note-body-%d" .ID) "AgentID" 0 "CampaignID" $c.ID "SessionID" 0 "Draft" false)}}{{end}}
   <div class="d-flex justify-content-between"><button class="btn btn-sm btn-outline-light" type="submit">Save</button>
     <button class="btn btn-sm btn-outline-danger" type="submit" formaction="{{$u}}/delete" hx-post="{{$u}}/delete" hx-confirm="Delete this note? (Undo from the log.)">Delete</button></div>
