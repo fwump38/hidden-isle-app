@@ -202,11 +202,14 @@ func TestWizardSuggest(t *testing.T) {
 		t.Errorf("ability suggestions should be the class's own, pickable: %s", body)
 	}
 
+	// "Nonsense" isn't a real skill and is dropped; the point it would have spent isn't just
+	// lost, it lands on Slip too (the suggestion's other named skill still has room), so the
+	// total still uses all 4 points remaining rather than quietly offering only 3.
 	wireAssistWith(t, srv, suggestResp(map[string]any{"points": "Study +2, Nonsense +1, Slip +1", "reason": "bookish"}))
 	_, body = st.postBody("Ana", "/agents/1/wizard/suggest", url.Values{"kind": {"skills"}, "skill.Study": {"0"}})
 	body = html.UnescapeString(body)
-	if !strings.Contains(body, `"skill.Study":"2"`) || !strings.Contains(body, `"skill.Slip":"1"`) || strings.Contains(body, "Nonsense") {
-		t.Errorf("skill suggestions should become new totals for real skills: %s", body)
+	if !strings.Contains(body, `"skill.Study":"2"`) || !strings.Contains(body, `"skill.Slip":"2"`) || strings.Contains(body, "Nonsense") {
+		t.Errorf("skill suggestions should become new totals for real skills, topped up to use every point: %s", body)
 	}
 
 	// This occultist's class prefills Unleash 1 (fixture); the creation cap is 2/skill. A
@@ -268,6 +271,11 @@ func TestWizardSuggestDrawsACardWhenNoneChosenYet(t *testing.T) {
 	if !strings.Contains(body, `"set.burden":"Proud"`) || !strings.Contains(body, `"set.burden_card":"`) {
 		t.Errorf("picking the suggestion should fill in both the word and the card drawn for it: %s", body)
 	}
+	// The card wizardContext drew must also be shown right away, via an out-of-band swap into the
+	// existing #card-burden element, not just implied by suggestion text the player can't verify.
+	if !strings.Contains(body, `id="card-burden"`) || !strings.Contains(body, `hx-swap-oob="true"`) {
+		t.Errorf("a freshly-drawn card should be shown immediately alongside the suggestions: %s", body)
+	}
 
 	// homeland and dioscorian share the "contact" suggestion kind and both fill "set.card", not a
 	// step-specific field, so wizardContext's drawn card has to be mapped back to that explicitly.
@@ -276,6 +284,9 @@ func TestWizardSuggestDrawsACardWhenNoneChosenYet(t *testing.T) {
 	body = html.UnescapeString(body)
 	if !strings.Contains(body, `"set.name":"Marco"`) || !strings.Contains(body, `"set.card":"`) {
 		t.Errorf("a contact suggestion with no card yet should fill in the card it drew: %s", body)
+	}
+	if !strings.Contains(body, `id="card-homeland"`) || !strings.Contains(body, `hx-swap-oob="true"`) {
+		t.Errorf("a homeland contact's freshly-drawn card should be shown immediately too: %s", body)
 	}
 }
 

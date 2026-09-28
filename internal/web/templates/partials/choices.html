@@ -6,6 +6,7 @@
 {{range .Choices}}{{template "choice" .}}{{end}}
 {{with .Note}}<div class="small text-body-secondary w-100">{{.}}</div>{{end}}
 {{range .Exclude}}<input type="hidden" name="exclude" value="{{.}}">{{end}}
+{{with .Card}}{{template "wizard-card" .}}{{end}}
 {{end}}
 
 {{define "choice"}}

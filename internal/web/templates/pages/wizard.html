@@ -206,10 +206,14 @@
     <div class="col-6 col-md-3">
       <div class="fw-semibold hi-suit-{{$suit}} mb-1">{{$suit}} {{help (index $d.SuitHelp $suit)}}</div>
       {{range $sk := index $d.Skills $suit}}
+      {{$floor := 0}}{{with $d.Class}}{{$floor = index .PrefilledSkills $sk}}{{end}}
+      {{$cur := index $a.Skills $sk}}
+      {{$lo := $floor}}{{if lt $cur $lo}}{{$lo = $cur}}{{end}}
+      {{$hi := $cap}}{{if gt $cur $hi}}{{$hi = $cur}}{{end}}
       <div class="d-flex justify-content-between align-items-center small mb-1">
-        <label for="sk-{{$sk}}">{{$sk}}</label>
-        <select class="form-select form-select-sm w-auto" id="sk-{{$sk}}" name="skill.{{$sk}}">
-          {{range $n := seq 0 3}}<option value="{{$n}}" {{if eq $n (index $a.Skills $sk)}}selected{{end}}>{{$n}}</option>{{end}}
+        <label for="sk-{{$sk}}">{{$sk}}{{if gt $floor 0}} <span class="badge text-bg-secondary" title="{{with $d.Class}}{{.Name}}{{end}} starts with {{$floor}} here; it can only go up from here during creation">{{$floor}}</span>{{end}}</label>
+        <select class="form-select form-select-sm w-auto" id="sk-{{$sk}}" name="skill.{{$sk}}" {{if le $hi $lo}}disabled title="At the creation cap"{{end}}>
+          {{range $n := seq $lo $hi}}<option value="{{$n}}" {{if eq $n $cur}}selected{{end}}>{{$n}}</option>{{end}}
         </select>
       </div>
       {{end}}
@@ -425,39 +429,5 @@
       </div>
     </form>
   </div></div>
-</div>
-{{end}}
-
-{{/* One step's card picker (web.wizCard): the card the player drew, typed in or drawn by the app,
-     and the options the book gives for it. */}}
-{{define "wizard-card"}}
-{{$contact := or (eq .For "homeland") (eq .For "dioscorian")}}
-<div class="hi-card-pick" id="card-{{.For}}">
-  <div class="row g-2 align-items-end">
-    <div class="col-12 col-sm-7">
-      <label class="form-label small mb-0" for="card-in-{{.For}}">{{if $contact}}Card{{else}}The card you drew{{end}}</label>
-      <input class="form-control" id="card-in-{{.For}}" name="{{.Input}}" list="vision-cards" value="{{.Value}}" placeholder="e.g. The Chariot" autocomplete="off" data-card-input
-        hx-get="/agents/{{.AgentID}}/wizard/card?for={{.For}}" hx-trigger="change" hx-target="#card-{{.For}}" hx-select="#card-{{.For}}" hx-swap="outerHTML">
-    </div>
-    <div class="col-12 col-sm-5">
-      <button class="btn btn-outline-secondary w-100" type="button" hx-post="/agents/{{.AgentID}}/wizard/draw" hx-vals='{"for": "{{.For}}"}' hx-target="#card-{{.For}}" hx-select="#card-{{.For}}" hx-swap="outerHTML">
-        <i class="bi bi-shuffle"></i> {{if .Value}}Draw again{{else if $contact}}Draw 3 for me{{else}}Draw for me{{end}}
-      </button>
-    </div>
-  </div>
-  {{if .Unknown}}<div class="small text-warning mt-1">"{{.Value}}" isn't a vision card (the 22 Major Arcana and 16 Courts). Check the spelling, or pick from the list.</div>{{end}}
-  {{with .Card}}
-  <div class="hi-card-meaning small mt-2"><strong>{{.Name}}</strong>{{with .Meaning}}: {{.}}{{end}}{{if $contact}}{{with .Characters}}<br><span class="text-body-secondary">As a person:</span> {{.}}{{end}}{{end}}</div>
-  {{end}}
-  {{if .Choices}}
-  <div class="small text-body-secondary mt-2">The card offers:</div>
-  <div class="d-flex flex-wrap gap-2 mt-1">{{range .Choices}}{{template "choice" .}}{{end}}</div>
-  {{end}}
-  {{if .Drawn}}
-  <div class="small text-body-secondary mt-2">You drew these. Pick the one that speaks to you:</div>
-  <div class="d-flex flex-wrap gap-2 mt-1">
-    {{range .Drawn}}<div class="hi-choice-wrap"><button class="btn btn-sm btn-outline-light hi-choice" type="button" data-fill="{{fill (dict2 "set.card" .Name)}}">{{.Name}}</button><div class="hi-choice-why small text-body-secondary">{{.Meaning}}{{if and .Meaning .Characters}} · {{end}}{{.Characters}}</div></div>{{end}}
-  </div>
-  {{end}}
 </div>
 {{end}}

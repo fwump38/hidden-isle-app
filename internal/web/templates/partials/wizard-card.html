@@ -1,0 +1,38 @@
+{{/* One step's card picker (web.wizCard): the card the player drew, typed in or drawn by the app,
+     and the options the book gives for it. .OOB relocates it into the existing #card-<For>
+     element via an htmx out-of-band swap, when it's riding along in another response (wizardSuggest,
+     when it drew a fresh card itself alongside its suggestions). A partial, not part of pages/wizard.html,
+     so every page that can render "choices" (partials/choices.html) — not just the wizard — has it
+     available: html/template parses each page's own file together with every partial, but not with
+     other pages', so a page-only definition would 500 the moment another page's "choices" needed it. */}}
+{{define "wizard-card"}}
+{{$contact := or (eq .For "homeland") (eq .For "dioscorian")}}
+<div class="hi-card-pick" id="card-{{.For}}"{{if .OOB}} hx-swap-oob="true"{{end}}>
+  <div class="row g-2 align-items-end">
+    <div class="col-12 col-sm-7">
+      <label class="form-label small mb-0" for="card-in-{{.For}}">{{if $contact}}Card{{else}}The card you drew{{end}}</label>
+      <input class="form-control" id="card-in-{{.For}}" name="{{.Input}}" list="vision-cards" value="{{.Value}}" placeholder="e.g. The Chariot" autocomplete="off" data-card-input
+        hx-get="/agents/{{.AgentID}}/wizard/card?for={{.For}}" hx-trigger="change" hx-target="#card-{{.For}}" hx-select="#card-{{.For}}" hx-swap="outerHTML">
+    </div>
+    <div class="col-12 col-sm-5">
+      <button class="btn btn-outline-secondary w-100" type="button" hx-post="/agents/{{.AgentID}}/wizard/draw" hx-vals='{"for": "{{.For}}"}' hx-target="#card-{{.For}}" hx-select="#card-{{.For}}" hx-swap="outerHTML">
+        <i class="bi bi-shuffle"></i> {{if .Value}}Draw again{{else if $contact}}Draw 3 for me{{else}}Draw for me{{end}}
+      </button>
+    </div>
+  </div>
+  {{if .Unknown}}<div class="small text-warning mt-1">"{{.Value}}" isn't a vision card (the 22 Major Arcana and 16 Courts). Check the spelling, or pick from the list.</div>{{end}}
+  {{with .Card}}
+  <div class="hi-card-meaning small mt-2"><strong>{{.Name}}</strong>{{with .Meaning}}: {{.}}{{end}}{{if $contact}}{{with .Characters}}<br><span class="text-body-secondary">As a person:</span> {{.}}{{end}}{{end}}</div>
+  {{end}}
+  {{if .Choices}}
+  <div class="small text-body-secondary mt-2">The card offers:</div>
+  <div class="d-flex flex-wrap gap-2 mt-1">{{range .Choices}}{{template "choice" .}}{{end}}</div>
+  {{end}}
+  {{if .Drawn}}
+  <div class="small text-body-secondary mt-2">You drew these. Pick the one that speaks to you:</div>
+  <div class="d-flex flex-wrap gap-2 mt-1">
+    {{range .Drawn}}<div class="hi-choice-wrap"><button class="btn btn-sm btn-outline-light hi-choice" type="button" data-fill="{{fill (dict2 "set.card" .Name)}}">{{.Name}}</button><div class="hi-choice-why small text-body-secondary">{{.Meaning}}{{if and .Meaning .Characters}} · {{end}}{{.Characters}}</div></div>{{end}}
+  </div>
+  {{end}}
+</div>
+{{end}}

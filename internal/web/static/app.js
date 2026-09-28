@@ -373,6 +373,19 @@ document.addEventListener("DOMContentLoaded", () => initDraftVisibility(document
 document.addEventListener("htmx:afterSettle", () => initDraftVisibility(document));
 
 // ---------------------------------------------------------------- creation wizard
+// The skills step's <select>s remember the value they had before any suggestion was applied
+// (whatever was actually saved, or the class's prefill on a fresh visit), so a suggestion's sparse
+// fill (it only names the skills it touches) can restore everything else first: otherwise picking
+// one suggestion, then a different one, left the first one's points in place alongside the second's.
+function captureSkillBaseline(form) {
+  if (!form || form.id !== "wiz-skills") return;
+  form.querySelectorAll('select[name^="skill."]').forEach((s) => {
+    if (s.dataset.baseline === undefined) s.dataset.baseline = s.value;
+  });
+}
+document.addEventListener("DOMContentLoaded", () => captureSkillBaseline(document.getElementById("wiz-skills")));
+document.addEventListener("htmx:afterSettle", () => captureSkillBaseline(document.getElementById("wiz-skills")));
+
 // <button data-fill='{"set.burden":"Reckless"}'>: a choice that fills in its form (the book's
 // options for a card, or Claude's suggestions). Nothing is saved until the player saves the step.
 document.addEventListener("click", (e) => {
@@ -382,6 +395,11 @@ document.addEventListener("click", (e) => {
   if (!form) return;
   let fill = {};
   try { fill = JSON.parse(b.dataset.fill || "{}"); } catch { return; }
+  if (form.id === "wiz-skills") {
+    form.querySelectorAll('select[name^="skill."]').forEach((s) => {
+      if (s.dataset.baseline !== undefined) s.value = s.dataset.baseline;
+    });
+  }
   for (const [name, value] of Object.entries(fill)) {
     const el = form.querySelector(`[name="${CSS.escape(name)}"]`);
     if (!el) continue;

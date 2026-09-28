@@ -363,6 +363,11 @@ type wizCard struct {
 	Drawn   []*gamedata.VisionCard // a digital draw of several cards to pick from (contacts)
 	Choices []wizChoice            // the book's options for the card
 	Unknown bool                   // Value isn't a vision card
+	// OOB renders this card picker as an htmx out-of-band swap into its existing #card-<For>
+	// element, for when it's included alongside something else's response (wizardSuggest, when
+	// it drew a fresh card the player hasn't seen: the suggestions alone would talk about "the
+	// drawn card" without ever showing which one).
+	OOB bool
 }
 
 // wizChoice is one option a player can pick: Fill maps form field names to the values picking
@@ -383,6 +388,23 @@ var wizCardInput = map[string]string{
 	// homeland and dioscorian's suggest-box shares, so a card wizardContext draws for either one
 	// needs this entry to find its way back into the same "set.card" field they both already use.
 	"contact": "set.card",
+}
+
+// wizCardForKey is the wizard-card picker's "For" (and so its #card-<For> element) for a
+// suggestion Kind, or "" for a kind with no card picker at all. Every card-driven kind but
+// "contact" already matches its own "For" one-for-one; "contact" is homeland's and dioscorian's
+// shared suggestion Kind, so it needs the same set.kind lookup wizardContext's "contact" case uses.
+func wizCardForKey(kind string, form url.Values) string {
+	switch kind {
+	case "child", "adult", "burden", "ideal":
+		return kind
+	case "contact":
+		if form.Get("set.kind") == "Dioscorian" {
+			return "dioscorian"
+		}
+		return "homeland"
+	}
+	return ""
 }
 
 func wizCardSaved(ag *db.Agent, key string) string {
@@ -535,6 +557,10 @@ type wizSuggestions struct {
 	Exclude []string
 	Note    string
 	Error   string
+	// Card is set when this request drew a fresh card itself (the player hadn't drawn or entered
+	// one yet): it's rendered as an out-of-band swap so the drawn card is visible right away,
+	// alongside the suggestions inspired by it, not just implied by their "the drawn card" text.
+	Card *wizCard
 }
 
 var skillPointsRE = regexp.MustCompile(`([A-Za-z]+)\s*\+\s*(\d)`)
@@ -569,6 +595,16 @@ func (s *Server) wizardSuggest(w http.ResponseWriter, r *http.Request) {
 		d.Error = sentence(friendly(err))
 		s.partial(w, "wizard", "choices", d)
 		return
+	}
+	// A card wizardContext drew for this request, so the player can see what the suggestions
+	// below are actually "in the spirit of" instead of just reading about "the drawn card"
+	// without ever seeing which one it was.
+	if drawnCard != "" {
+		if forKey := wizCardForKey(kind, r.Form); forKey != "" {
+			wc := newWizCard(snap, ag.ID, forKey, drawnCard, nil)
+			wc.OOB = true
+			d.Card = &wc
+		}
 	}
 	class := snap.Class(ag.Class)
 	solo := s.isSolo(a, ag)
@@ -888,16 +924,10 @@ func wizChoiceFor(kind string, sg assist.Suggestion, ag *db.Agent, class *gameda
 		for _, sk := range snap.Skills.Skills {
 			known[strings.ToLower(sk.Name)] = sk.Name
 		}
-		var parts []string
-		for _, m := range skillPointsRE.FindAllStringSubmatch(f["points"], -1) {
-			name, ok := known[strings.ToLower(m[1])]
-			if !ok {
-				continue
-			}
-			n, _ := strconv.Atoi(m[2])
-			// A suggestion is a starting point, not the rules: clamp it to what's actually still
-			// legal for this skill and this many points left, rather than trusting the model to
-			// have honored the cap and remaining-points hints it was given (it doesn't always).
+		added := map[string]int{}
+		var order []string
+		// place puts as much of n into name as the cap and what's left actually allow.
+		place := func(name string, n int) {
 			if room := maxSkill - cur[name]; n > room {
 				n = room
 			}
@@ -905,15 +935,48 @@ func wizChoiceFor(kind string, sg assist.Suggestion, ag *db.Agent, class *gameda
 				n = remaining
 			}
 			if n <= 0 {
-				continue
+				return
+			}
+			if added[name] == 0 {
+				order = append(order, name)
 			}
 			cur[name] += n
+			added[name] += n
 			remaining -= n
-			c.Fill["skill."+name] = strconv.Itoa(cur[name])
-			parts = append(parts, fmt.Sprintf("%s +%d", name, n))
 		}
-		if len(parts) == 0 {
+		for _, m := range skillPointsRE.FindAllStringSubmatch(f["points"], -1) {
+			if name, ok := known[strings.ToLower(m[1])]; ok {
+				n, _ := strconv.Atoi(m[2])
+				place(name, n)
+			}
+		}
+		// A suggestion is a starting point, not the rules: the model doesn't always add up to the
+		// points remaining, or it names a skill already at (or near) the cap it was given, which
+		// used to just quietly come up short. Spend whatever's left on the skills it already
+		// named (most likely still in the spirit of the suggestion), and only then, deterministically,
+		// on any other skill still under cap — so a suggestion always uses every point that's
+		// actually still placeable, rather than silently offering less than it claims.
+		for _, name := range order {
+			if remaining <= 0 {
+				break
+			}
+			place(name, remaining)
+		}
+		if remaining > 0 {
+			for _, sk := range snap.Skills.Skills {
+				if remaining <= 0 {
+					break
+				}
+				place(sk.Name, remaining)
+			}
+		}
+		if len(order) == 0 {
 			return c, false
+		}
+		var parts []string
+		for _, name := range order {
+			c.Fill["skill."+name] = strconv.Itoa(cur[name])
+			parts = append(parts, fmt.Sprintf("%s +%d", name, added[name]))
 		}
 		c.Label = strings.Join(parts, ", ")
 	default:

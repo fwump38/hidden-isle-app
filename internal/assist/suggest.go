@@ -48,8 +48,11 @@ var suggestKinds = map[string]suggestKind{
 		Fields: []SuggestField{{"word", "One adjective or -ing verb, capitalised (p. 40)"}}},
 	"abilities": {Ask: "Suggest which of the class's abilities best fit this Agent's core self and concept.", Count: 3,
 		Fields: []SuggestField{{"ability", "Exactly one ability name from the class list given"}}},
-	"skills": {Ask: "Suggest where to add this Agent's skill points: 2 points inspired by their core self and 2 anywhere, within the limits given.", Count: 2,
-		Fields: []SuggestField{{"points", `Exactly the form "Skill +N, Skill +N, …", using only skill names from the list given, adding up to the points to add`}}},
+	// The exact split isn't hardcoded here (it isn't always 2 core-self + 2 free — some may
+	// already be spent, or the campaign's own limits differ) since a fixed number here would
+	// contradict "Points to add: N" in the details and reliably shorted the total.
+	"skills": {Ask: "Suggest where to add this Agent's remaining skill points: some inspired by their core self, the rest anywhere, within the limits given.", Count: 2,
+		Fields: []SuggestField{{"points", `Exactly the form "Skill +N, Skill +N, …", using only skill names from the list given. Must add up to exactly the "points to add" number in the details — use all of it, never more, and never push a skill past the "max in any skill" limit also given there`}}},
 	"magic": {Ask: "Suggest a school of magic for this Agent's Adept proficiency that fits their concept.", Count: 2,
 		Fields: []SuggestField{{"school", "Exactly one school name from the list given"}}},
 	"look": {Ask: "Suggest how this Agent appears: an age, a culture and a short look that echoes their drawn cards.", Count: 3,
