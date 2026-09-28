@@ -80,7 +80,7 @@ type Agent struct {
 	Age     string `json:"age"`
 	Culture string `json:"culture"`
 	Look    string `json:"look"`
-	Why     string `json:"why"` // why they came to Dioscoria
+	Why     string `json:"why"`     // why they came to Dioscoria
 	Concept string `json:"concept"` // player's own rough description, reused to drive wizard suggestions
 
 	ChildPhrase string `json:"child_phrase"`
