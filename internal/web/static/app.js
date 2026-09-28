@@ -341,6 +341,23 @@ function showHandout(h) {
 document.addEventListener("DOMContentLoaded", connectLive);
 document.addEventListener("htmx:afterSettle", connectLive);
 
+// ---------------------------------------------------------------- entry visibility / draft
+// A [data-vis-select] (the "Who can see this" select on journal/session entry forms) shows its
+// sibling [data-draft-wrap] only when "Everyone" is chosen: "Save as draft" only means anything
+// for party-visible entries, so it's hidden the rest of the time rather than just disabled.
+function updateDraftVisibility(select) {
+  const wrap = select.closest("form")?.querySelector("[data-draft-wrap]");
+  if (wrap) wrap.hidden = select.value !== "party";
+}
+document.addEventListener("change", (e) => {
+  if (e.target.matches?.("[data-vis-select]")) updateDraftVisibility(e.target);
+});
+function initDraftVisibility(root) {
+  (root || document).querySelectorAll("[data-vis-select]").forEach(updateDraftVisibility);
+}
+document.addEventListener("DOMContentLoaded", () => initDraftVisibility(document));
+document.addEventListener("htmx:afterSettle", () => initDraftVisibility(document));
+
 // ---------------------------------------------------------------- creation wizard
 // <button data-fill='{"set.burden":"Reckless"}'>: a choice that fills in its form (the book's
 // options for a card, or Claude's suggestions). Nothing is saved until the player saves the step.

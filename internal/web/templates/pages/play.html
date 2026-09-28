@@ -91,12 +91,12 @@
         <div class="col-12"><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-send"></i> Push</button></div>
       </div>
     </form>
-    <form method="post" action="/c/{{$c.ID}}/entries" class="card card-body mb-3">
-      <input type="hidden" name="kind" value="note"><input type="hidden" name="visibility" value="seer"><input type="hidden" name="back" value="{{$back}}">
+    <form method="post" action="/c/{{$c.ID}}/r/seer_note" class="card card-body mb-3">
+      <input type="hidden" name="back" value="{{$back}}">
       <h2 class="h6"><i class="bi bi-pencil"></i> Quick note <span class="small text-warning">Seer only</span></h2>
-      <textarea class="form-control form-control-sm mb-2" id="quick-note-body" name="body" rows="3" required placeholder="What just happened, for the session log later" aria-label="Note"></textarea>
+      <textarea class="form-control form-control-sm mb-2" id="quick-note-body" name="set.body" rows="3" required placeholder="What just happened, for the session log later" aria-label="Note"></textarea>
       {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "seer_note" "Target" "quick-note-body" "AgentID" 0 "CampaignID" $c.ID "SessionID" 0 "Draft" false)}}{{end}}
-      <input type="hidden" name="title" value="Table note">
+      <input type="hidden" name="set.title" value="Table note">
       <button class="btn btn-sm btn-outline-light" type="submit">Save note</button>
     </form>
     <div class="card mb-3"><div class="card-body">

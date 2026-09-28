@@ -4,7 +4,7 @@
   <h1 class="h4 mb-0">Journal</h1>
   <div class="small">Show: <a href="{{$back}}">all</a> · <a href="{{$back}}?kind=recap">recaps</a> · <a href="{{$back}}?kind=session_log">session logs</a> · <a href="{{$back}}?kind=history">histories</a> · <a href="{{$back}}?kind=journal">journals</a></div>
 </div>
-<p class="small text-body-secondary">Written by people, not generated. Journals are yours: “only me” is private even from the Seer; “me and the Seer” shares it with the Seer.</p>
+<p class="small text-body-secondary">Written by people, not generated — use Enhance below to add detail, not to invent events. “Only me” is private even from the Seer; “me and the Seer” shares it with the Seer; “everyone” can be saved as a draft first. The Seer's own private notes live under <a href="/c/{{$c.ID}}/notes">Seer notes</a>, not here.</p>
 <div class="row g-3">
   <div class="col-12 col-lg-7">
     {{range $d.Entries}}
@@ -27,9 +27,9 @@
           <div class="col-12"><input class="form-control form-control-sm" name="title" value="{{.Title}}" aria-label="Title"></div>
           <div class="col-12"><textarea class="form-control form-control-sm" id="body-{{.ID}}" name="body" rows="4" aria-label="Text">{{.Body}}</textarea>
           {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "journal" "Target" (printf "body-%d" .ID) "AgentID" (uintv .AgentID) "CampaignID" $c.ID "SessionID" (uintv .SessionID) "Draft" false)}}{{end}}</div>
-          <div class="col-8"><select class="form-select form-select-sm" name="visibility" aria-label="Who can read it">{{$v := .Visibility}}
-            <option value="party" {{if eq $v "party"}}selected{{end}}>Everyone</option><option value="owner" {{if eq $v "owner"}}selected{{end}}>Me and the Seer</option><option value="private" {{if eq $v "private"}}selected{{end}}>Only me</option>{{if $seer}}<option value="seer" {{if eq $v "seer"}}selected{{end}}>Seer only</option>{{end}}</select></div>
-          <div class="col-4 d-flex align-items-center"><div class="form-check mb-0"><input class="form-check-input" type="checkbox" name="published" id="pub-{{.ID}}" {{if .Published}}checked{{end}}><label class="form-check-label" for="pub-{{.ID}}">Published</label></div></div>
+          <div class="col-8"><select class="form-select form-select-sm" name="visibility" aria-label="Who can see this" data-vis-select>{{$v := .Visibility}}
+            <option value="private" {{if eq $v "private"}}selected{{end}}>Only me</option><option value="owner" {{if eq $v "owner"}}selected{{end}}>Me and the Seer</option><option value="party" {{if eq $v "party"}}selected{{end}}>Everyone</option>{{if $seer}}<option value="seer" {{if eq $v "seer"}}selected{{end}}>Seer only</option>{{end}}</select></div>
+          <div class="col-4 d-flex align-items-center" data-draft-wrap hidden><div class="form-check mb-0"><input class="form-check-input" type="checkbox" name="draft" id="draft-{{.ID}}" {{if not .Published}}checked{{end}}><label class="form-check-label small" for="draft-{{.ID}}">Save as draft</label></div></div>
           <div class="col-12 d-flex justify-content-between"><button class="btn btn-sm btn-outline-light" type="submit">Save</button>
             <button class="btn btn-sm btn-outline-danger" type="submit" formaction="/entries/{{.ID}}/delete" hx-post="/entries/{{.ID}}/delete" hx-confirm="Delete this entry? This can't be undone.">Delete</button></div>
         </form>
@@ -44,18 +44,18 @@
       <h2 class="h6">Write</h2>
       <div class="row g-2">
         <div class="col-6"><select class="form-select form-select-sm" name="kind" aria-label="Kind">
-          <option value="journal">Journal</option><option value="note">Note</option>
+          <option value="journal">Journal</option>
           {{if $seer}}<option value="recap">Player-safe recap</option><option value="session_log">Session log</option>{{end}}</select></div>
         <div class="col-6"><select class="form-select form-select-sm" name="session_id" aria-label="Session"><option value="">No session</option>{{range $d.Sessions}}<option value="{{.ID}}">{{.Number}}. {{.Title}}</option>{{end}}</select></div>
         <div class="col-12"><input class="form-control form-control-sm" name="title" placeholder="Title" aria-label="Title"></div>
         <div class="col-12"><textarea class="form-control form-control-sm" id="body-new" name="body" rows="6" required placeholder="What happened, in your words" aria-label="Text"></textarea>
         {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "journal" "Target" "body-new" "AgentID" 0 "CampaignID" $c.ID "SessionID" 0 "Draft" false)}}{{end}}</div>
-        <div class="col-8"><select class="form-select form-select-sm" name="visibility" aria-label="Who can read it">
+        <div class="col-8"><select class="form-select form-select-sm" name="visibility" aria-label="Who can see this" data-vis-select>
           <option value="private">Only me</option><option value="owner" selected>Me and the Seer</option><option value="party">Everyone</option>{{if $seer}}<option value="seer">Seer only</option>{{end}}</select></div>
-        <div class="col-4 d-flex align-items-center"><div class="form-check mb-0"><input class="form-check-input" type="checkbox" name="published" id="pub-new"><label class="form-check-label small" for="pub-new">Publish</label></div></div>
+        <div class="col-4 d-flex align-items-center" data-draft-wrap hidden><div class="form-check mb-0"><input class="form-check-input" type="checkbox" name="draft" id="draft-new"><label class="form-check-label small" for="draft-new">Save as draft</label></div></div>
         <div class="col-12"><button class="btn btn-primary btn-sm" type="submit">Save</button></div>
       </div>
-      <p class="small text-body-secondary mt-2 mb-0">Recaps show on the campaign page once published. Everyone-visible entries need “Publish” before other players see them.</p>
+      <p class="small text-body-secondary mt-2 mb-0">Recaps show on the campaign page once published (and always need "Everyone"). "Everyone" entries can be saved as a draft first; every other option is shared right away with whoever it names.</p>
     </form>
   </div>
 </div>

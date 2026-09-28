@@ -145,6 +145,24 @@ func TestToolsPlayACampaign(t *testing.T) {
 	h.call("write_entry", map[string]any{"campaign_id": cid, "kind": "recap", "title": "Session 1", "body": "We arrived.", "visibility": "party", "published": true})
 	if es := h.call("list_entries", map[string]any{"campaign_id": cid})["items"].([]any); len(es) != 1 {
 		t.Errorf("entries: %d", len(es))
+	} else if e := es[0].(map[string]any); e["published"] != true {
+		t.Errorf("published=true (the old field) should still publish it: %v", e)
+	}
+	// draft (the new field) takes precedence over the old published one, and a non-party entry is
+	// always published regardless of either.
+	h.call("write_entry", map[string]any{"campaign_id": cid, "kind": "recap", "title": "Session 2", "body": "Still hidden.", "visibility": "party", "published": true, "draft": true})
+	h.call("write_entry", map[string]any{"campaign_id": cid, "kind": "journal", "title": "Diary", "body": "private thoughts", "visibility": "owner"})
+	entries := h.call("list_entries", map[string]any{"campaign_id": cid})["items"].([]any)
+	byTitle := map[string]map[string]any{}
+	for _, e := range entries {
+		m := e.(map[string]any)
+		byTitle[m["title"].(string)] = m
+	}
+	if byTitle["Session 2"]["published"] != false {
+		t.Errorf("draft=true should override published=true: %v", byTitle["Session 2"])
+	}
+	if byTitle["Diary"]["published"] != true {
+		t.Errorf("owner-visibility entries should always be published: %v", byTitle["Diary"])
 	}
 	if _, e := h.try("delete_record", map[string]any{"kind": "campaign", "id": cid, "reason": "x"}); e == "" {
 		t.Error("campaign deletion over MCP should be refused")

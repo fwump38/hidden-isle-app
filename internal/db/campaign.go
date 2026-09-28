@@ -261,7 +261,7 @@ type Entry struct {
 	SessionID  *uint      `gorm:"index" json:"session_id,omitempty"`
 	AgentID    *uint      `gorm:"index" json:"agent_id,omitempty"`
 	AuthorID   uint       `gorm:"not null" json:"author_id"`
-	Kind       string     `gorm:"not null" json:"kind"` // session_log | recap | history | journal | note
+	Kind       string     `gorm:"not null" json:"kind"` // session_log | recap | history | journal
 	Title      string     `json:"title"`
 	Body       string     `json:"body"`
 	Visibility Visibility `gorm:"not null;default:owner" json:"visibility"`

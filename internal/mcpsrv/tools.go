@@ -161,16 +161,17 @@ type undoIn struct {
 }
 type entriesIn struct {
 	CampaignID uint   `json:"campaign_id"`
-	Kind       string `json:"kind,omitempty" jsonschema:"session_log, recap, history, journal or note"`
+	Kind       string `json:"kind,omitempty" jsonschema:"session_log, recap, history or journal"`
 }
 type writeEntryIn struct {
 	CampaignID uint   `json:"campaign_id"`
 	ID         uint   `json:"id,omitempty" jsonschema:"to edit an existing entry"`
-	Kind       string `json:"kind" jsonschema:"session_log, recap, history (needs agent_id) or note"`
+	Kind       string `json:"kind" jsonschema:"session_log, recap, history (needs agent_id) or journal"`
 	Title      string `json:"title"`
 	Body       string `json:"body" jsonschema:"what a person wrote (lightly tidied if asked); never invented events"`
 	Visibility string `json:"visibility" jsonschema:"party (everyone, once published), seer (Seer only) or owner"`
-	Published  bool   `json:"published,omitempty"`
+	Draft      bool   `json:"draft,omitempty" jsonschema:"party visibility only: keep it a draft (not yet shared) instead of publishing it right away"`
+	Published  bool   `json:"published,omitempty" jsonschema:"deprecated, use draft instead (the opposite sense); ignored if draft is true"`
 	SessionID  uint   `json:"session_id,omitempty"`
 	AgentID    uint   `json:"agent_id,omitempty"`
 }
@@ -312,7 +313,7 @@ func (s *Server) addTools() {
 			}
 			return items{out}, err
 		})
-	tool(s, "list_entries", "Written entries in a campaign (session logs, recaps, histories, journals shared with the Seer).",
+	tool(s, "list_entries", "Written entries in a campaign (session logs, recaps, histories, journals shared with the Seer). Never a substitute for the change log: draft a recap or summary only from what's actually logged, not invented.",
 		func(ctx context.Context, a campaign.Actor, in entriesIn) (any, error) {
 			es, err := s.svc.Entries(a, in.CampaignID, in.Kind, 0)
 			return items{es}, err
@@ -405,10 +406,11 @@ func (s *Server) addTools() {
 		func(ctx context.Context, a campaign.Actor, in undoIn) (any, error) {
 			return note{Note: "undone"}, s.svc.Revert(a, in.EventID, in.Reason)
 		})
-	tool(s, "write_entry", "Save a session log, recap, history line or note that a person wrote. Recaps for players must be player-safe (no Seer-only material) and need published=true and visibility=party to be seen.",
+	tool(s, "write_entry", "Save a session log, recap, history line or journal entry that a person wrote. Recaps for players must be player-safe (no Seer-only material) and need visibility=party with draft unset (or false) to be seen; every other visibility is shared with whoever it names right away.",
 		func(ctx context.Context, a campaign.Actor, in writeEntryIn) (any, error) {
+			vis := db.Visibility(in.Visibility)
 			e := &db.Entry{ID: in.ID, CampaignID: in.CampaignID, Kind: in.Kind, Title: in.Title, Body: in.Body,
-				Visibility: db.Visibility(in.Visibility), Published: in.Published}
+				Visibility: vis, Published: vis != db.VisParty || (in.Published && !in.Draft)}
 			if in.SessionID != 0 {
 				e.SessionID = &in.SessionID
 			}
