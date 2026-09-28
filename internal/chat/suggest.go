@@ -69,6 +69,10 @@ type SuggestRequest struct {
 	Context []string
 	Hint    string   // the player's own description of what they're after
 	Exclude []string // options already on screen, so "more" gives new ones
+	// Enum constrains a field to exactly one of a fixed set of values (keyed by SuggestField.Name),
+	// e.g. the real class names, so the model can't return something that reads as plausible but
+	// matches nothing in wizChoiceFor and silently vanishes ("nothing usable came back").
+	Enum map[string][]string
 }
 
 // Suggestion is one option: its field values and a short reason.
@@ -126,7 +130,11 @@ func (s *Service) Suggest(ctx context.Context, u *db.User, req SuggestRequest) (
 	props := map[string]any{"why": strProp("One short line: why this fits")}
 	required := []string{"why"}
 	for _, f := range kind.Fields {
-		props[f.Name] = strProp(f.Desc)
+		p := strProp(f.Desc)
+		if enum := req.Enum[f.Name]; len(enum) > 0 {
+			p["enum"] = enum
+		}
+		props[f.Name] = p
 		required = append(required, f.Name)
 	}
 	tool := newTool("offer_suggestions", "Offer the options to the player.", map[string]any{

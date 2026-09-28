@@ -3,7 +3,9 @@ package web
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"errors"
 	"html/template"
 	"io/fs"
@@ -40,12 +42,14 @@ type Server struct {
 	Rules *rules.Index  // rules search in the rule browser; nil hides it
 	Build string
 
-	pages map[string]*template.Template
-	book  rulebook.Cache // the rule browser's rendered text
+	pages    map[string]*template.Template
+	book     rulebook.Cache // the rule browser's rendered text
+	assetVer string         // cache-busting suffix for /static/app.{js,css}, from their content
 }
 
 func New(g *gorm.DB, cfg *config.Config, a *auth.Authenticator, data *gamedata.Store, svc *campaign.Service, build string) (*Server, error) {
 	s := &Server{DB: g, Cfg: cfg, Auth: a, Data: data, Svc: svc, Build: build, pages: map[string]*template.Template{}}
+	s.assetVer = assetVersion()
 	funcs := templateFuncs()
 	pages, err := fs.Glob(assets, "templates/pages/*.html")
 	if err != nil {
@@ -101,17 +105,34 @@ func cacheForever(h http.Handler) http.Handler {
 	})
 }
 
+// assetVersion hashes app.js and app.css so layout.html can suffix their URLs with it
+// (?v=<hash>). /static/* is cached for 24h (cacheForever) with no revalidation, so without a
+// content-derived cache buster a browser that has visited once keeps serving its own old copy of
+// these two files for a full day after every deploy, no matter what the server now has.
+func assetVersion() string {
+	h := sha256.New()
+	for _, name := range []string{"static/app.js", "static/app.css"} {
+		b, err := assets.ReadFile(name)
+		if err != nil {
+			continue
+		}
+		h.Write(b)
+	}
+	return hex.EncodeToString(h.Sum(nil))[:12]
+}
+
 // pageData is what every page template receives.
 type pageData struct {
-	Title string
-	User  *db.User
-	Info  auth.RequestInfo
-	Build string
-	Flash string
-	Error string
-	Data  any
-	Nav   *campaignNav // set on campaign pages
-	Live  bool         // subscribe to the campaign's live updates
+	Title    string
+	User     *db.User
+	Info     auth.RequestInfo
+	Build    string
+	AssetVer string
+	Flash    string
+	Error    string
+	Data     any
+	Nav      *campaignNav // set on campaign pages
+	Live     bool         // subscribe to the campaign's live updates
 
 	ChatEnabled bool // the in-app player chat is configured (ANTHROPIC_API_KEY)
 	// Cites maps the rules' page-cite prefixes to book keys ({"p.":"p","Sheet p.":"sheet"}), so
@@ -125,6 +146,7 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, page string, sta
 	pd.ChatEnabled = s.Chat != nil
 	pd.Info = auth.Info(r.Context())
 	pd.Build = s.Build
+	pd.AssetVer = s.assetVer
 	if s.Data != nil {
 		if snap := s.Data.Current(); snap != nil {
 			pd.Cites = map[string]string{}

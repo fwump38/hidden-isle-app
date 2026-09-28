@@ -238,7 +238,7 @@
     <input type="hidden" name="prof.rank" value="Adept">
     {{if $d.Schools}}
     <div class="d-flex flex-wrap gap-2 mb-2">
-      {{range $d.Schools}}<button class="btn btn-sm btn-outline-light hi-choice" type="button" data-fill="{{fill (dict2 "prof.add" .Name)}}">{{.Name}}{{with .Does}}<span class="why">{{.}}</span>{{end}}</button>{{end}}
+      {{range $d.Schools}}<div class="hi-choice-wrap"><button class="btn btn-sm btn-outline-light hi-choice" type="button" data-fill="{{fill (dict2 "prof.add" .Name)}}">{{.Name}}</button>{{with .Does}}<div class="hi-choice-why small text-body-secondary">{{.}}</div>{{end}}</div>{{end}}
     </div>
     {{end}}
     <label class="form-label small mb-0" for="m-school">School</label>
@@ -390,7 +390,7 @@
   {{if .Drawn}}
   <div class="small text-body-secondary mt-2">You drew these. Pick the one that speaks to you:</div>
   <div class="d-flex flex-wrap gap-2 mt-1">
-    {{range .Drawn}}<button class="btn btn-sm btn-outline-light hi-choice" type="button" data-fill="{{fill (dict2 "set.card" .Name)}}">{{.Name}}<span class="why">{{.Meaning}}{{if and .Meaning .Characters}} · {{end}}{{.Characters}}</span></button>{{end}}
+    {{range .Drawn}}<div class="hi-choice-wrap"><button class="btn btn-sm btn-outline-light hi-choice" type="button" data-fill="{{fill (dict2 "set.card" .Name)}}">{{.Name}}</button><div class="hi-choice-why small text-body-secondary">{{.Meaning}}{{if and .Meaning .Characters}} · {{end}}{{.Characters}}</div></div>{{end}}
   </div>
   {{end}}
 </div>

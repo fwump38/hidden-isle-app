@@ -82,10 +82,13 @@ body.hi-chat-open .hi-chat-fab { display: none; }
 }
 @media (max-width: 991.98px) { .hi-chat-drawer { width: 100vw; } }
 
-/* Creation wizard: choices a player can pick with one tap. */
+/* Creation wizard: choices a player can pick with one tap. Each is a button (the value alone,
+   so app.js's [data-fill] handler fills only that) plus its "why" as plain text below it, outside
+   the button. */
+.hi-choice-wrap { display: flex; flex-direction: column; gap: .15rem; max-width: 16rem; }
 .hi-choice { text-align: left; white-space: normal; }
 .hi-choice.active, .hi-choice:active { border-color: var(--hi-accent); background: rgba(201, 162, 39, .15); color: var(--bs-body-color); }
-.hi-choice .why { display: block; font-size: .8em; color: var(--bs-secondary-color); }
+.hi-choice-why { padding: 0 .2rem; }
 .hi-card-meaning { border-left: 3px solid var(--hi-accent); padding-left: .6rem; }
 .hi-wiz-foot { display: flex; justify-content: space-between; align-items: center; gap: .5rem; flex-wrap: wrap; border-top: 1px solid var(--bs-border-color); margin-top: 1rem; padding-top: .75rem; }
 
