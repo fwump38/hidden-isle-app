@@ -544,6 +544,40 @@ func TestCreationWizard(t *testing.T) {
 	}
 }
 
+// TestWizardContactRemoveAndRedraw: once a homeland or Dioscorian contact exists, the wizard step
+// used to go read-only (a summary and "Edit on the sheet" link, with no way back to the draw-3
+// form) — the player had to leave the wizard entirely to change their mind. It should offer a
+// "Remove and draw again" button that deletes the contact and brings back the draw form right
+// there in the wizard.
+func TestWizardContactRemoveAndRedraw(t *testing.T) {
+	st, _ := newSite(t)
+	ok := func(code int, flash string) {
+		t.Helper()
+		if code != http.StatusSeeOther || flash != "" {
+			t.Fatalf("post: %d %q", code, flash)
+		}
+	}
+	ok(st.post("Ana", "/agents", url.Values{"name": {"Ines"}, "class": {"prowler"}, "campaign_id": {"0"}}))
+	ok(st.post("Ana", "/agents/1/contacts", url.Values{"set.kind": {"Homeland"}, "set.name": {"Mother Agnese"}, "set.card": {"Page of Cups"}, "set.affection": {"4"}, "back": {"/agents/1/wizard?step=homeland"}}))
+
+	_, body := st.get("Ana", "/agents/1/wizard?step=homeland")
+	if !strings.Contains(body, "Mother Agnese") || !strings.Contains(body, "Remove and draw again") {
+		t.Fatalf("should show the contact with a way to remove and redraw it: %s", body)
+	}
+	if strings.Contains(body, `name="set.name"`) {
+		t.Error("shouldn't still show the draw-a-contact form once one exists")
+	}
+
+	ok(st.post("Ana", "/r/contact/1/delete", url.Values{"back": {"/agents/1/wizard?step=homeland"}}))
+	_, body = st.get("Ana", "/agents/1/wizard?step=homeland")
+	if strings.Contains(body, "Mother Agnese") {
+		t.Error("the contact should be gone after removing it")
+	}
+	if !strings.Contains(body, `name="set.name"`) {
+		t.Error("removing the contact should bring back the draw-a-new-one form, not leave a dead end")
+	}
+}
+
 // TestWizardStepCheckmarksSurviveASkippedStep: completing steps out of order (skipping Abilities
 // but finishing everything after it) must still check off each completed step on its own, and
 // the review screen must not claim the Agent is ready — and must not be spoofable by navigating
@@ -632,6 +666,15 @@ func TestWizardMagicStepAndDraw(t *testing.T) {
 	form(url.Values{"prof.add": {"Illusion"}, "prof.rank": {"Adept"}})
 	if _, body := st.get("Ana", "/agents/1/wizard?step=magic"); !strings.Contains(body, "Illusion") || !strings.Contains(body, "Continue") {
 		t.Fatal("proficiency should be listed with a continue link")
+	}
+
+	// A player who changes their mind about the school shouldn't be stuck on a read-only choice:
+	// removing it from the wizard step itself should bring back the "pick a school" form.
+	if code, flash := st.post("Ana", "/agents/1", url.Values{"prof.remove": {"0"}, "back": {"/agents/1/wizard?step=magic"}}); code != http.StatusSeeOther || flash != "" {
+		t.Fatalf("remove proficiency: %d %q", code, flash)
+	}
+	if _, body := st.get("Ana", "/agents/1/wizard?step=magic"); strings.Contains(body, "Illusion: Adept") || !strings.Contains(body, `name="prof.add"`) {
+		t.Fatal("removing the proficiency should bring back the school picker, not stay stuck on the old choice")
 	}
 
 	// Digital draw: returns a card and re-renders that step's card picker with its options.

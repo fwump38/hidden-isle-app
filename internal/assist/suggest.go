@@ -54,8 +54,11 @@ var suggestKinds = map[string]suggestKind{
 		Fields: []SuggestField{{"school", "Exactly one school name from the list given"}}},
 	"look": {Ask: "Suggest how this Agent appears: an age, a culture and a short look that echoes their drawn cards.", Count: 3,
 		Fields: []SuggestField{{"age", "An age, as a number or short phrase"}, {"culture", "A culture, e.g. Venetian"}, {"look", "One or two sentences"}}},
+	// The field is "sentence", not "why": naming it "why" (a near-synonym of the "reason" property
+	// every kind carries, "why this suggestion fits") reliably got the model to swap the two —
+	// the in-fiction answer landing in "reason" and the meta-justification landing in "why".
 	"why": {Ask: "Suggest why this Agent came to Dioscoria, tailored to their core self and culture.", Count: 3,
-		Fields: []SuggestField{{"why", "One sentence"}}},
+		Fields: []SuggestField{{"sentence", "One sentence: why they came to Dioscoria. This is the answer itself, not a justification for the suggestion — that's \"reason\""}}},
 	"contact": {Ask: "Suggest who this contact is, reading the drawn card loosely as their personality.", Count: 3,
 		Fields: []SuggestField{{"name", "A full name fitting their land"}, {"land", "Their land (or Dioscorian district)"}, {"description", "Profession and personality, one or two sentences"}}},
 	"ability_contact": {Ask: "Suggest who or what this granted contact is: a being or patron an ability grants (a deity, angel or demon), not an ordinary contact. Fit the Agent's core self.", Count: 3,

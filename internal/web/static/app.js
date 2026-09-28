@@ -456,17 +456,33 @@ document.addEventListener("DOMContentLoaded", syncAbilityChecks);
 // An ability that grants a contact pops a modal to name them right after it's saved
 // (partials wizard.html "wizard-ability-contact-modal", [data-auto-modal]). More than one can
 // need naming at once (two contact-granting abilities picked together); show them one at a time.
-function showNextAbilityContactModal() {
+//
+// The modal's own form submit is a plain <form> inside #main, so layout.html's hx-boost picks it
+// up and swaps the whole #main (including the modal) with the server's response — Bootstrap never
+// gets to run its own hide(), so its backdrop and the <body> "modal-open" state it sets (both live
+// outside #main) are left behind: a stuck, darkened screen until a real page reload. Reconcile
+// modal chrome with reality after every such swap: open the next one if another ability still
+// needs naming, otherwise strip any backdrop/body state nothing is actually using any more.
+function reconcileAbilityContactModals() {
   const next = document.querySelector("[data-auto-modal]");
-  if (!next || !window.bootstrap) return;
-  next.removeAttribute("data-auto-modal");
-  new bootstrap.Modal(next).show();
+  if (next && window.bootstrap) {
+    next.removeAttribute("data-auto-modal");
+    new bootstrap.Modal(next).show();
+    return;
+  }
+  if (document.querySelector(".modal.show")) return; // a real modal is legitimately open
+  document.querySelectorAll(".modal-backdrop").forEach((el) => el.remove());
+  document.body.classList.remove("modal-open");
+  document.body.style.removeProperty("overflow");
+  document.body.style.removeProperty("padding-right");
 }
+// Dismissing one without submitting ("Later") doesn't touch #main, so Bootstrap's own hide()
+// runs normally and fires this — chain to the next one the same way.
 document.addEventListener("hidden.bs.modal", (e) => {
-  if (e.target.matches?.("[id^='ability-contact-modal-']")) showNextAbilityContactModal();
+  if (e.target.matches?.("[id^='ability-contact-modal-']")) reconcileAbilityContactModals();
 });
-document.addEventListener("htmx:afterSettle", showNextAbilityContactModal);
-document.addEventListener("DOMContentLoaded", showNextAbilityContactModal);
+document.addEventListener("htmx:afterSettle", reconcileAbilityContactModals);
+document.addEventListener("DOMContentLoaded", reconcileAbilityContactModals);
 
 // ---------------------------------------------------------------- writing assistant
 // .hi-assist (partials/choices.html "write-assist"): "Enhance" sends the target textarea's

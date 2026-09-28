@@ -145,24 +145,26 @@ func TestSuggestForcesTheToolAndParsesOptions(t *testing.T) {
 }
 
 // TestSuggestWhyKindFieldDoesntCollideWithReason is a regression test: the "why" kind's own field
-// is also named "why" (p. 41's "why Dioscoria"), which used to collide with the rationale
-// property (also named "why" at the time) and produce two identical entries in the tool's
+// used to be named "why" too (p. 41's "why Dioscoria"), which first collided with the rationale
+// property (also named "why" at the time) and produced two identical entries in the tool's
 // "required" array — an invalid JSON schema (draft 2020-12 requires "required" to be unique),
-// rejected by the API with a 400 before the model ever ran.
+// rejected by the API with a 400 before the model ever ran. Renaming the rationale to "reason"
+// fixed the schema, but the field being named "why" — a near-synonym of "reason" — still reliably
+// got the model to swap the two in its actual answers, so the field is now named "sentence".
 func TestSuggestWhyKindFieldDoesntCollideWithReason(t *testing.T) {
 	var body map[string]any
 	w := setup(t, func(rw http.ResponseWriter, r *http.Request) {
 		json.NewDecoder(r.Body).Decode(&body)
 		rw.Header().Set("Content-Type", "application/json")
 		rw.Write(toolUseResp("toolu_1", "offer_suggestions", map[string]any{"options": []map[string]any{
-			{"why": "Fleeing famine, disaster or war", "reason": "fits a refugee concept"},
+			{"sentence": "Fleeing famine, disaster or war", "reason": "fits a refugee concept"},
 		}}))
 	})
 	got, err := w.assist.Suggest(context.Background(), w.ana, SuggestRequest{Kind: "why"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || got[0].Fields["why"] != "Fleeing famine, disaster or war" || got[0].Why != "fits a refugee concept" {
+	if len(got) != 1 || got[0].Fields["sentence"] != "Fleeing famine, disaster or war" || got[0].Why != "fits a refugee concept" {
 		t.Fatalf("suggestions = %+v", got)
 	}
 	tools, _ := body["tools"].([]any)

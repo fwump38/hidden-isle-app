@@ -291,14 +291,18 @@ func (d *wizardData) setStep(n int) {
 	d.Key = wizStepList[n-1].Key
 }
 
+// isSolo says whether ag belongs to a solitaire-mode campaign (p. 96's looser skill cap).
+func (s *Server) isSolo(a campaign.Actor, ag *db.Agent) bool {
+	if ag.CampaignID == 0 {
+		return false
+	}
+	c, err := s.Svc.Campaign(a, ag.CampaignID)
+	return err == nil && c.Mode == "solitaire"
+}
+
 func (s *Server) buildWizardData(a campaign.Actor, ag *db.Agent, snap *gamedata.Snapshot) wizardData {
 	class := snap.Class(ag.Class)
-	solo := false
-	if ag.CampaignID != 0 {
-		if c, err := s.Svc.Campaign(a, ag.CampaignID); err == nil && c.Mode == "solitaire" {
-			solo = true
-		}
-	}
+	solo := s.isSolo(a, ag)
 	contacts, _ := s.Svc.Contacts(a, ag.ID)
 	chosen := map[string]bool{}
 	for _, ab := range ag.Abilities {
@@ -375,6 +379,10 @@ type wizChoice struct {
 var wizCardInput = map[string]string{
 	"child": "set.child_card", "adult": "set.adult_card", "burden": "set.burden_card", "ideal": "set.ideal_card",
 	"homeland": "set.card", "dioscorian": "set.card",
+	// "contact" isn't a card-picker step key (For never equals it); it's the suggestion Kind both
+	// homeland and dioscorian's suggest-box shares, so a card wizardContext draws for either one
+	// needs this entry to find its way back into the same "set.card" field they both already use.
+	"contact": "set.card",
 }
 
 func wizCardSaved(ag *db.Agent, key string) string {
@@ -553,7 +561,7 @@ func (s *Server) wizardSuggest(w http.ResponseWriter, r *http.Request) {
 	// already carries it into every step's request, so a hint here (e.g. describing a contact)
 	// must not overwrite it.
 	hint := strings.TrimSpace(r.FormValue("hint"))
-	req, bookOptions := wizardContext(a, s, ag, snap, kind, r.Form)
+	req, bookOptions, drawnCard := wizardContext(a, s, ag, snap, kind, r.Form)
 	req.Hint = hint
 	req.Exclude = append(slices.Clone(d.Exclude), bookOptions...)
 	sugs, err := s.Assist.Suggest(r.Context(), a.User, req)
@@ -563,8 +571,17 @@ func (s *Server) wizardSuggest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	class := snap.Class(ag.Class)
+	solo := s.isSolo(a, ag)
 	for _, sg := range sugs {
-		if c, ok := wizChoiceFor(kind, sg, ag, class, snap, r.Form); ok {
+		if c, ok := wizChoiceFor(kind, sg, ag, class, snap, solo, r.Form); ok {
+			// A card wizardContext drew for this request (the player hadn't drawn one yet) needs
+			// to land in the form too when the suggestion it inspired is picked, or the "card you
+			// drew" box stays empty under an answer that was supposedly drawn from it.
+			if drawnCard != "" {
+				if field, ok := wizCardInput[kind]; ok {
+					c.Fill[field] = drawnCard
+				}
+			}
 			d.Choices = append(d.Choices, c)
 			d.Exclude = append(d.Exclude, c.Label)
 		}
@@ -595,8 +612,11 @@ func cardLine(snap *gamedata.Snapshot, label, name string) (string, *gamedata.Vi
 }
 
 // wizardContext describes the Agent so far for one step's request, and returns the book options
-// already on screen for it (so Claude offers different ones).
-func wizardContext(a campaign.Actor, s *Server, ag *db.Agent, snap *gamedata.Snapshot, kind string, form url.Values) (assist.SuggestRequest, []string) {
+// already on screen for it (so Claude offers different ones) plus the name of a card it drew
+// itself, if the step draws one and the player hadn't entered one yet (so a picked suggestion can
+// fill it in too, instead of leaving the "card you drew" box empty under an answer inspired by a
+// card the player never actually saw).
+func wizardContext(a campaign.Actor, s *Server, ag *db.Agent, snap *gamedata.Snapshot, kind string, form url.Values) (assist.SuggestRequest, []string, string) {
 	req := assist.SuggestRequest{Kind: kind}
 	add := func(format string, args ...any) { req.Context = append(req.Context, fmt.Sprintf(format, args...)) }
 	class := snap.Class(ag.Class)
@@ -656,8 +676,22 @@ func wizardContext(a campaign.Actor, s *Server, ag *db.Agent, snap *gamedata.Sna
 	}
 
 	var book []string
-	cardFor := func(label, field, saved string, options func(*gamedata.VisionCard) []string) {
-		line, v := cardLine(snap, label, formOr(form, field, saved))
+	var drawnCard string
+	// cardFor describes the card for a card-driven field. mayDraw is true only for a step's own
+	// card (child/adult/burden/ideal, a contact): if the player hasn't drawn or entered one yet,
+	// it draws one itself (the same digital-draw fallback as "Draw for me", cards.Draw) rather
+	// than asking Claude to invent phrases "in the spirit of" a card that doesn't exist. "look"'s
+	// read-only reuse of earlier steps' cards passes false, since drawing a fresh child/adult/
+	// burden/ideal card just to flavor a look suggestion would draw cards those steps never asked for.
+	cardFor := func(label, field, saved string, options func(*gamedata.VisionCard) []string, mayDraw bool) {
+		val := formOr(form, field, saved)
+		if val == "" && mayDraw {
+			if hands, err := cards.Draw(snap, "vision", []cards.Request{{Count: 1}}); err == nil && len(hands) > 0 && len(hands[0].Cards) > 0 {
+				val = hands[0].Cards[0]
+				drawnCard = val
+			}
+		}
+		line, v := cardLine(snap, label, val)
 		if line == "" {
 			return
 		}
@@ -675,13 +709,13 @@ func wizardContext(a campaign.Actor, s *Server, ag *db.Agent, snap *gamedata.Sna
 			add("Homeland or culture: %s", region)
 		}
 	case "child":
-		cardFor("Drawn card", "set.child_card", ag.ChildCard, history)
+		cardFor("Drawn card", "set.child_card", ag.ChildCard, history, true)
 	case "adult":
-		cardFor("Drawn card", "set.adult_card", ag.AdultCard, history)
+		cardFor("Drawn card", "set.adult_card", ag.AdultCard, history, true)
 	case "burden":
-		cardFor("Drawn card", "set.burden_card", ag.BurdenCard, func(v *gamedata.VisionCard) []string { return v.Burdens })
+		cardFor("Drawn card", "set.burden_card", ag.BurdenCard, func(v *gamedata.VisionCard) []string { return v.Burdens }, true)
 	case "ideal":
-		cardFor("Drawn card", "set.ideal_card", ag.IdealCard, func(v *gamedata.VisionCard) []string { return v.Ideals })
+		cardFor("Drawn card", "set.ideal_card", ag.IdealCard, func(v *gamedata.VisionCard) []string { return v.Ideals }, true)
 	case "abilities":
 		if class != nil {
 			add("Choose %d. The class's abilities:", snap.Limits.Creation.Abilities)
@@ -701,12 +735,7 @@ func wizardContext(a campaign.Actor, s *Server, ag *db.Agent, snap *gamedata.Sna
 			add("Already chosen: %s", ab.Name)
 		}
 	case "skills":
-		solo := false
-		if ag.CampaignID != 0 {
-			if c, err := s.Svc.Campaign(a, ag.CampaignID); err == nil && c.Mode == "solitaire" {
-				solo = true
-			}
-		}
+		solo := s.isSolo(a, ag)
 		cur := wizFormSkills(ag, form)
 		total := 0
 		var parts []string
@@ -731,7 +760,7 @@ func wizardContext(a campaign.Actor, s *Server, ag *db.Agent, snap *gamedata.Sna
 			{"Childhood card", "set.child_card", ag.ChildCard}, {"Adulthood card", "set.adult_card", ag.AdultCard},
 			{"Burden card", "set.burden_card", ag.BurdenCard}, {"Ideal card", "set.ideal_card", ag.IdealCard},
 		} {
-			cardFor(c.label, c.field, c.saved, nil)
+			cardFor(c.label, c.field, c.saved, nil, false)
 		}
 		for _, f := range []struct{ label, field, saved string }{
 			{"Culture so far", "set.culture", ag.Culture}, {"Age so far", "set.age", ag.Age}, {"Look so far", "set.look", ag.Look},
@@ -753,13 +782,13 @@ func wizardContext(a campaign.Actor, s *Server, ag *db.Agent, snap *gamedata.Sna
 		if land := form.Get("set.land"); land != "" {
 			add("Their land: %s", land)
 		}
-		cardFor("Their card", "set.card", "", nil)
+		cardFor("Their card", "set.card", "", nil, true)
 	case "ability_contact":
 		if name := form.Get("ability_name"); name != "" {
 			add("This ability grants a contact: %s (p. 43).", name)
 		}
 	}
-	return req, book
+	return req, book, drawnCard
 }
 
 // wizFormSkills is the Agent's skills with any unsaved changes on the skills form applied.
@@ -776,8 +805,9 @@ func wizFormSkills(ag *db.Agent, form url.Values) map[string]int {
 }
 
 // wizChoiceFor turns one of Claude's options into something the player can pick, checking it
-// against the rules data (an ability or class that doesn't exist is dropped, not shown).
-func wizChoiceFor(kind string, sg assist.Suggestion, ag *db.Agent, class *gamedata.Class, snap *gamedata.Snapshot, form url.Values) (wizChoice, bool) {
+// against the rules data (an ability or class that doesn't exist is dropped, not shown; a skill
+// suggestion is clamped to what the creation limits actually allow, not just what was asked for).
+func wizChoiceFor(kind string, sg assist.Suggestion, ag *db.Agent, class *gamedata.Class, snap *gamedata.Snapshot, solo bool, form url.Values) (wizChoice, bool) {
 	f := sg.Fields
 	c := wizChoice{Why: sg.Why, Fill: map[string]string{}}
 	switch kind {
@@ -810,7 +840,7 @@ func wizChoiceFor(kind string, sg assist.Suggestion, ag *db.Agent, class *gameda
 	case "ideal":
 		c.Label, c.Fill["set.ideal"] = f["word"], f["word"]
 	case "why":
-		c.Label, c.Fill["set.why"] = f["why"], f["why"]
+		c.Label, c.Fill["set.why"] = f["sentence"], f["sentence"]
 	case "look":
 		c.Label = f["look"] + " (" + f["age"] + ", " + f["culture"] + ")"
 		c.Fill["set.age"], c.Fill["set.culture"], c.Fill["set.look"] = f["age"], f["culture"], f["look"]
@@ -848,6 +878,12 @@ func wizChoiceFor(kind string, sg assist.Suggestion, ag *db.Agent, class *gameda
 		}
 	case "skills":
 		cur := wizFormSkills(ag, form)
+		total := 0
+		for _, v := range cur {
+			total += v
+		}
+		remaining := creationTotalPoints(&snap.Limits, solo) - total
+		maxSkill := creationMaxSkill(&snap.Limits, solo)
 		known := map[string]string{}
 		for _, sk := range snap.Skills.Skills {
 			known[strings.ToLower(sk.Name)] = sk.Name
@@ -859,7 +895,20 @@ func wizChoiceFor(kind string, sg assist.Suggestion, ag *db.Agent, class *gameda
 				continue
 			}
 			n, _ := strconv.Atoi(m[2])
+			// A suggestion is a starting point, not the rules: clamp it to what's actually still
+			// legal for this skill and this many points left, rather than trusting the model to
+			// have honored the cap and remaining-points hints it was given (it doesn't always).
+			if room := maxSkill - cur[name]; n > room {
+				n = room
+			}
+			if n > remaining {
+				n = remaining
+			}
+			if n <= 0 {
+				continue
+			}
 			cur[name] += n
+			remaining -= n
 			c.Fill["skill."+name] = strconv.Itoa(cur[name])
 			parts = append(parts, fmt.Sprintf("%s +%d", name, n))
 		}

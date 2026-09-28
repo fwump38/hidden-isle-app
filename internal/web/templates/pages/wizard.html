@@ -235,7 +235,13 @@
   <p class="small text-body-secondary">Occultists, Illusionists, Siphoners and anyone with a magical background choose 1 proficiency at Adept.</p>
   {{if $a.Proficiencies}}
   <ul class="list-group list-group-flush mb-2">
-    {{range $p := $a.Proficiencies}}<li class="list-group-item px-0">{{$p.School}}: {{$p.Rank}}</li>{{end}}
+    {{range $i, $p := $a.Proficiencies}}
+    <li class="list-group-item px-0 d-flex justify-content-between align-items-center gap-2">
+      <span>{{$p.School}}: {{$p.Rank}}</span>
+      <form method="post" action="{{$act}}"><input type="hidden" name="back" value="{{$d.URL "magic"}}">
+        <button class="btn btn-sm btn-outline-danger" type="submit" name="prof.remove" value="{{$i}}" hx-confirm="Remove {{$p.School}} and pick a different school?">Remove</button></form>
+    </li>
+    {{end}}
   </ul>
   <div class="hi-wiz-foot">
     <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
@@ -313,7 +319,12 @@
 <div class="card"><div class="card-body">
   <h2 class="h5">{{if $home}}Homeland contact{{else}}Dioscorian contact{{end}} <span class="small text-body-secondary fw-normal">(p. 41)</span></h2>
   {{if $have}}
-  <p>{{$have.Name}}{{with $have.Card}} ({{.}}){{end}}, affection {{$have.Affection}}.{{with $have.Description}} <span class="text-body-secondary">{{.}}</span>{{end}} <a class="small" href="{{$act}}">Edit on the sheet</a></p>
+  <p>{{$have.Name}}{{with $have.Card}} ({{.}}){{end}}, affection {{$have.Affection}}.{{with $have.Description}} <span class="text-body-secondary">{{.}}</span>{{end}}</p>
+  <div class="d-flex flex-wrap gap-2 mb-2">
+    <a class="btn btn-sm btn-outline-secondary" href="{{$act}}">Edit on the sheet</a>
+    <form method="post" action="/r/contact/{{$have.ID}}/delete"><input type="hidden" name="back" value="{{$d.URL $d.Key}}">
+      <button class="btn btn-sm btn-outline-danger" type="submit" hx-confirm="Remove {{$have.Name}} and draw a new one?">Remove and draw again</button></form>
+  </div>
   <div class="hi-wiz-foot">
     <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
     <a class="btn btn-primary" href="{{$d.Next}}">Continue <i class="bi bi-arrow-right"></i></a>

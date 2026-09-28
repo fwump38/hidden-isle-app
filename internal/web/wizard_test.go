@@ -209,6 +209,26 @@ func TestWizardSuggest(t *testing.T) {
 		t.Errorf("skill suggestions should become new totals for real skills: %s", body)
 	}
 
+	// This occultist's class prefills Unleash 1 (fixture); the creation cap is 2/skill. A
+	// suggestion of "+2" would put it at 3, over the cap — it must be clamped to what's still
+	// legal (+1), not trusted just because the model said so.
+	wireAssistWith(t, srv, suggestResp(map[string]any{"points": "Unleash +2", "reason": "fits their temper"}))
+	_, body = st.postBody("Ana", "/agents/1/wizard/suggest", url.Values{"kind": {"skills"}})
+	body = html.UnescapeString(body)
+	if !strings.Contains(body, `"skill.Unleash":"2"`) || strings.Contains(body, "Unleash +2") {
+		t.Errorf("a skill suggestion over the creation cap should be clamped, not offered as-is: %s", body)
+	}
+
+	// With only 1 of the 7 creation points left unspent (Unleash 1 + Channel 2 prefilled, plus
+	// Skirmish 2 + Convince 1 entered but not yet saved), a suggested "+2" elsewhere must be
+	// clamped to the 1 point actually remaining, even though Bargain itself is nowhere near cap.
+	wireAssistWith(t, srv, suggestResp(map[string]any{"points": "Bargain +2", "reason": "too generous"}))
+	_, body = st.postBody("Ana", "/agents/1/wizard/suggest", url.Values{"kind": {"skills"}, "skill.Skirmish": {"2"}, "skill.Convince": {"1"}})
+	body = html.UnescapeString(body)
+	if !strings.Contains(body, `"skill.Bargain":"1"`) || strings.Contains(body, "Bargain +2") {
+		t.Errorf("a skill suggestion shouldn't exceed the points actually remaining: %s", body)
+	}
+
 	wireAssistWith(t, srv, suggestResp(map[string]any{"class": "Prowler", "reason": "sneaky"}, map[string]any{"class": "Wizard", "reason": "no such class"}))
 	_, body = st.postBody("Ana", "/agents/create/suggest", url.Values{"kind": {"class"}, "hint": {"a sneaky thief"}})
 	if !strings.Contains(body, `name="class" value="prowler"`) || strings.Contains(body, "Wizard") {
@@ -221,6 +241,41 @@ func TestWizardSuggest(t *testing.T) {
 	_, body = st.postBody("Ana", "/agents/create/suggest", url.Values{"kind": {"class"}, "hint": {"a sneaky thief"}})
 	if !strings.Contains(body, "Nothing usable came back") {
 		t.Errorf("no usable class suggestions should say so, not render empty: %s", body)
+	}
+}
+
+// TestWizardSuggestDrawsACardWhenNoneChosenYet is a regression test: asking for suggestions on a
+// card-driven step (child, adult, burden, ideal, a contact) before the player has drawn or entered
+// a card used to send Claude no card at all, so "in the spirit of the drawn card" suggestions were
+// invented from nothing. It should draw one itself, the same digital fallback "Draw for me" uses,
+// and fill it into the form too when a suggestion inspired by it gets picked.
+func TestWizardSuggestDrawsACardWhenNoneChosenYet(t *testing.T) {
+	st, _, srv := newSiteWithServer(t)
+	newWizardAgent(t, st, "prowler")
+
+	var sentBody map[string]any
+	wireAssistFunc(t, srv, func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&sentBody)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(suggestResp(map[string]any{"word": "Proud", "reason": "fits"}))
+	})
+	_, body := st.postBody("Ana", "/agents/1/wizard/suggest", url.Values{"kind": {"burden"}})
+	body = html.UnescapeString(body)
+	raw, _ := json.Marshal(sentBody)
+	if !strings.Contains(string(raw), "Drawn card:") {
+		t.Fatalf("no card was drawn for the request: %s", raw)
+	}
+	if !strings.Contains(body, `"set.burden":"Proud"`) || !strings.Contains(body, `"set.burden_card":"`) {
+		t.Errorf("picking the suggestion should fill in both the word and the card drawn for it: %s", body)
+	}
+
+	// homeland and dioscorian share the "contact" suggestion kind and both fill "set.card", not a
+	// step-specific field, so wizardContext's drawn card has to be mapped back to that explicitly.
+	wireAssistWith(t, srv, suggestResp(map[string]any{"name": "Marco", "land": "Venice", "description": "a fisherman", "reason": "fits"}))
+	_, body = st.postBody("Ana", "/agents/1/wizard/suggest", url.Values{"kind": {"contact"}, "set.kind": {"Homeland"}})
+	body = html.UnescapeString(body)
+	if !strings.Contains(body, `"set.name":"Marco"`) || !strings.Contains(body, `"set.card":"`) {
+		t.Errorf("a contact suggestion with no card yet should fill in the card it drew: %s", body)
 	}
 }
 

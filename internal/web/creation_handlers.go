@@ -230,7 +230,7 @@ func (s *Server) createClassSuggest(w http.ResponseWriter, r *http.Request) {
 		d.Error = sentence(friendly(err))
 	}
 	for _, sg := range sugs {
-		if c, ok := wizChoiceFor("class", sg, nil, nil, snap, nil); ok {
+		if c, ok := wizChoiceFor("class", sg, nil, nil, snap, false, nil); ok {
 			d.Choices = append(d.Choices, c)
 			d.Exclude = append(d.Exclude, c.Label)
 		}
