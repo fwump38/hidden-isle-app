@@ -7,27 +7,58 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/fwump38/hidden-isle-app/internal/assist"
 	"github.com/fwump38/hidden-isle-app/internal/rules"
 )
 
-// wireAssistWith gives srv a working assist.Service backed by a fake Anthropic server that always
-// replies with the given raw response body (e.g. a tool_use block), so web-layer tests can
-// exercise the suggest routes without any network use.
-func wireAssistWith(t *testing.T, srv *Server, body []byte) {
+// wireAssistFunc gives srv a working assist.Service backed by a fake Anthropic server running
+// handler, so web-layer tests can exercise the suggest and write-assist routes without any
+// network use.
+func wireAssistFunc(t *testing.T, srv *Server, handler http.HandlerFunc) {
 	t.Helper()
-	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(body)
-	}))
+	fake := httptest.NewServer(handler)
 	t.Cleanup(fake.Close)
 	idx, err := rules.New(srv.DB)
 	if err != nil {
 		t.Fatal(err)
 	}
 	srv.Assist = assist.New(srv.DB, srv.Svc, srv.Data, idx, assist.Config{APIKey: "test", BaseURL: fake.URL})
+}
+
+// wireAssistWith is wireAssistFunc with a fixed raw response body (e.g. a tool_use block).
+func wireAssistWith(t *testing.T, srv *Server, body []byte) {
+	t.Helper()
+	wireAssistFunc(t, srv, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(body)
+	})
+}
+
+// wireAssistWithCounter is wireAssistWith plus a call counter, for tests that assert a request
+// was refused before ever reaching the API.
+func wireAssistWithCounter(t *testing.T, srv *Server, calls *int, body []byte) {
+	t.Helper()
+	var n int32
+	wireAssistFunc(t, srv, func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&n, 1)
+		*calls = int(atomic.LoadInt32(&n))
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(body)
+	})
+}
+
+// wireAssistWithCapture is wireAssistWith plus a copy of the last request body it received
+// (decoded), for tests that check exactly what context was sent to the model.
+func wireAssistWithCapture(t *testing.T, srv *Server, last *map[string]any, body []byte) {
+	t.Helper()
+	wireAssistFunc(t, srv, func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(last)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(body)
+	})
 }
 
 func suggestResp(options ...map[string]any) []byte {

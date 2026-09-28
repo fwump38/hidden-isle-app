@@ -102,10 +102,14 @@
             <div class="col-4"><input class="form-control form-control-sm" type="number" min="0" name="set.track_length" value="{{.TrackLength}}" aria-label="Track length" title="Track length"></div>
             <div class="col-6"><input class="form-control form-control-sm" name="set.leader" value="{{.Leader}}" placeholder="Leader" aria-label="Leader"></div>
             <div class="col-6"><select class="form-select form-select-sm" name="set.status" aria-label="Status">{{$st := .Status}}{{range $snap.Campaign.AdversaryStatus}}<option {{if eq . $st}}selected{{end}}>{{.}}</option>{{end}}</select></div>
-            <div class="col-12"><input class="form-control form-control-sm" name="set.plot" value="{{.Plot}}" placeholder="Plot" aria-label="Plot"></div>
-            <div class="col-12"><input class="form-control form-control-sm" name="set.motivation" value="{{.Motivation}}" placeholder="Motivation" aria-label="Motivation"></div>
-            <div class="col-12"><textarea class="form-control form-control-sm" name="set.members" rows="2" placeholder="Members (up to 4, with motivations)" aria-label="Members">{{.Members}}</textarea></div>
-            <div class="col-12"><textarea class="form-control form-control-sm border-warning-subtle" name="set.secrets" rows="2" placeholder="Seer-only secrets" aria-label="Secrets">{{.Secrets}}</textarea></div>
+            <div class="col-12"><textarea class="form-control form-control-sm" id="plot-{{.ID}}" name="set.plot" rows="2" placeholder="Plot" aria-label="Plot">{{.Plot}}</textarea>
+            {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "adversary_plot" "Target" (printf "plot-%d" .ID) "AgentID" 0 "CampaignID" $c.ID "SessionID" 0 "Draft" false)}}{{end}}</div>
+            <div class="col-12"><textarea class="form-control form-control-sm" id="motiv-{{.ID}}" name="set.motivation" rows="2" placeholder="Motivation" aria-label="Motivation">{{.Motivation}}</textarea>
+            {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "adversary_motivation" "Target" (printf "motiv-%d" .ID) "AgentID" 0 "CampaignID" $c.ID "SessionID" 0 "Draft" false)}}{{end}}</div>
+            <div class="col-12"><textarea class="form-control form-control-sm" id="mem-{{.ID}}" name="set.members" rows="2" placeholder="Members (up to 4, with motivations)" aria-label="Members">{{.Members}}</textarea>
+            {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "adversary_members" "Target" (printf "mem-%d" .ID) "AgentID" 0 "CampaignID" $c.ID "SessionID" 0 "Draft" false)}}{{end}}</div>
+            <div class="col-12"><textarea class="form-control form-control-sm border-warning-subtle" id="secrets-{{.ID}}" name="set.secrets" rows="2" placeholder="Seer-only secrets" aria-label="Secrets">{{.Secrets}}</textarea>
+            {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "adversary_secrets" "Target" (printf "secrets-%d" .ID) "AgentID" 0 "CampaignID" $c.ID "SessionID" 0 "Draft" false)}}{{end}}</div>
             <div class="col-6"><input type="hidden" name="set.major" value=""><div class="form-check"><input class="form-check-input" type="checkbox" name="set.major" id="maj-{{.ID}}" {{if .Major}}checked{{end}}><label class="form-check-label" for="maj-{{.ID}}">Major</label></div></div>
             <div class="col-6"><input type="hidden" name="set.hidden" value=""><div class="form-check"><input class="form-check-input" type="checkbox" name="set.hidden" id="hid-{{.ID}}" {{if .Hidden}}checked{{end}}><label class="form-check-label" for="hid-{{.ID}}">Hidden from players</label></div></div>
             <div class="col-12 d-flex justify-content-between"><button class="btn btn-sm btn-outline-light" type="submit">Save</button>
@@ -143,9 +147,12 @@
       {{if $seer}}
       <form method="post" action="{{$u}}" class="row g-1">
         <input type="hidden" name="back" value="{{$back}}">
-        <div class="col-12"><label class="small text-body-secondary" for="ev-{{.ID}}">Events</label><textarea class="form-control form-control-sm" id="ev-{{.ID}}" name="set.events" rows="3">{{.Events}}</textarea></div>
-        <div class="col-12"><label class="small text-body-secondary" for="co-{{.ID}}">Contacts</label><textarea class="form-control form-control-sm" id="co-{{.ID}}" name="set.contacts" rows="2">{{.Contacts}}</textarea></div>
-        <div class="col-12"><label class="small text-body-secondary" for="no-{{.ID}}">Notes</label><textarea class="form-control form-control-sm" id="no-{{.ID}}" name="set.notes" rows="2">{{.Notes}}</textarea></div>
+        <div class="col-12"><label class="small text-body-secondary" for="ev-{{.ID}}">Events</label><textarea class="form-control form-control-sm" id="ev-{{.ID}}" name="set.events" rows="3">{{.Events}}</textarea>
+        {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "territory_events" "Target" (printf "ev-%d" .ID) "AgentID" 0 "CampaignID" $c.ID "SessionID" 0 "Draft" false)}}{{end}}</div>
+        <div class="col-12"><label class="small text-body-secondary" for="co-{{.ID}}">Contacts</label><textarea class="form-control form-control-sm" id="co-{{.ID}}" name="set.contacts" rows="2">{{.Contacts}}</textarea>
+        {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "territory_contacts" "Target" (printf "co-%d" .ID) "AgentID" 0 "CampaignID" $c.ID "SessionID" 0 "Draft" false)}}{{end}}</div>
+        <div class="col-12"><label class="small text-body-secondary" for="no-{{.ID}}">Notes</label><textarea class="form-control form-control-sm" id="no-{{.ID}}" name="set.notes" rows="2">{{.Notes}}</textarea>
+        {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "territory_notes" "Target" (printf "no-%d" .ID) "AgentID" 0 "CampaignID" $c.ID "SessionID" 0 "Draft" false)}}{{end}}</div>
         <div class="col-12"><button class="btn btn-sm btn-outline-light" type="submit">Save</button></div>
       </form>
       {{else}}
@@ -197,7 +204,8 @@
 <form method="post" action="{{$u}}" class="card card-body mb-3">
   <input type="hidden" name="back" value="{{$back}}">
   <input class="form-control fw-semibold mb-2" name="set.title" value="{{.Title}}" aria-label="Title">
-  <textarea class="form-control mb-2" name="set.body" rows="6" aria-label="Note">{{.Body}}</textarea>
+  <textarea class="form-control mb-2" id="note-body-{{.ID}}" name="set.body" rows="6" aria-label="Note">{{.Body}}</textarea>
+  {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "seer_note" "Target" (printf "note-body-%d" .ID) "AgentID" 0 "CampaignID" $c.ID "SessionID" 0 "Draft" false)}}{{end}}
   <div class="d-flex justify-content-between"><button class="btn btn-sm btn-outline-light" type="submit">Save</button>
     <button class="btn btn-sm btn-outline-danger" type="submit" formaction="{{$u}}/delete" hx-post="{{$u}}/delete" hx-confirm="Delete this note? (Undo from the log.)">Delete</button></div>
 </form>

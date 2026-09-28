@@ -85,6 +85,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	s.registerDowntime(mux)
 	s.registerCreation(mux)
 	s.registerRules(mux)
+	s.registerAssist(mux)
 
 	mux.Handle("GET /admin", s.requireSeer(http.HandlerFunc(s.admin)))
 	mux.Handle("POST /admin/gamedata/sync", s.requireSeer(http.HandlerFunc(s.syncGameData)))

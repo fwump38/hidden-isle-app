@@ -38,3 +38,37 @@
   </div>
 </div>
 {{end}}
+
+{{/* write-assist adds "Enhance" / "Draft from campaign" controls under a free-form textarea,
+     driven by internal/assist (internal/web/assist_fields.go lists the valid Field keys).
+     (dict "Field" "journal" "Target" "textarea-id" "AgentID" 0 "CampaignID" $c.ID "SessionID" 0 "Draft" bool)
+     Target is the id of the <textarea> it helps with (no leading #); AgentID/CampaignID/SessionID
+     are always given, 0 when not applicable. Wrap the call in {{if $.AssistEnabled}}…{{end}} (see
+     create-agent.html for the pattern) — nothing here checks that itself. app.js reads the target
+     textarea live and fills it back in; nothing is saved until the player applies a result and
+     submits the form themselves. */}}
+{{define "write-assist"}}
+<div class="hi-assist mt-1" data-assist-target="{{.Target}}" data-assist-field="{{.Field}}"
+     data-assist-agent="{{.AgentID}}" data-assist-campaign="{{.CampaignID}}" data-assist-session="{{.SessionID}}">
+  <div class="d-flex gap-2 flex-wrap">
+    <button class="btn btn-sm btn-outline-info" type="button" data-assist-write disabled><i class="bi bi-magic"></i> Enhance</button>
+    {{if .Draft}}<button class="btn btn-sm btn-outline-info" type="button" data-assist-draft><i class="bi bi-stars"></i> Draft from campaign</button>{{end}}
+  </div>
+  <div class="hi-assist-out"></div>
+</div>
+{{end}}
+
+{{/* assist-preview is the htmx response for a write-assist request: a web.assistPreviewData. */}}
+{{define "assist-preview"}}
+{{with .Error}}<div class="small text-warning mt-2"><i class="bi bi-exclamation-circle"></i> {{.}}</div>{{end}}
+{{with .Text}}
+<div class="card card-body py-2 mt-2 hi-assist-result">
+  <p class="small hi-prose mb-2">{{.}}</p>
+  <div class="d-flex gap-2 flex-wrap">
+    <button class="btn btn-sm btn-primary" type="button" data-assist-apply="replace">Replace</button>
+    <button class="btn btn-sm btn-outline-primary" type="button" data-assist-apply="append">Append</button>
+    <button class="btn btn-sm btn-outline-secondary" type="button" data-assist-apply="discard">Discard</button>
+  </div>
+</div>
+{{end}}
+{{end}}

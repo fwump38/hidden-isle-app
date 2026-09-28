@@ -25,7 +25,8 @@
           <input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="kind" value="{{.Kind}}"><input type="hidden" name="back" value="{{$back}}">
           {{with .SessionID}}<input type="hidden" name="session_id" value="{{.}}">{{end}}{{with .AgentID}}<input type="hidden" name="agent_id" value="{{.}}">{{end}}
           <div class="col-12"><input class="form-control form-control-sm" name="title" value="{{.Title}}" aria-label="Title"></div>
-          <div class="col-12"><textarea class="form-control form-control-sm" name="body" rows="4" aria-label="Text">{{.Body}}</textarea></div>
+          <div class="col-12"><textarea class="form-control form-control-sm" id="body-{{.ID}}" name="body" rows="4" aria-label="Text">{{.Body}}</textarea>
+          {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "journal" "Target" (printf "body-%d" .ID) "AgentID" (uintv .AgentID) "CampaignID" $c.ID "SessionID" (uintv .SessionID) "Draft" false)}}{{end}}</div>
           <div class="col-8"><select class="form-select form-select-sm" name="visibility" aria-label="Who can read it">{{$v := .Visibility}}
             <option value="party" {{if eq $v "party"}}selected{{end}}>Everyone</option><option value="owner" {{if eq $v "owner"}}selected{{end}}>Me and the Seer</option><option value="private" {{if eq $v "private"}}selected{{end}}>Only me</option>{{if $seer}}<option value="seer" {{if eq $v "seer"}}selected{{end}}>Seer only</option>{{end}}</select></div>
           <div class="col-4 d-flex align-items-center"><div class="form-check mb-0"><input class="form-check-input" type="checkbox" name="published" id="pub-{{.ID}}" {{if .Published}}checked{{end}}><label class="form-check-label" for="pub-{{.ID}}">Published</label></div></div>
@@ -47,7 +48,8 @@
           {{if $seer}}<option value="recap">Player-safe recap</option><option value="session_log">Session log</option>{{end}}</select></div>
         <div class="col-6"><select class="form-select form-select-sm" name="session_id" aria-label="Session"><option value="">No session</option>{{range $d.Sessions}}<option value="{{.ID}}">{{.Number}}. {{.Title}}</option>{{end}}</select></div>
         <div class="col-12"><input class="form-control form-control-sm" name="title" placeholder="Title" aria-label="Title"></div>
-        <div class="col-12"><textarea class="form-control form-control-sm" name="body" rows="6" required placeholder="What happened, in your words" aria-label="Text"></textarea></div>
+        <div class="col-12"><textarea class="form-control form-control-sm" id="body-new" name="body" rows="6" required placeholder="What happened, in your words" aria-label="Text"></textarea>
+        {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "journal" "Target" "body-new" "AgentID" 0 "CampaignID" $c.ID "SessionID" 0 "Draft" false)}}{{end}}</div>
         <div class="col-8"><select class="form-select form-select-sm" name="visibility" aria-label="Who can read it">
           <option value="private">Only me</option><option value="owner" selected>Me and the Seer</option><option value="party">Everyone</option>{{if $seer}}<option value="seer">Seer only</option>{{end}}</select></div>
         <div class="col-4 d-flex align-items-center"><div class="form-check mb-0"><input class="form-check-input" type="checkbox" name="published" id="pub-new"><label class="form-check-label small" for="pub-new">Publish</label></div></div>

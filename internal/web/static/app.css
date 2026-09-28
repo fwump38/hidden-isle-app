@@ -62,6 +62,9 @@ body, main { overflow-anchor: none; }
 .hi-card-meaning { border-left: 3px solid var(--hi-accent); padding-left: .6rem; }
 .hi-wiz-foot { display: flex; justify-content: space-between; align-items: center; gap: .5rem; flex-wrap: wrap; border-top: 1px solid var(--bs-border-color); margin-top: 1rem; padding-top: .75rem; }
 
+/* Writing assistant (partials/choices.html "write-assist", app.js .hi-assist). */
+.hi-assist-result { border-color: var(--hi-accent); }
+
 /* Rule browser (/rules). */
 .hi-rules-tabs { scrollbar-width: thin; }
 .hi-rules-search input { width: 14rem; max-width: 55vw; }

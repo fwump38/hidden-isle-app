@@ -154,3 +154,91 @@ func TestSuggestRespectsTheBudget(t *testing.T) {
 		t.Fatalf("err = %v, want ErrBudget", err)
 	}
 }
+
+func textToolResp(text string) []byte {
+	b, _ := json.Marshal(map[string]any{
+		"id": "msg_1", "type": "message", "role": "assistant", "model": "claude-sonnet-5",
+		"content":     []map[string]any{{"type": "tool_use", "id": "toolu_1", "name": "offer_text", "input": map[string]any{"text": text}}},
+		"stop_reason": "tool_use",
+		"usage":       map[string]any{"input_tokens": 150, "output_tokens": 40},
+	})
+	return b
+}
+
+// TestWriteEnhanceForcesTheToolAndSendsTheBrief covers Enhance: the request carries both the
+// author's draft and the brief's lines, forces offer_text, and spends against the same budget.
+func TestWriteEnhanceForcesTheToolAndSendsTheBrief(t *testing.T) {
+	var body map[string]any
+	w := setup(t, func(rw http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&body)
+		rw.Header().Set("Content-Type", "application/json")
+		rw.Write(textToolResp("A fuller telling of the same events."))
+	})
+	brief := &Brief{}
+	brief.Add("Adversary: The Choir — a smuggling ring")
+	got, err := w.assist.Write(context.Background(), w.ana, WriteRequest{
+		Field: "journal entry", Mode: ModeEnhance, Text: "We found the smugglers.", Brief: brief,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "A fuller telling of the same events." {
+		t.Errorf("got = %q", got)
+	}
+	tc, _ := body["tool_choice"].(map[string]any)
+	if tc["type"] != "tool" || tc["name"] != "offer_text" {
+		t.Errorf("tool_choice = %v, want the forced offer_text tool", body["tool_choice"])
+	}
+	raw, _ := json.Marshal(body["messages"])
+	for _, want := range []string{"We found the smugglers.", "The Choir"} {
+		if !strings.Contains(string(raw), want) {
+			t.Errorf("request messages missing %q: %s", want, raw)
+		}
+	}
+	var usage db.AIUsage
+	if err := w.svc.DB.Where("user_id = ?", w.ana.ID).First(&usage).Error; err != nil || usage.CostUSD <= 0 {
+		t.Errorf("write spend wasn't recorded: %+v %v", usage, err)
+	}
+}
+
+func TestWriteEnhanceRequiresText(t *testing.T) {
+	w := setup(t, func(rw http.ResponseWriter, r *http.Request) {
+		t.Error("no API call should be made with nothing to enhance")
+	})
+	if _, err := w.assist.Write(context.Background(), w.ana, WriteRequest{Field: "journal entry", Mode: ModeEnhance}); err == nil {
+		t.Error("expected an error enhancing empty text")
+	}
+}
+
+func TestWriteDraftNeedsNoText(t *testing.T) {
+	var body map[string]any
+	w := setup(t, func(rw http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&body)
+		rw.Header().Set("Content-Type", "application/json")
+		rw.Write(textToolResp("A recap drafted from the log."))
+	})
+	brief := &Brief{}
+	brief.Add("Session: The Choir's Warehouse — the Hand broke the smuggling ring")
+	got, err := w.assist.Write(context.Background(), w.ana, WriteRequest{Field: "recap", Mode: ModeDraft, Brief: brief})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "A recap drafted from the log." {
+		t.Errorf("got = %q", got)
+	}
+	raw, _ := json.Marshal(body["messages"])
+	if strings.Contains(string(raw), "What's written so far") {
+		t.Errorf("draft mode shouldn't claim there's existing text: %s", raw)
+	}
+}
+
+func TestWriteRespectsTheBudget(t *testing.T) {
+	w := setup(t, func(rw http.ResponseWriter, r *http.Request) {
+		t.Error("no API call should be made over the cap")
+	})
+	w.assist.cfg.PlayerCapUSD = 1
+	w.svc.DB.Create(&db.AIUsage{UserID: w.ana.ID, Month: currentMonth(), CostUSD: 2})
+	if _, err := w.assist.Write(context.Background(), w.ana, WriteRequest{Field: "journal entry", Mode: ModeEnhance, Text: "hi"}); !errors.Is(err, ErrBudget) {
+		t.Fatalf("err = %v, want ErrBudget", err)
+	}
+}

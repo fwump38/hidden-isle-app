@@ -396,3 +396,58 @@ document.addEventListener("change", (e) => {
 });
 document.addEventListener("htmx:afterSettle", () => updateSkillTotal(document.getElementById("wiz-skills")));
 document.addEventListener("DOMContentLoaded", () => updateSkillTotal(document.getElementById("wiz-skills")));
+
+// ---------------------------------------------------------------- writing assistant
+// .hi-assist (partials/choices.html "write-assist"): "Enhance" sends the target textarea's
+// current value to /assist/write; "Draft from campaign" sends none. Either way the result
+// previews in place with Replace/Append/Discard; nothing touches the textarea until one of those
+// is clicked, and nothing is saved until the surrounding form is submitted.
+function assistUpdateButtons(root) {
+  (root || document).querySelectorAll(".hi-assist").forEach((box) => {
+    const ta = document.getElementById(box.dataset.assistTarget || "");
+    const btn = box.querySelector("[data-assist-write]");
+    if (btn) btn.disabled = !ta || !ta.value.trim();
+  });
+}
+document.addEventListener("input", (e) => {
+  if (e.target.matches?.("textarea, input")) assistUpdateButtons(document);
+});
+document.addEventListener("DOMContentLoaded", () => assistUpdateButtons(document));
+document.addEventListener("htmx:afterSettle", () => assistUpdateButtons(document));
+
+document.addEventListener("click", (e) => {
+  const go = e.target.closest("[data-assist-write], [data-assist-draft]");
+  if (go) {
+    const box = go.closest(".hi-assist");
+    const out = box && box.querySelector(".hi-assist-out");
+    if (!box || !out || !window.htmx) return;
+    const draft = go.hasAttribute("data-assist-draft");
+    const ta = document.getElementById(box.dataset.assistTarget || "");
+    go.disabled = true;
+    out.innerHTML = '<span class="small text-body-secondary"><span class="spinner-border spinner-border-sm"></span> Thinking…</span>';
+    htmx.ajax("POST", "/assist/write", {
+      target: out, swap: "innerHTML",
+      values: {
+        field: box.dataset.assistField || "", mode: draft ? "draft" : "enhance",
+        text: draft ? "" : (ta ? ta.value : ""), target: box.dataset.assistTarget || "",
+        agent_id: box.dataset.assistAgent || "0", campaign_id: box.dataset.assistCampaign || "0",
+        session_id: box.dataset.assistSession || "0",
+      },
+    }).finally(() => { go.disabled = false; assistUpdateButtons(box); });
+    return;
+  }
+  const apply = e.target.closest("[data-assist-apply]");
+  if (!apply) return;
+  const box = apply.closest(".hi-assist");
+  const out = box && box.querySelector(".hi-assist-out");
+  if (apply.dataset.assistApply !== "discard") {
+    const ta = box && document.getElementById(box.dataset.assistTarget || "");
+    const text = apply.closest(".hi-assist-result")?.querySelector("p")?.textContent || "";
+    if (ta && text) {
+      ta.value = apply.dataset.assistApply === "append" && ta.value.trim() ? ta.value.replace(/\s+$/, "") + "\n\n" + text : text;
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      ta.focus();
+    }
+  }
+  if (out) out.innerHTML = "";
+});
