@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clocks</title>
+<style>
+/*SHARED_CSS*/
+.clocks { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); margin-bottom: 12px; }
+.clockcard { display: flex; gap: 10px; align-items: center; }
+.clockcard.done { opacity: .7; }
+.clockcard .name { font-weight: 600; }
+form.new input[name=name] { flex: 1 1 14rem; }
+</style>
+</head>
+<body>
+<div class="row why">
+  <label class="small muted" for="why-input">Why?</label>
+  <input type="text" id="why-input" placeholder="for the change log, e.g. noisy break-in" autocomplete="off">
+</div>
+<div id="status" class="status"></div>
+<div id="app"><p class="muted">Loading the clocks…</p></div>
+<script>
+/*SHARED_JS*/
+
+const { h, clock, change } = hi;
+
+function render(v) {
+  if (!v || !v.clocks) return hi.fail("No clocks in this result.");
+  const running = v.clocks.filter((c) => c.status === "Running");
+  const other = v.clocks.filter((c) => c.status !== "Running");
+
+  const card = (c) => {
+    const upd = (fields, summary) => change("update_record", { kind: "clock", id: c.id, fields }, `clock “${c.name}”: ${summary}`);
+    const full = c.filled >= c.segments;
+    return h("div", { class: "box clockcard" + (c.status === "Running" ? "" : " done") },
+      clock(c.filled, c.segments, 56),
+      h("div", { class: "grow" },
+        h("div", { class: "name" }, c.name),
+        h("div", { class: "small muted" }, `${c.filled}/${c.segments}`, c.agent_name ? ` · ${c.agent_name}` : "", c.scope ? ` · ${c.scope}` : "",
+          c.status !== "Running" ? ` · ${c.status}` : ""),
+        h("div", { class: "row small", style: "margin-top: 4px" },
+          c.visibility === "seer" ? h("span", { class: "badge seer", title: "Players can't see this clock" }, "Seer only") : null,
+          h("button", { class: "btn", type: "button", "aria-label": "Unfill a segment", disabled: c.filled <= 0,
+            onclick: () => change("tick_clock", { clock_id: c.id, amount: -1 }, `clock “${c.name}” −1`) }, "−"),
+          h("button", { class: "btn", type: "button", "aria-label": "Fill a segment", disabled: full,
+            onclick: () => change("tick_clock", { clock_id: c.id, amount: 1 }, `clock “${c.name}” +1`) }, "+"),
+          c.visibility === "seer" ? h("button", { class: "btn", type: "button", title: "Show it to the players",
+            onclick: () => upd({ visibility: "party" }, "revealed to the players") }, "Reveal") : null,
+          h("select", { "aria-label": "Status", onchange: (e) => upd({ status: e.target.value }, `status → ${e.target.value}`) },
+            v.statuses.map((s) => h("option", { selected: s === c.status }, s))))));
+  };
+
+  const form = h("form", { class: "row new box", onsubmit: (e) => {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const name = String(f.get("name") || "").trim();
+      if (!name) return hi.fail("Name the clock after what happens when it fills (p. 86).");
+      change("create_record", { campaign_id: v.campaign_id, kind: "clock",
+        fields: { name, segments: Number(f.get("segments")), visibility: f.get("seer") ? "seer" : "party" } }, `started clock “${name}”`);
+    } },
+    h("input", { type: "text", name: "name", placeholder: "New clock: what happens when it fills", "aria-label": "Clock name" }),
+    h("select", { name: "segments", "aria-label": "Segments" }, v.segment_choices.map((n) => h("option", { value: n, selected: n === 4 }, `${n} segments`))),
+    h("label", { class: "check small" }, h("input", { type: "checkbox", name: "seer" }), "Seer only"),
+    h("button", { class: "btn primary", type: "submit" }, "Start"));
+
+  hi.mount(
+    h("div", { class: "row between head" }, h("h1", {}, `Clocks · ${v.campaign}`),
+      h("button", { class: "btn", type: "button", onclick: hi.refresh, title: "Reload" }, "↻ Refresh")),
+    running.length ? h("div", { class: "clocks" }, running.map(card)) : h("p", { class: "muted" }, "No running clocks."),
+    form,
+    other.length ? h("details", { id: "other", style: "margin-top: 10px" }, h("summary", { class: "small muted" }, `Finished or paused (${other.length})`),
+      h("div", { class: "clocks", style: "margin-top: 8px" }, other.map(card))) : null);
+}
+
+hi.start({ name: "clocks", tool: "show_clocks", render });
+</script>
+</body>
+</html>

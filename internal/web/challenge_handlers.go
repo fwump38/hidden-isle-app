@@ -24,12 +24,6 @@ type challengeView struct {
 	Form    url.Values
 }
 
-// Consequence menus (p. 17 failure, p. 18 complicated success).
-var failureIdeas = []string{"harm (1-3, physical or spiritual)", "lose an item, for now or for good", "a complication", "rising danger: start or tick a clock",
-	"a future disadvantage", "the enemy acts", "a lost opportunity", "higher stakes", "interpersonal conflict"}
-var complicatedIdeas = []string{"harm", "a cost: a favor, a price, a hard choice", "lose an item", "reduced effect", "rising danger: start or tick a clock",
-	"a lost opportunity", "an unexpected problem", "higher stakes", "stuck? draw a vision card for inspiration"}
-
 func setupFromForm(ag *db.Agent, f url.Values) challenge.Setup {
 	skill := f.Get("skill")
 	st := challenge.Setup{Skill: skill, SkillPoints: ag.Skills[skill], HarmInSuit: len(ag.Harm[challenge.SuitOf(skill)]),
@@ -107,9 +101,9 @@ func (s *Server) challengeHelper(w http.ResponseWriter, r *http.Request) {
 		v.Result = &res
 		switch res.Outcome {
 		case "failure":
-			v.Ideas = failureIdeas
+			v.Ideas = challenge.FailureIdeas
 		case "complicated":
-			v.Ideas = complicatedIdeas
+			v.Ideas = challenge.ComplicatedIdeas
 		}
 	}
 }

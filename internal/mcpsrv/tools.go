@@ -23,7 +23,8 @@ Standing rules:
 - The table draws real tarot cards: ask what was drawn. Use draw_cards only when asked for a digital draw.
 - Every change needs a short reason; it goes in the change log that players can read. Seer-only material (session prep, adversary secrets, Seer notes, hidden clocks and adversaries, adventure text) must never appear in anything players see.
 - Long-form writing (session logs, recaps, histories) is written by people. write_entry stores what the Seer or a player wrote, lightly tidied if asked; don't invent events that aren't in their notes.
-- get_campaign first when starting play; it has the campaign's current state.`
+- get_campaign first when starting play; it has the campaign's current state.
+- show_agent, show_clocks and show_challenge open interactive widgets (in clients that support MCP Apps) where the Seer can make changes directly; use them when the Seer wants to see or work with a sheet, the clocks or a challenge, and the get_* tools when you only need the data.`
 
 type empty struct{}
 

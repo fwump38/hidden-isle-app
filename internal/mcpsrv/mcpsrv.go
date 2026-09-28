@@ -51,6 +51,8 @@ func New(g *gorm.DB, cfg *config.Config, data *gamedata.Store, svc *campaign.Ser
 	s.mcp = mcp.NewServer(&mcp.Implementation{Name: "hidden-isle", Title: "The Hidden Isle", Version: build},
 		&mcp.ServerOptions{Instructions: instructions})
 	s.addTools()
+	s.addWidgetTools()
+	s.addWidgets()
 	s.syncPrompts(data.Current())
 	data.OnLoad(s.syncPrompts)
 	return s

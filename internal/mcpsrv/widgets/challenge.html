@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Challenge helper</title>
+<style>
+/*SHARED_CSS*/
+.field { display: flex; flex-direction: column; gap: 2px; }
+.field > span { font-size: .8em; color: var(--muted); }
+.count { font-size: 1.6rem; font-weight: 700; line-height: 1.1; }
+ul, ol { margin: 4px 0; padding-left: 1.2rem; }
+.outcome { border-radius: var(--radius); padding: 8px 10px; margin-top: 10px; border: 1px solid var(--line); }
+.outcome.total { border-color: var(--ok); }
+.outcome.complicated { border-color: var(--warn); }
+.outcome.failure { border-color: var(--danger); }
+.outcome .label { font-size: 1.1rem; font-weight: 700; }
+.outcome.total .label { color: var(--ok); } .outcome.complicated .label { color: var(--warn); } .outcome.failure .label { color: var(--danger); }
+.note { color: var(--warn); }
+section + section { margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="row why">
+  <label class="small muted" for="why-input">Why?</label>
+  <input type="text" id="why-input" placeholder="for the change log (track marks)" autocomplete="off">
+</div>
+<div id="status" class="status"></div>
+<div id="app"><p class="muted">Loading the challenge helper…</p></div>
+<script>
+/*SHARED_JS*/
+
+const { h } = hi;
+
+// st is what's been chosen; it survives a refresh (which only reloads the Agent).
+const st = {
+  skill: "", difficulty: "medium", seer_extra: 0, participants: 0,
+  burden: false, vice: false, ideal: false, virtue: false, ignore_harm: false,
+  mods: [{ label: "", cards: 0 }, { label: "", cards: 0 }],
+  played: "", seer: "", fortunes: [0, 1, 2].map(() => ({ card: "", mode: "add", suit_bonus: false, by: "" })),
+  count: null, result: null, drawn: null, marked: false,
+};
+let v = null;
+
+function load(data) {
+  if (!data || !data.agent) return hi.fail("No Agent in this result.");
+  const first = !v;
+  v = data;
+  if (first) st.skill = v.skill || v.suits[0].skills[0].name;
+  render();
+  if (first) count();
+}
+
+async function count() {
+  st.result = null;
+  st.marked = false;
+  try {
+    st.count = await hi.call("challenge_count", {
+      agent_id: v.agent.id, skill: st.skill, difficulty: st.difficulty,
+      seer_extra: Number(st.seer_extra) || 0, participants: Number(st.participants) || 0,
+      burden: st.burden, vice: st.vice, ideal: st.ideal, virtue: st.virtue, ignore_harm: st.ignore_harm,
+      modifiers: st.mods.filter((m) => Number(m.cards)).map((m) => ({ label: m.label || "modifier", cards: Number(m.cards) })),
+    });
+    hi.ok("");
+  } catch (err) {
+    st.count = null;
+    hi.fail(err.message);
+  }
+  render();
+}
+
+async function resolve() {
+  if (!st.played || !st.seer) return hi.fail("Choose the card played and the Seer's card.");
+  try {
+    st.result = await hi.call("challenge_resolve", {
+      skill: st.skill, played: st.played, seer: st.seer, numeral_bonus: st.count ? st.count.numeral_bonus : 0,
+      fortunes: st.fortunes.filter((f) => f.card),
+    });
+    hi.ok("");
+    hi.context(`resolved ${v.agent.name}'s ${st.skill} challenge: ${st.result.label} (${st.result.challenge_card} vs ${st.result.seer_card}).`);
+  } catch (err) {
+    hi.fail(err.message);
+  }
+  render();
+}
+
+async function draw() {
+  try {
+    const out = await hi.call("draw_cards", { deck: "pips", hands: [{ name: v.agent.name, count: st.count.agent_cards }] });
+    st.drawn = out.result.hands[0].cards;
+  } catch (err) {
+    hi.fail(err.message);
+  }
+  render();
+}
+
+async function markTracks() {
+  const a = v.agent, fields = {};
+  if (st.count.mark_burden) fields.burden_track = Math.min(7, a.burden_track + 1);
+  if (st.count.mark_ideal) fields.ideal_track = Math.min(7, a.ideal_track + 1);
+  const why = document.getElementById("why-input");
+  if (!why.value.trim()) why.value = "used in a challenge (p. 20)";
+  if (await hi.change("update_record", { kind: "agent", id: a.id, fields }, `${a.name}: marked the ${Object.keys(fields).map((k) => k.replace("_track", "")).join(" and ")} track`)) {
+    st.marked = true;
+    render();
+  }
+}
+
+function askClaude() {
+  const r = st.result, c = st.count;
+  const lines = [
+    `${v.agent.name}'s ${st.skill} challenge (trump ${c ? c.trump : "?"}): ${r.label}.`,
+    `${r.challenge_card} (${r.challenge_number}) vs the Seer's ${r.seer_card} (${r.seer_number}).`,
+    ...r.steps,
+  ];
+  if (r.outcome !== "total") lines.push("Suggest a few consequences that fit the fiction, from the book's menu (p. 17 failure, p. 18 complicated success).");
+  hi.message(lines.join("\n")).catch((err) => hi.fail(err.message));
+}
+
+// bind wires an input to st and recounts on change.
+function bind(key, props) {
+  const el = h("input", props);
+  if (el.type === "checkbox") el.checked = !!st[key]; else el.value = st[key];
+  el.addEventListener("change", () => { st[key] = el.type === "checkbox" ? el.checked : el.value; count(); });
+  return el;
+}
+
+function pipSelect(value, onchange, label, empty) {
+  return h("select", { "aria-label": label, onchange: (e) => onchange(e.target.value) },
+    h("option", { value: "", selected: !value }, empty), v.pips.map((p) => h("option", { selected: p === value }, p)));
+}
+
+function render() {
+  if (!v) return;
+  const a = v.agent, c = st.count, r = st.result;
+  const harm = Object.fromEntries(v.suits.map((s) => [s.suit, s.harm.filter(Boolean).length]));
+
+  const setup = h("section", { class: "box" },
+    h("div", { class: "row" },
+      h("label", { class: "field grow" }, h("span", {}, "Skill"), skillSelect()),
+      h("label", { class: "field" }, h("span", {}, "Seer's difficulty"),
+        h("select", { onchange: (e) => { st.difficulty = e.target.value; count(); } },
+          [["easy", "Easy (2)"], ["medium", "Medium (3)"], ["hard", "Hard (4)"]].map(([k, l]) => h("option", { value: k, selected: k === st.difficulty }, l)))),
+      h("label", { class: "field", title: "Extra Seer cards for dangerous context (p. 15)" }, h("span", {}, "Danger +"), bind("seer_extra", { type: "number", min: 0, style: "width: 4.5rem" })),
+      h("label", { class: "field", title: "Group action: participants, +1 Seer card each (p. 22)" }, h("span", {}, "Group of"), bind("participants", { type: "number", min: 0, style: "width: 4.5rem" }))),
+    h("div", { class: "row small", style: "margin-top: 6px" },
+      h("label", { class: "check" }, bind("burden", { type: "checkbox" }), `Burden${a.burden ? " (" + a.burden + ")" : ""}: +1 card`),
+      h("label", { class: "check" }, bind("vice", { type: "checkbox" }), `Vice${a.vices.length ? " (" + a.vices.join(", ") + ")" : ""}: +1 card`),
+      h("label", { class: "check" }, bind("ideal", { type: "checkbox" }), `Ideal${a.ideal ? " (" + a.ideal + ")" : ""}: −1 card, +3`),
+      h("label", { class: "check" }, bind("virtue", { type: "checkbox" }), `Virtue${a.virtues.length ? " (" + a.virtues.join(", ") + ")" : ""}: +3`),
+      h("label", { class: "check", title: "Only when an ability says so, e.g. UNSTOPPABLE" }, bind("ignore_harm", { type: "checkbox" }), "Ignore harm penalty")),
+    h("div", { class: "row small", style: "margin-top: 6px" }, st.mods.map((m, i) => [
+      h("input", { type: "text", value: m.label, placeholder: i ? "another modifier" : "e.g. preparation, an item, an ally", "aria-label": "Modifier",
+        onchange: (e) => { m.label = e.target.value; if (Number(m.cards)) count(); } }),
+      h("select", { "aria-label": "Cards", onchange: (e) => { m.cards = Number(e.target.value); count(); } },
+        [0, 1, 2, -1].map((n) => h("option", { value: n, selected: n === Number(m.cards) }, n > 0 ? "+" + n : n < 0 ? "−1" : "±0"))),
+    ])));
+
+  const counts = c ? h("section", { class: "grid" },
+    h("div", { class: "box" }, h("div", { class: "count" }, c.agent_cards),
+      h("div", {}, `cards for ${a.name} · trump `, h("strong", { class: "suit-" + c.trump }, c.trump), c.numeral_bonus ? ` · +${c.numeral_bonus} to each card` : ""),
+      h("ul", { class: "small muted" }, c.breakdown.map((b) => h("li", {}, b)))),
+    h("div", { class: "box" }, h("div", { class: "count" }, c.seer_cards), h("div", {}, "cards for the Seer"),
+      h("ul", { class: "small muted" }, c.seer_breakdown.map((b) => h("li", {}, b)))),
+    (c.notes || []).length ? h("div", { class: "small note" }, c.notes.join(" ")) : null,
+    h("div", { class: "row small" },
+      h("button", { class: "btn", type: "button", onclick: draw, title: "Only if the table isn't using a real deck" }, "Draw the hand digitally"),
+      st.drawn ? h("span", {}, h("strong", {}, "Digital hand: "), st.drawn.join(", "), h("span", { class: "muted" }, ". The Seer draws their own.")) : null))
+    : null;
+
+  const played = h("section", { class: "box" }, h("h2", {}, "Cards played"),
+    h("div", { class: "row" },
+      h("label", { class: "field" }, h("span", {}, `${a.name}'s card`), pipSelect(st.played, (x) => { st.played = x; }, "Card played", "…")),
+      h("label", { class: "field" }, h("span", {}, "Seer's card"), pipSelect(st.seer, (x) => { st.seer = x; }, "Seer's card", "…"))),
+    h("div", { class: "small muted", style: "margin-top: 6px" }, "Fortune cards, after the reveal, one per player (p. 18):"),
+    st.fortunes.map((f) => h("div", { class: "row small", style: "margin-top: 4px" },
+      pipSelect(f.card, (x) => { f.card = x; }, "Fortune card", "No fortune"),
+      h("select", { "aria-label": "Fortune effect", onchange: (e) => { f.mode = e.target.value; } },
+        h("option", { value: "add", selected: f.mode === "add" }, "adds its number"), h("option", { value: "suit", selected: f.mode === "suit" }, "changes the suit")),
+      h("input", { type: "text", value: f.by, placeholder: "who", "aria-label": "Played by", style: "width: 6rem", onchange: (e) => { f.by = e.target.value; } }),
+      h("label", { class: "check", title: "They have points in all three skills of its suit" }, h("input", { type: "checkbox", checked: f.suit_bonus, onchange: (e) => { f.suit_bonus = e.target.checked; } }), "+3 suit bonus"))),
+    h("div", { style: "margin-top: 8px" }, h("button", { class: "btn primary", type: "button", onclick: resolve }, "Resolve")));
+
+  let outcome = null;
+  if (r) {
+    const ideas = v.ideas[r.outcome];
+    const marks = c && (c.mark_burden || c.mark_ideal);
+    outcome = h("section", { class: "outcome " + r.outcome },
+      h("div", { class: "label" }, r.label),
+      h("div", { class: "small" }, `${r.challenge_card} (${r.challenge_number}) vs ${r.seer_card} (${r.seer_number})`),
+      h("ol", { class: "small" }, r.steps.map((s) => h("li", {}, s))),
+      (r.notes || []).length ? h("div", { class: "small note" }, r.notes.join(" ")) : null,
+      ideas ? h("div", { class: "small" }, h("strong", {}, "Consequence ideas"), " (the world must change, p. 17): ", ideas.join("; "), ".") : null,
+      h("div", { class: "row", style: "margin-top: 8px" },
+        marks ? h("button", { class: "btn", type: "button", disabled: st.marked, onclick: markTracks },
+          st.marked ? "Marked" : `Mark the ${c.mark_burden && c.mark_ideal ? "burden and ideal tracks" : c.mark_burden ? "burden track" : "ideal track"}`) : null,
+        marks ? h("span", { class: "small muted" }, "Marked whatever the outcome (p. 20).") : null,
+        h("button", { class: "btn", type: "button", onclick: askClaude }, r.outcome === "total" ? "Tell Claude" : "Ask Claude for consequences")));
+  }
+
+  hi.mount(
+    h("div", { class: "row between head" },
+      h("div", {}, h("h1", {}, `Challenge · ${a.name}`),
+        h("div", { class: "small muted" }, `Burden track ${a.burden_track}/7 · ideal track ${a.ideal_track}/7 · harm `,
+          v.suits.map((s) => `${s.suit} ${harm[s.suit]}`).join(", "))),
+      h("button", { class: "btn", type: "button", onclick: hi.refresh, title: "Reload the Agent" }, "↻ Refresh")),
+    setup, counts, played, outcome,
+    h("p", { class: "small muted" }, "The table draws real cards; enter what was played. Counts: p. 15 (harm p. 23, group p. 22). Resolution: pp. 15-19."));
+}
+
+function skillSelect() {
+  return h("select", { "aria-label": "Skill", onchange: (e) => { st.skill = e.target.value; count(); } },
+    v.suits.map((s) => h("optgroup", { label: s.suit },
+      s.skills.map((k) => h("option", { value: k.name, selected: k.name === st.skill }, `${k.name} (${k.points})`)))));
+}
+
+hi.start({ name: "challenge", tool: "show_challenge", render: load });
+</script>
+</body>
+</html>

@@ -182,6 +182,12 @@ func Counts(s Setup) (Count, error) {
 
 // ---------------------------------------------------------------- resolving
 
+// Consequence menus (p. 17 failure, p. 18 complicated success).
+var FailureIdeas = []string{"harm (1-3, physical or spiritual)", "lose an item, for now or for good", "a complication", "rising danger: start or tick a clock",
+	"a future disadvantage", "the enemy acts", "a lost opportunity", "higher stakes", "interpersonal conflict"}
+var ComplicatedIdeas = []string{"harm", "a cost: a favor, a price, a hard choice", "lose an item", "reduced effect", "rising danger: start or tick a clock",
+	"a lost opportunity", "an unexpected problem", "higher stakes", "stuck? draw a vision card for inspiration"}
+
 // Fortune is a fortune card played after the reveal (pp. 18-19): it either changes the challenge
 // card's suit to its own, or adds its number. SuitBonus: the player who plays it has at least 1
 // point in all three skills of the fortune card's suit, for +3 more.

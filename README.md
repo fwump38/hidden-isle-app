@@ -9,7 +9,7 @@ It runs as a single Go binary in one container, with its state in SQLite.
 
 This repo holds **no game text**. The rules data (classes, abilities, cards, tables, limits) comes from a separate rules repository, which the app syncs on a timer through that repo's `hidden-isle-data.yaml` manifest.
 
-> **Status: Phase 5 (in-app chat).** Working:
+> **Status: Phase 6 (MCP Apps widgets).** Working:
 > - sign-in (PIN at home, Authentik away);
 > - campaigns and player-owned Agents with live character sheets;
 > - clocks, adversaries, territories, sessions, house rulings, Seer notes and journals;
@@ -32,8 +32,8 @@ This repo holds **no game text**. The rules data (classes, abilities, cards, tab
 >   that player may see. A suggested sheet change is
 >   only a card in the chat until the player taps Apply.
 >
-> Next: MCP Apps widgets in claude.ai (an Agent sheet, clock and challenge picker as `ui://`
-> resources), if that turns out to be worth it over the web UI.
+> - MCP Apps widgets in claude.ai: an Agent sheet, the campaign's clocks and the challenge
+>   helper, drawn inline in the chat and editable in place.
 
 ## How it's put together
 
@@ -99,9 +99,22 @@ claude mcp add --transport http hidden-isle https://isle.example.com/mcp --heade
 | Changes | `create_campaign`, `create_agent`, `move_agent`, `create_record`, `update_record`, `delete_record`, `undo_change`, `write_entry` |
 | At the table | `add_harm`, `heal`, `award_xp`, `tick_clock`, `advance_adversary`, `drift_contacts`, `draw_cards` |
 | Rules | `search_rules`, `read_rules` (full text with page cites; adventures Seer-only), `get_class`, `lookup_card`, `get_table` |
+| Widgets | `show_agent`, `show_clocks`, `show_challenge` (see below) |
 
 - **Prompts:** the rules repo's plugin skills are served as prompts (`create-agent`, `challenge`, `downtime`, `wrap-up`, …), so a claude.ai chat with only this connector has them.
 - **Refreshing:** prompts and the search index refresh when you install a new rules release.
+
+**Widgets (MCP Apps).** In clients that support MCP Apps (claude.ai), three tools draw an interactive view inside the chat instead of plain JSON. Ask Claude to "show Ines's sheet", "show the clocks" or "start a challenge for Ines".
+
+| Tool | Widget | What you can do in it |
+|---|---|---|
+| `show_agent` | Agent sheet | Set harm, skills, XP, burden/ideal tracks, load, contact affection/distance; tick the Agent's clocks; read abilities verbatim with page cites |
+| `show_clocks` | Clocks | Tick clocks, reveal Seer-only ones to the players, change status, start a new one |
+| `show_challenge` | Challenge helper | Count both hands (p. 15), enter the cards played and fortunes, resolve (pp. 15-19), mark the burden/ideal track, hand the result back to Claude for consequences |
+
+- **Same rules as everywhere:** every change in a widget goes through the same tools Claude uses, so limits, the change log (with the widget's "Why?" box as the reason) and undo all apply. Changes reach phones and the TV view live.
+- **No setup:** the pages are served by the app itself as `ui://hidden-isle/…` resources and load nothing from outside.
+- **Other clients** (e.g. Claude Code) get the same data as JSON.
 
 ## In-app chat for players
 
@@ -167,7 +180,7 @@ scripts/vendor.sh                                                     # refresh 
   - `internal/gamedata`: sync and validation
   - `internal/cards`: draws
   - `internal/creation`: the automatic character-creation generator (no Claude; real draws only)
-  - `internal/mcpsrv`: MCP
+  - `internal/mcpsrv`: MCP (tools, prompts, and the widgets in `widgets/`)
   - `internal/chat`: the in-app player chat (Anthropic API, tool loop, budget caps)
   - `internal/web`: UI
 - **Schema changes:** add models to `internal/db/models.go`, where `AutoMigrate` applies additive changes. Put renames and data fixes in `migrations`.

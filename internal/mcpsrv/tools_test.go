@@ -205,3 +205,66 @@ func TestToolsRefusePlayers(t *testing.T) {
 		t.Errorf("player used MCP: %q", e)
 	}
 }
+
+func TestWidgets(t *testing.T) {
+	h := newHarness(t, db.User{Name: "Seer"})
+	ctx := context.Background()
+
+	// Each show_* tool names a ui:// resource that serves a self-contained MCP Apps page.
+	tools, err := h.cs.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	uis := map[string]string{}
+	for _, tl := range tools.Tools {
+		if ui, ok := tl.Meta["ui"].(map[string]any); ok {
+			uis[tl.Name] = ui["resourceUri"].(string)
+		}
+	}
+	if len(uis) != 3 || uis["show_agent"] != "ui://hidden-isle/agent-sheet.html" {
+		t.Fatalf("ui tools: %v", uis)
+	}
+	for name, uri := range uis {
+		res, err := h.cs.ReadResource(ctx, &mcp.ReadResourceParams{URI: uri})
+		if err != nil {
+			t.Fatalf("%s: %v", uri, err)
+		}
+		c := res.Contents[0]
+		if c.MIMEType != "text/html;profile=mcp-app" || !strings.Contains(c.Text, "ui/initialize") ||
+			strings.Contains(c.Text, "SHARED_") || !strings.Contains(c.Text, `"`+name+`"`) {
+			t.Errorf("%s: mime %q, shared code inlined? %.200s", uri, c.MIMEType, c.Text)
+		}
+	}
+
+	cid := h.call("create_campaign", map[string]any{"name": "Venice Nights"})["id"]
+	aid := h.call("create_agent", map[string]any{"campaign_id": cid, "name": "Ines", "class": "Prowler", "player": "ana"})["id"]
+	h.call("add_harm", map[string]any{"agent_id": aid, "suit": "cups", "type": "S", "reason": "x"})
+	h.call("create_record", map[string]any{"campaign_id": cid, "kind": "clock", "fields": map[string]any{"name": "Her debt comes due", "segments": 4, "agent_id": aid}, "reason": "x"})
+	h.call("create_record", map[string]any{"campaign_id": cid, "kind": "clock", "fields": map[string]any{"name": "The Doge learns", "segments": 6, "visibility": "seer"}, "reason": "x"})
+
+	sheet := h.call("show_agent", map[string]any{"agent_id": aid})
+	suits := sheet["suits"].([]any)
+	cups := suits[2].(map[string]any)
+	if len(suits) != 4 || cups["suit"] != "Cups" || cups["harm"].([]any)[0] != "S" || len(cups["skills"].([]any)) != 3 {
+		t.Errorf("sheet suits: %v", suits)
+	}
+	if cl := sheet["clocks"].([]any); len(cl) != 1 {
+		t.Errorf("sheet clocks: %v", cl)
+	}
+
+	clocks := h.call("show_clocks", map[string]any{"campaign_id": cid})
+	if cl := clocks["clocks"].([]any); len(cl) != 2 || cl[0].(map[string]any)["agent_name"] != "Ines" {
+		t.Errorf("clocks (the Seer sees hidden ones too): %v", cl)
+	}
+	if segs := clocks["segment_choices"].([]any); len(segs) == 0 {
+		t.Errorf("segment choices: %v", clocks)
+	}
+
+	ch := h.call("show_challenge", map[string]any{"agent_id": aid, "skill": "Slip"})
+	if ch["skill"] != "Slip" || len(ch["pips"].([]any)) == 0 || ch["ideas"].(map[string]any)["failure"] == nil {
+		t.Errorf("challenge view: %v", ch)
+	}
+	if _, e := h.try("show_challenge", map[string]any{"agent_id": aid, "skill": "Juggle"}); !strings.Contains(e, "unknown skill") {
+		t.Errorf("bad skill: %q", e)
+	}
+}

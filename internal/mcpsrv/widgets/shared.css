@@ -1,0 +1,94 @@
+/* Shared by every widget. The host may pass its own theme variables (--color-*, --font-*,
+   --border-radius-*); ours fall back to the web app's palette. */
+:root {
+  --bg: var(--color-background-primary, #ffffff);
+  --bg2: var(--color-background-secondary, #f4f2ec);
+  --fg: var(--color-text-primary, #1d1b16);
+  --muted: var(--color-text-secondary, #6b675d);
+  --line: var(--color-border-primary, #d9d4c7);
+  --accent: #9a7a12;
+  --danger: #b3261e;
+  --ok: #2e7d32;
+  --warn: #9a6700;
+  --swords: #2f5fc4; --wands: #c0522a; --cups: #1b7fa6; --pentacles: #5d7f1e;
+  --radius: var(--border-radius-md, 8px);
+  --font: var(--font-sans, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
+}
+:root[data-theme="dark"] {
+  --bg: var(--color-background-primary, #1f1e1b);
+  --bg2: var(--color-background-secondary, #2a2925);
+  --fg: var(--color-text-primary, #ece8dc);
+  --muted: var(--color-text-secondary, #a39e90);
+  --line: var(--color-border-primary, #3d3b35);
+  --accent: #c9a227;
+  --danger: #ef6f66;
+  --ok: #6fbf73;
+  --warn: #e0b04a;
+  --swords: #8fb3ff; --wands: #ff9f7a; --cups: #7ad7ff; --pentacles: #b5d67a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: var(--color-background-primary, #1f1e1b);
+    --bg2: var(--color-background-secondary, #2a2925);
+    --fg: var(--color-text-primary, #ece8dc);
+    --muted: var(--color-text-secondary, #a39e90);
+    --line: var(--color-border-primary, #3d3b35);
+    --accent: #c9a227;
+    --danger: #ef6f66;
+    --ok: #6fbf73;
+    --warn: #e0b04a;
+    --swords: #8fb3ff; --wands: #ff9f7a; --cups: #7ad7ff; --pentacles: #b5d67a;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.4 var(--font); }
+body { padding: 12px; }
+h1 { font-size: 1.15rem; margin: 0; }
+h2 { font-size: .95rem; margin: 0 0 .4rem; }
+p { margin: .25rem 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+.muted { color: var(--muted); }
+.small { font-size: .85em; }
+.row { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.between { justify-content: space-between; }
+.grow { flex: 1 1 auto; min-width: 0; }
+.grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.box { border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; background: var(--bg); }
+.head { margin-bottom: 10px; }
+.badge { display: inline-block; font-size: .75em; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.badge.seer { border-color: var(--warn); color: var(--warn); }
+.badge.on { border-color: var(--ok); color: var(--ok); }
+.btn { border: 1px solid var(--line); background: var(--bg2); border-radius: 6px; padding: 3px 9px; min-height: 28px; }
+.btn:hover:not(:disabled) { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #1d1b16; font-weight: 600; }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn.link { border: 0; background: none; padding: 0; min-height: 0; color: var(--accent); }
+input[type=text], input[type=number], select, textarea {
+  border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 3px 6px; min-height: 28px; max-width: 100%;
+}
+label.check { display: inline-flex; align-items: center; gap: 4px; }
+.why { margin-bottom: 10px; }
+.why input { flex: 1 1 12rem; }
+.status { min-height: 1.2em; font-size: .85em; }
+.status.err { color: var(--danger); }
+.status.ok { color: var(--ok); }
+
+.suit-Swords { color: var(--swords); } .suit-Wands { color: var(--wands); }
+.suit-Cups { color: var(--cups); } .suit-Pentacles { color: var(--pentacles); }
+
+/* Pips: tap to set, tap the top filled one to lower it (as on the web sheet). */
+.pips { display: inline-flex; gap: 3px; vertical-align: middle; }
+.pip { width: 14px; height: 14px; padding: 0; border-radius: 50%; border: 1px solid var(--muted); background: transparent; }
+.pip.on { background: var(--accent); border-color: var(--accent); }
+.pip:hover:not(:disabled) { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pip:disabled { cursor: default; }
+@media (pointer: coarse) { .pip { width: 20px; height: 20px; } .pips { gap: 5px; } }
+
+.clock { flex: none; }
+.clock .seg { fill: transparent; stroke: var(--muted); stroke-width: 1.5; }
+.clock .seg.filled { fill: var(--accent); }
+
+.harm { width: 3.2rem; }
+.harm.has { border-color: var(--danger); color: var(--danger); }
+details > summary { cursor: pointer; }

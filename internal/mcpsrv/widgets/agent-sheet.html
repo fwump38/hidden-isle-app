@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent sheet</title>
+<style>
+/*SHARED_CSS*/
+.suit + .suit { margin-top: 8px; }
+.suit-head { border-bottom: 1px solid var(--line); padding-bottom: 3px; margin-bottom: 3px; }
+.traits .row { margin-bottom: 4px; }
+.skill { display: flex; justify-content: space-between; align-items: center; }
+.ability summary { font-weight: 600; }
+.ability p { margin: 4px 0; }
+.sheet-note { color: var(--warn); }
+.contact + .contact, .clockrow + .clockrow { margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="row why">
+  <label class="small muted" for="why-input">Why?</label>
+  <input type="text" id="why-input" placeholder="for the change log, e.g. failed Slip vs the harbor guard" autocomplete="off">
+</div>
+<div id="status" class="status"></div>
+<div id="app"><p class="muted">Loading the sheet…</p></div>
+<script>
+/*SHARED_JS*/
+
+const { h, pips, clock, change } = hi;
+
+function render(v) {
+  if (!v || !v.agent) return hi.fail("No sheet in this result.");
+  const a = v.agent;
+  const upd = (fields, summary) => change("update_record", { kind: "agent", id: a.id, fields }, `${a.name}: ${summary}`);
+  const harmMap = () => Object.fromEntries(v.suits.map((s) => [s.suit, s.harm.filter(Boolean)]));
+  const skillMap = () => Object.fromEntries(v.suits.flatMap((s) => s.skills.map((k) => [k.name, k.points])));
+
+  const header = h("div", { class: "row between head" },
+    h("div", { class: "grow" },
+      h("h1", {}, a.name),
+      h("div", { class: "small muted" },
+        v.class ? `${v.class.name} · ${v.class.guild}` : a.class, " · ",
+        h("span", { class: "badge" + (a.status === "Active" ? " on" : "") }, a.status),
+        v.player ? ` · played by ${v.player}` : " · run by the Seer",
+        v.campaign ? ` · ${v.campaign}` : " · not in a campaign"),
+      v.class && v.class.motto ? h("div", { class: "small muted" }, h("em", {}, `“${v.class.motto}”`)) : null),
+    h("button", { class: "btn", type: "button", onclick: hi.refresh, title: "Reload the sheet" }, "↻ Refresh"));
+
+  const suits = h("div", { class: "box" }, h("h2", {}, "Skills, XP and harm"),
+    v.suits.map((s) => {
+      const harm = s.harm.map((m, i) => h("select", {
+        class: "harm" + (m ? " has" : ""), "aria-label": `${s.suit} harm box ${i + 1}`,
+        onchange: (e) => {
+          const marks = [...s.harm];
+          marks[i] = e.target.value;
+          const map = harmMap();
+          map[s.suit] = marks.filter(Boolean);
+          upd({ harm: map }, `${s.suit} harm → [${map[s.suit].join(" ") || "none"}]`);
+        } }, ["", "P", "S", "T"].map((o) => h("option", { value: o, selected: o === m }, o || "—"))));
+      return h("div", { class: "suit" },
+        h("div", { class: "row between suit-head" },
+          h("strong", { class: "suit-" + s.suit }, s.suit),
+          h("span", { class: "row small" }, h("span", { class: "muted" }, "XP"),
+            pips(s.xp, 7, (n) => upd({ [s.xp_key]: n }, `${s.suit} XP → ${n}`), `${s.suit} XP`)),
+          h("span", { class: "row small" }, h("span", { class: "muted" }, "Harm"), harm)),
+        s.harm[1] ? h("div", { class: "small", style: "color: var(--danger)" }, `2 harm: 1 fewer card with ${s.suit} skills (p. 23).`) : null,
+        s.skills.map((k) => h("div", { class: "skill" }, h("span", {}, k.name),
+          pips(k.points, k.max, (n) => { const m = skillMap(); m[k.name] = n; upd({ skills: m }, `${k.name} → ${n}`); }, k.name))));
+    }),
+    h("p", { class: "small muted" }, "Harm: P physical, S spiritual, T trauma (p. 23). A full XP track of 7 gives +1 skill point in that suit (p. 25)."));
+
+  const traits = h("div", { class: "box traits" }, h("h2", {}, "Burden & ideal"),
+    h("div", { class: "row between" }, h("span", {}, "Burden: ", h("strong", {}, a.burden || "—"), a.burden_card ? h("span", { class: "muted" }, ` (${a.burden_card})`) : null),
+      pips(a.burden_track, 7, (n) => upd({ burden_track: n }, `burden track → ${n}`), "Burden track")),
+    h("div", { class: "row between" }, h("span", {}, "Ideal: ", h("strong", {}, a.ideal || "—"), a.ideal_card ? h("span", { class: "muted" }, ` (${a.ideal_card})`) : null),
+      pips(a.ideal_track, 7, (n) => upd({ ideal_track: n }, `ideal track → ${n}`), "Ideal track")),
+    list("Vices (+1 card)", a.vices), list("Virtues (+3)", a.virtues), list("Fulfilled", a.fulfilled_virtues),
+    h("p", { class: "small muted" }, "A full burden track becomes a vice, a full ideal track a virtue, in downtime (pp. 66-67)."));
+
+  const abilities = h("div", { class: "box" },
+    h("div", { class: "row between" },
+      h("h2", {}, "Abilities", v.class ? h("span", { class: "small muted" }, ` · ${v.class.ability_xp_track}`) : null),
+      h("span", { class: "row small" }, h("span", { class: "muted" }, "XP"), pips(a.xp_ability, 7, (n) => upd({ xp_ability: n }, `ability XP → ${n}`), "Ability XP"))),
+    v.abilities.length ? v.abilities.map((ab, i) => h("details", { class: "ability", id: "ab-" + i },
+      h("summary", {}, ab.name, ab.class_of_origin ? h("span", { class: "small muted" }, ` (${ab.class_of_origin})`) : null,
+        h("span", { class: "small muted" }, ab.page ? ` · p. ${ab.page}` : ab.source ? ` · ${ab.source}` : "")),
+      h("p", { class: "small" }, ab.text),
+      ab.sheet_text ? h("p", { class: "small sheet-note" }, `Character Sheets 1.3 words it: “${ab.sheet_text}” (the Rulebook wins unless the Seer rules otherwise)`) : null))
+      : h("p", { class: "small muted" }, "No abilities yet. Choose 2 at creation (p. 41)."),
+    (a.proficiencies || []).length ? h("div", {}, h("h2", { style: "margin-top: 8px" }, "Magic"),
+      a.proficiencies.map((p) => h("div", { class: "row small" }, clock(p.segments, 6, 22), h("strong", {}, p.school), h("span", { class: "muted" }, p.rank)))) : null,
+    (a.magical_sources || []).length ? h("p", { class: "small muted" }, "Sources: " + a.magical_sources.join(", ")) : null);
+
+  const inventory = h("div", { class: "box" },
+    h("div", { class: "row between" }, h("h2", {}, "Inventory"),
+      h("span", { class: "row small" }, h("span", { class: "muted" }, "Load"), pips(a.load_used, 5, (n) => upd({ load_used: n }, `load → ${n}`), "Load"))),
+    (a.items || []).length ? h("p", { class: "small" }, "Pulled: ", a.items.map((it) => it.name + (it.single_use ? " (single-use)" : "")).join(", "))
+      : h("p", { class: "small muted" }, "Nothing pulled this scenario (1 load each, p. 27)."));
+
+  const contacts = h("div", { class: "box" }, h("h2", {}, "Contacts"),
+    v.contacts.length ? v.contacts.map((c) => {
+      const cu = (fields, summary) => change("update_record", { kind: "contact", id: c.id, fields }, `${a.name}'s contact ${c.name}: ${summary}`);
+      return h("div", { class: "contact" },
+        h("div", {}, h("strong", {}, c.name), h("span", { class: "small muted" }, [c.kind, c.card, c.land].filter(Boolean).map((x) => " · " + x).join(""))),
+        h("div", { class: "row small" },
+          h("span", { class: "muted" }, "Affection"), pips(c.affection, 6, (n) => cu({ affection: n }, `affection → ${n}`), "Affection"),
+          h("span", { class: "muted" }, "Distance"), pips(c.distance, 3, (n) => cu({ distance: n }, `distance → ${n}`), "Distance")),
+        c.description ? h("p", { class: "small muted" }, c.description) : null);
+    }) : h("p", { class: "small muted" }, "No contacts yet: a homeland contact and a Dioscorian contact at creation (p. 41)."));
+
+  const clocks = h("div", { class: "box" }, h("h2", {}, "Clocks"),
+    v.clocks.length ? v.clocks.map((c) => h("div", { class: "row clockrow" }, clock(c.filled, c.segments, 30),
+      h("span", { class: "grow small" }, c.name, " ", h("span", { class: "muted" }, `${c.filled}/${c.segments}`)),
+      h("button", { class: "btn", type: "button", "aria-label": "Unfill a segment", onclick: () => change("tick_clock", { clock_id: c.id, amount: -1 }, `clock “${c.name}” −1`) }, "−"),
+      h("button", { class: "btn", type: "button", "aria-label": "Fill a segment", onclick: () => change("tick_clock", { clock_id: c.id, amount: 1 }, `clock “${c.name}” +1`) }, "+")))
+      : h("p", { class: "small muted" }, v.campaign ? "No clocks on this Agent." : "Clocks belong to a campaign."));
+
+  const who = h("div", { class: "box" }, h("h2", {}, "Who they are"),
+    line("Age", a.age), line("Culture", a.culture), line("Look", a.look), line("Why Dioscoria", a.why),
+    a.child_phrase ? line("As a child", `solved problems by ${a.child_phrase}` + (a.child_card ? ` (${a.child_card})` : "")) : null,
+    a.adult_phrase ? line("As an adult", `${a.adult_verb || "survived"} by ${a.adult_phrase}` + (a.adult_card ? ` (${a.adult_card})` : "")) : null,
+    a.notes ? h("p", { class: "small", style: "white-space: pre-wrap" }, a.notes) : null);
+
+  hi.mount(header, h("div", { class: "grid" }, suits, h("div", { style: "display: grid; gap: 10px" }, traits, inventory), abilities, contacts, clocks, who));
+}
+
+function list(label, xs) {
+  return xs && xs.length ? h("div", { class: "small" }, h("span", { class: "muted" }, label + ": "), xs.join(", ")) : null;
+}
+function line(label, value) {
+  return value ? h("div", { class: "small" }, h("span", { class: "muted" }, label + ": "), value) : null;
+}
+
+hi.start({ name: "agent-sheet", tool: "show_agent", render });
+</script>
+</body>
+</html>
