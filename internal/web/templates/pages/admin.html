@@ -42,19 +42,19 @@
   <div class="col-12 col-lg-6">
     <div class="card h-100">
       <div class="card-body">
-        <h2 class="h5 card-title"><i class="bi bi-stars"></i> In-app chat</h2>
-        {{if not .Data.ChatEnabled}}
-        <p class="small text-body-secondary mb-0">Off. Set <code>ANTHROPIC_API_KEY</code> to let players ask the assistant for character-creation help and rules questions, on your own Anthropic billing.</p>
+        <h2 class="h5 card-title"><i class="bi bi-stars"></i> AI assistance</h2>
+        {{if not .Data.AssistEnabled}}
+        <p class="small text-body-secondary mb-0">Off. Set <code>ANTHROPIC_API_KEY</code> to let players and the Seer get AI suggestions and writing help throughout the app, on your own Anthropic billing.</p>
         {{else}}
-        <p class="small text-body-secondary">This month ({{.Data.ChatMonth}}): <strong>${{printf "%.2f" .Data.ChatGlobalUSD}}</strong>{{if gt .Data.ChatGlobalCapUSD 0.0}} of ${{printf "%.2f" .Data.ChatGlobalCapUSD}} table cap{{end}}. Each player's own chat is on the campaign's Chat tab; read any of them from a campaign's Settings.</p>
-        {{if .Data.ChatUsage}}
+        <p class="small text-body-secondary">This month ({{.Data.AssistMonth}}): <strong>${{printf "%.2f" .Data.AssistGlobalUSD}}</strong>{{if gt .Data.AssistGlobalCapUSD 0.0}} of ${{printf "%.2f" .Data.AssistGlobalCapUSD}} table cap{{end}}.</p>
+        {{if .Data.AssistUsage}}
         <table class="table table-sm">
           <thead><tr><th>Player</th><th class="text-end">Spend</th></tr></thead>
           <tbody>
-            {{range .Data.ChatUsage}}<tr><td>{{.Name}}</td><td class="text-end">${{printf "%.2f" .CostUSD}}</td></tr>{{end}}
+            {{range .Data.AssistUsage}}<tr><td>{{.Name}}</td><td class="text-end">${{printf "%.2f" .CostUSD}}</td></tr>{{end}}
           </tbody>
         </table>
-        {{else}}<p class="small text-body-secondary mb-0">No chats yet this month.</p>{{end}}
+        {{else}}<p class="small text-body-secondary mb-0">No spend yet this month.</p>{{end}}
         {{end}}
       </div>
     </div>

@@ -14,14 +14,39 @@
         <div class="col-6 col-md-3"><label class="form-label small mb-0" for="played">Scenarios played</label><input class="form-control" type="number" min="0" id="played" name="set.scenarios_played" value="{{$c.ScenariosPlayed}}"></div>
         <div class="col-6 col-md-3"><label class="form-label small mb-0" for="mascot">Hand mascot {{help "The party is a Hand of Dioscoria with an animal mascot, chosen from the list on p. 42."}}</label><input class="form-control" id="mascot" name="set.hand_mascot" value="{{$c.HandMascot}}"></div>
         <div class="col-6 col-md-3"><label class="form-label small mb-0" for="hname">Hand name {{help "An adjective plus the mascot, chosen after several scenarios (p. 82)."}}</label><input class="form-control" id="hname" name="set.hand_name" value="{{$c.HandName}}"></div>
-        <div class="col-12"><label class="form-label small mb-0" for="table">Table: sessions, lines and veils, tone</label><textarea class="form-control" id="table" name="set.table" rows="3">{{$c.Table}}</textarea></div>
-        <div class="col-12"><label class="form-label small mb-0" for="opts">Options in use (downtime before session one, visions, narrative thresholds…)</label><textarea class="form-control" id="opts" name="set.options" rows="2">{{$c.Options}}</textarea></div>
-        <div class="col-12"><label class="form-label small mb-0" for="threads">Open threads (players can see these)</label><textarea class="form-control" id="threads" name="set.open_threads" rows="3">{{$c.OpenThreads}}</textarea></div>
         <div class="col-12 d-flex justify-content-between align-items-center">
           <button class="btn btn-primary" type="submit">Save</button>
           <span><input type="hidden" name="set.archived" value=""><span class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="set.archived" id="arch" {{if $c.Archived}}checked{{end}}><label class="form-check-label small" for="arch">Archived {{help "Moves the campaign to the bottom of the list. Nothing is deleted."}}</label></span></span>
         </div>
       </div>
+    </form>
+
+    <form method="post" action="{{$u}}" class="card card-body mt-3">
+      <input type="hidden" name="back" value="{{$back}}">
+      <h2 class="h6">Table agreements {{help "Session length and cadence, tone, and lines (never happens) and veils (happens off-screen). Players can see this."}}</h2>
+      <textarea class="form-control" id="table" name="set.table" rows="3" placeholder="e.g. 3 hours, every other Friday. No graphic torture; slavery can be referenced but not shown on screen.">{{$c.Table}}</textarea>
+      {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "campaign_table" "Target" "table" "AgentID" 0 "CampaignID" $c.ID "SessionID" 0 "Draft" false)}}{{end}}
+      <button class="btn btn-sm btn-outline-light mt-2 align-self-start">Save</button>
+    </form>
+
+    <form method="post" action="{{$u}}" class="card card-body mt-3">
+      <input type="hidden" name="back" value="{{$back}}">
+      <h2 class="h6">Options in use</h2>
+      <div class="row g-2">
+        <div class="col-12"><input type="hidden" name="set.visions" value=""><div class="form-check"><input class="form-check-input" type="checkbox" name="set.visions" id="visions" {{if $c.Visions}}checked{{end}}><label class="form-check-label" for="visions">Visions {{help "Advanced mechanic (p. 89): the Seer keeps vision cards and can share what an Agent has seen. Not necessary for the game to work; skip it until the table has more confidence."}}</label></div></div>
+        <div class="col-12"><input type="hidden" name="set.thresholds" value=""><div class="form-check"><input class="form-check-input" type="checkbox" name="set.thresholds" id="thresholds" {{if $c.Thresholds}}checked{{end}}><label class="form-check-label" for="thresholds">Narrative thresholds {{help "Advanced mechanic (p. 89): a scenario clock that raises the stakes as it fills. Optional; feel free to ignore it."}}</label></div></div>
+        <div class="col-12"><input type="hidden" name="set.skip_first_downtime" value=""><div class="form-check"><input class="form-check-input" type="checkbox" name="set.skip_first_downtime" id="skipdt" {{if $c.SkipFirstDowntime}}checked{{end}}><label class="form-check-label" for="skipdt">Skip downtime before session one {{help "p. 65: a new table can skip the Downtime phase before its first session, to get into play faster."}}</label></div></div>
+        <div class="col-12"><label class="form-label small mb-0" for="opts">Other house options</label><textarea class="form-control form-control-sm" id="opts" name="set.options" rows="2" placeholder="Anything else the table's agreed on that isn't in the book">{{$c.Options}}</textarea></div>
+      </div>
+      <button class="btn btn-sm btn-outline-light mt-2 align-self-start">Save</button>
+    </form>
+
+    <form method="post" action="{{$u}}" class="card card-body mt-3">
+      <input type="hidden" name="back" value="{{$back}}">
+      <h2 class="h6">Open threads {{help "Loose ends to pick up later: unfulfilled visions, an adversary's ongoing scheme, a hook from downtime (pp. 82, 89). Players can see this."}}</h2>
+      <textarea class="form-control" id="threads" name="set.open_threads" rows="3">{{$c.OpenThreads}}</textarea>
+      {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "campaign_open_threads" "Target" "threads" "AgentID" 0 "CampaignID" $c.ID "SessionID" 0 "Draft" true)}}{{end}}
+      <button class="btn btn-sm btn-outline-light mt-2 align-self-start">Save</button>
     </form>
   </div>
   <div class="col-12 col-lg-5">
@@ -33,7 +58,6 @@
         <input type="hidden" name="user_id" value="{{.ID}}"><input type="hidden" name="back" value="{{$back}}">
         <span>{{.Name}}</span>
         {{if index $d.Members .ID}}
-        {{if $d.ChatEnabled}}<a class="btn btn-sm btn-outline-info" href="/c/{{$c.ID}}/chat/with/{{.ID}}" title="Read their chat with the assistant"><i class="bi bi-stars"></i></a>{{end}}
         <button class="btn btn-sm btn-success" type="submit" name="member" value="off"><i class="bi bi-check2"></i> Member</button>
         {{else}}
         <button class="btn btn-sm btn-outline-secondary" type="submit" name="member" value="on">Add</button>

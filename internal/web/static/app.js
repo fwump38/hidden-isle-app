@@ -91,7 +91,7 @@ document.addEventListener("DOMContentLoaded", () => initTooltips(document));
 // ---------------------------------------------------------------- page cites → rule browser
 // Every page cite on screen ("p. 15", "pp. 72, 100-103", "Sheet p. 3", "Ref p. 8") links to
 // that page in the rule browser. The prefixes come from the rules manifest (<body data-cites>).
-// A MutationObserver catches anything added later: htmx swaps, chat replies, handouts.
+// A MutationObserver catches anything added later: htmx swaps, handouts.
 const citeSkip = "a, button, select, option, textarea, input, script, style, code, pre, [contenteditable], [data-no-cites], .hi-page";
 let citeRe = null, citeBooks = {};
 
@@ -169,7 +169,7 @@ function linkifyCites(root) {
   nodes.forEach((n) => linkifyText(n, re));
 }
 
-const citeRoots = "#main, #chat-drawer, #handout-modal";
+const citeRoots = "#main, #handout-modal";
 document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll(citeRoots).forEach(linkifyCites);
   const obs = new MutationObserver((muts) => {
@@ -285,8 +285,7 @@ function connectLive() {
 
 function busy() {
   const a = document.activeElement;
-  // Typing in the chat panel doesn't count: refreshing the page beside it leaves the panel alone.
-  if (a && !a.closest("#chat-drawer") && a.matches("input:not([type=checkbox]):not([type=radio]), textarea, select")) return true;
+  if (a && a.matches("input:not([type=checkbox]):not([type=radio]), textarea, select")) return true;
   const why = document.getElementById("why-input");
   if (why && why.value) return true;
   return !!document.querySelector("#challenge-out .alert, #challenge-out .border, #oracle-out .card");
@@ -334,7 +333,10 @@ function showHandout(h) {
     if (h.meaning) { const m = document.createElement("span"); m.className = "d-block small text-body-secondary"; m.textContent = h.meaning; c.appendChild(m); }
     body.appendChild(c);
   }
-  if (h.body) { const p = document.createElement("p"); p.className = "hi-prose"; p.textContent = h.body; body.appendChild(p); }
+  // The live popup is plain text (textContent), not server-rendered HTML, so an @mention token
+  // here can't become a real link; strip it down to its plain "@Name" instead of showing the raw
+  // markup. The persisted copy on the campaign page is server-rendered and does link it.
+  if (h.body) { const p = document.createElement("p"); p.className = "hi-prose"; p.textContent = h.body.replace(/@\[([^\]]+)\]\(\w+:[\w.]+\)/g, "@$1"); body.appendChild(p); }
   if (h.image_url) { const img = document.createElement("img"); img.src = h.image_url; img.alt = h.title || "handout"; img.className = "img-fluid rounded"; body.appendChild(img); }
   bootstrap.Modal.getOrCreateInstance(modal).show();
 }
@@ -342,107 +344,22 @@ function showHandout(h) {
 document.addEventListener("DOMContentLoaded", connectLive);
 document.addEventListener("htmx:afterSettle", connectLive);
 
-// ---------------------------------------------------------------- chat side panel
-// The chat lives in layout.html's #chat-drawer, outside #main, so it stays open while hx-boost
-// swaps pages beside it. #main says which campaign's chat belongs to the current page
-// (data-chat-base); the panel reloads when that changes. The open state is remembered per
-// browser, but only reopened by itself on wide screens, where it docks instead of covering.
-const chatOpenKey = "hi-chat-open";
-let chatLoadedBase = null;
-
-function chatDrawer() { return document.getElementById("chat-drawer"); }
-function chatIsOpen() { const d = chatDrawer(); return !!d && !d.hidden; }
-function chatBase() {
-  const m = document.getElementById("main");
-  return (m && m.dataset.chatBase) || "/chat";
+// ---------------------------------------------------------------- entry visibility / draft
+// A [data-vis-select] (the "Who can see this" select on journal/session entry forms) shows its
+// sibling [data-draft-wrap] only when "Everyone" is chosen: "Save as draft" only means anything
+// for party-visible entries, so it's hidden the rest of the time rather than just disabled.
+function updateDraftVisibility(select) {
+  const wrap = select.closest("form")?.querySelector("[data-draft-wrap]");
+  if (wrap) wrap.hidden = select.value !== "party";
 }
-
-function setChatOpen(open, opts = {}) {
-  const d = chatDrawer();
-  if (!d) return false;
-  d.hidden = !open;
-  document.body.classList.toggle("hi-chat-open", open);
-  document.querySelectorAll("[data-chat-toggle]").forEach((b) => b.setAttribute("aria-expanded", String(open)));
-  try { localStorage.setItem(chatOpenKey, open ? "1" : ""); } catch { /* private window etc. */ }
-  if (open) loadChat(opts);
-  return true;
-}
-
-function loadChat({ ask = "", focus = false } = {}) {
-  const base = chatBase();
-  const m = document.getElementById("main");
-  const where = document.getElementById("chat-drawer-where");
-  if (where) where.textContent = (m && m.dataset.chatLabel) || "";
-  const full = document.getElementById("chat-drawer-full");
-  if (full) full.href = base;
-  if (chatLoadedBase === base) {
-    if (ask) { const ta = chatTextarea(); if (ta) ta.value = ask; }
-    scrollChat();
-    if (focus || ask) chatTextarea()?.focus();
-    return;
-  }
-  chatLoadedBase = base;
-  const url = base + "/panel" + (ask ? "?ask=" + encodeURIComponent(ask) : "");
-  htmx.ajax("GET", url, { target: "#chat-drawer-body", swap: "innerHTML" }).then(() => {
-    scrollChat();
-    if (focus || ask) chatTextarea()?.focus();
-  });
-}
-
-function chatTextarea() { return document.querySelector('#chat-drawer textarea[name="message"]'); }
-function scrollChat() {
-  document.querySelectorAll(".hi-chat-messages").forEach((el) => { el.scrollTop = el.scrollHeight; });
-}
-
-// Capture phase, so a Chat link inside #main opens the panel instead of hx-boost following it.
-document.addEventListener("click", (e) => {
-  const toggle = e.target.closest("[data-chat-toggle]");
-  if (toggle && chatDrawer()) {
-    e.preventDefault();
-    e.stopPropagation();
-    setChatOpen(!chatIsOpen(), { focus: true });
-    return;
-  }
-  if (e.target.closest("[data-chat-close]")) {
-    setChatOpen(false);
-    return;
-  }
-  // <button data-chat-ask="…">: open the panel with a question ready to send.
-  const ask = e.target.closest("[data-chat-ask]");
-  if (ask && chatDrawer()) {
-    e.preventDefault();
-    e.stopPropagation();
-    setChatOpen(true, { ask: ask.dataset.chatAsk });
-  }
-}, true);
-
-document.addEventListener("keydown", (e) => {
-  // Enter sends; Shift+Enter is a new line.
-  const ta = e.target.closest?.(".hi-chat-send textarea");
-  if (ta && e.key === "Enter" && !e.shiftKey && !e.isComposing) {
-    e.preventDefault();
-    if (ta.value.trim()) ta.form.requestSubmit();
-    return;
-  }
-  if (e.key === "Escape" && chatIsOpen() && document.activeElement?.closest("#chat-drawer")) setChatOpen(false);
+document.addEventListener("change", (e) => {
+  if (e.target.matches?.("[data-vis-select]")) updateDraftVisibility(e.target);
 });
-
-document.addEventListener("htmx:afterSettle", (e) => {
-  const t = e.detail.target;
-  if (t && (t.id === "chat-drawer-body" || t.classList?.contains("hi-chat") || t.closest?.("#chat-drawer"))) scrollChat();
-  if (t && t.id === "main" && chatIsOpen() && chatBase() !== chatLoadedBase) loadChat();
-});
-
-// Applying a change the chat suggested may alter the sheet on screen beside it.
-document.addEventListener("agentChanged", () => refreshOrNotify());
-
-document.addEventListener("DOMContentLoaded", () => {
-  if (!chatDrawer()) return;
-  let wasOpen = false;
-  try { wasOpen = localStorage.getItem(chatOpenKey) === "1"; } catch { /* ignore */ }
-  if (wasOpen && window.matchMedia("(min-width: 992px)").matches) setChatOpen(true);
-  scrollChat();
-});
+function initDraftVisibility(root) {
+  (root || document).querySelectorAll("[data-vis-select]").forEach(updateDraftVisibility);
+}
+document.addEventListener("DOMContentLoaded", () => initDraftVisibility(document));
+document.addEventListener("htmx:afterSettle", () => initDraftVisibility(document));
 
 // ---------------------------------------------------------------- creation wizard
 // <button data-fill='{"set.burden":"Reckless"}'>: a choice that fills in its form (the book's
@@ -499,3 +416,177 @@ document.addEventListener("change", (e) => {
 });
 document.addEventListener("htmx:afterSettle", () => updateSkillTotal(document.getElementById("wiz-skills")));
 document.addEventListener("DOMContentLoaded", () => updateSkillTotal(document.getElementById("wiz-skills")));
+
+// ---------------------------------------------------------------- writing assistant
+// .hi-assist (partials/choices.html "write-assist"): "Enhance" sends the target textarea's
+// current value to /assist/write; "Draft from campaign" sends none. Either way the result
+// previews in place with Replace/Append/Discard; nothing touches the textarea until one of those
+// is clicked, and nothing is saved until the surrounding form is submitted.
+function assistUpdateButtons(root) {
+  (root || document).querySelectorAll(".hi-assist").forEach((box) => {
+    const ta = document.getElementById(box.dataset.assistTarget || "");
+    const btn = box.querySelector("[data-assist-write]");
+    if (btn) btn.disabled = !ta || !ta.value.trim();
+  });
+}
+document.addEventListener("input", (e) => {
+  if (e.target.matches?.("textarea, input")) assistUpdateButtons(document);
+});
+document.addEventListener("DOMContentLoaded", () => assistUpdateButtons(document));
+document.addEventListener("htmx:afterSettle", () => assistUpdateButtons(document));
+
+document.addEventListener("click", (e) => {
+  const go = e.target.closest("[data-assist-write], [data-assist-draft]");
+  if (go) {
+    const box = go.closest(".hi-assist");
+    const out = box && box.querySelector(".hi-assist-out");
+    if (!box || !out || !window.htmx) return;
+    const draft = go.hasAttribute("data-assist-draft");
+    const ta = document.getElementById(box.dataset.assistTarget || "");
+    go.disabled = true;
+    out.innerHTML = '<span class="small text-body-secondary"><span class="spinner-border spinner-border-sm"></span> Thinking…</span>';
+    htmx.ajax("POST", "/assist/write", {
+      target: out, swap: "innerHTML",
+      values: {
+        field: box.dataset.assistField || "", mode: draft ? "draft" : "enhance",
+        text: draft ? "" : (ta ? ta.value : ""), target: box.dataset.assistTarget || "",
+        agent_id: box.dataset.assistAgent || "0", campaign_id: box.dataset.assistCampaign || "0",
+        session_id: box.dataset.assistSession || "0",
+      },
+    }).finally(() => { go.disabled = false; assistUpdateButtons(box); });
+    return;
+  }
+  const apply = e.target.closest("[data-assist-apply]");
+  if (!apply) return;
+  const box = apply.closest(".hi-assist");
+  const out = box && box.querySelector(".hi-assist-out");
+  if (apply.dataset.assistApply !== "discard") {
+    const ta = box && document.getElementById(box.dataset.assistTarget || "");
+    const text = apply.closest(".hi-assist-result")?.querySelector("p")?.textContent || "";
+    if (ta && text) {
+      ta.value = apply.dataset.assistApply === "append" && ta.value.trim() ? ta.value.replace(/\s+$/, "") + "\n\n" + text : text;
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      ta.focus();
+    }
+  }
+  if (out) out.innerHTML = "";
+});
+
+// ---------------------------------------------------------------- @mentions
+// [data-mentions="<campaign id>"]: typing "@" then letters shows a dropdown of matching people,
+// Agents, contacts, adversaries and territories (GET /c/{cid}/mentions?q=, already filtered to
+// what the signed-in viewer may see). Picking one inserts @[Name](kind:id) at the "@"; app.js's
+// own `mentions` template func turns that into a link wherever the text is later shown.
+let mentionBox = null, mentionTarget = null, mentionItems = [], mentionActive = -1, mentionTimer = null;
+
+function mentionRange(ta) {
+  const v = ta.value, pos = ta.selectionStart;
+  const at = v.lastIndexOf("@", pos - 1);
+  if (at === -1) return null;
+  const between = v.slice(at + 1, pos);
+  if (/[\s@]/.test(between)) return null; // no space or another @ since the last one
+  return { start: at, query: between };
+}
+
+function closeMentions() {
+  if (mentionBox) mentionBox.style.display = "none";
+  mentionTarget = null;
+  mentionItems = [];
+  mentionActive = -1;
+}
+
+function mentionListBox() {
+  if (!mentionBox) {
+    mentionBox = document.createElement("div");
+    mentionBox.className = "hi-mention-list list-group shadow-sm";
+    document.body.appendChild(mentionBox);
+  }
+  return mentionBox;
+}
+
+function renderMentionBox(ta) {
+  const box = mentionListBox();
+  box.innerHTML = "";
+  if (!mentionItems.length) {
+    box.style.display = "none";
+    return;
+  }
+  mentionItems.forEach((it, i) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "list-group-item list-group-item-action py-1 small" + (i === mentionActive ? " active" : "");
+    btn.textContent = it.label;
+    btn.addEventListener("mousedown", (e) => { e.preventDefault(); pickMention(ta, it); });
+    box.appendChild(btn);
+  });
+  const r = ta.getBoundingClientRect();
+  box.style.position = "absolute";
+  box.style.left = (r.left + window.scrollX) + "px";
+  box.style.top = (r.bottom + window.scrollY) + "px";
+  box.style.width = Math.min(Math.max(r.width, 220), 360) + "px";
+  box.style.display = "block";
+}
+
+function pickMention(ta, item) {
+  const range = mentionRange(ta);
+  if (!range) return;
+  const name = item.label.replace(/\s*\([^)]*\)\s*$/, ""); // drop a trailing "(…)" hint
+  const token = `@[${name}](${item.kind}:${item.id})`;
+  const before = ta.value.slice(0, range.start);
+  const after = ta.value.slice(ta.selectionStart);
+  ta.value = before + token + " " + after;
+  const pos = (before + token + " ").length;
+  ta.setSelectionRange(pos, pos);
+  ta.dispatchEvent(new Event("input", { bubbles: true }));
+  closeMentions();
+  ta.focus();
+}
+
+function fetchMentions(ta, campaignID, query) {
+  fetch(`/c/${campaignID}/mentions?q=${encodeURIComponent(query)}`)
+    .then((r) => (r.ok ? r.json() : { items: [] }))
+    .then((data) => {
+      if (mentionTarget !== ta) return; // the caret moved on while this was in flight
+      mentionItems = data.items || [];
+      mentionActive = mentionItems.length ? 0 : -1;
+      renderMentionBox(ta);
+    })
+    .catch(() => closeMentions());
+}
+
+document.addEventListener("input", (e) => {
+  const ta = e.target;
+  if (!ta.matches?.("[data-mentions]")) return;
+  const range = mentionRange(ta);
+  if (!range) {
+    closeMentions();
+    return;
+  }
+  mentionTarget = ta;
+  clearTimeout(mentionTimer);
+  mentionTimer = setTimeout(() => fetchMentions(ta, ta.dataset.mentions, range.query), 150);
+});
+
+document.addEventListener("keydown", (e) => {
+  if (!mentionTarget || e.target !== mentionTarget || !mentionItems.length) return;
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    mentionActive = Math.min(mentionActive + 1, mentionItems.length - 1);
+    renderMentionBox(mentionTarget);
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    mentionActive = Math.max(mentionActive - 1, 0);
+    renderMentionBox(mentionTarget);
+  } else if ((e.key === "Enter" || e.key === "Tab") && mentionActive >= 0) {
+    e.preventDefault();
+    pickMention(mentionTarget, mentionItems[mentionActive]);
+  } else if (e.key === "Escape") {
+    closeMentions();
+  }
+});
+
+document.addEventListener("blur", (e) => {
+  if (e.target === mentionTarget) setTimeout(closeMentions, 150); // let a mousedown pick land first
+}, true);
+
+document.addEventListener("htmx:afterSettle", closeMentions);

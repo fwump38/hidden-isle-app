@@ -52,36 +52,6 @@ body, main { overflow-anchor: none; }
 .hi-help:focus { outline: 2px solid var(--bs-focus-ring-color); border-radius: 50%; }
 .form-text { font-size: .8em; }
 
-/* Chat side panel (layout.html #chat-drawer): docked on the right on wide screens, with the page
-   reflowing beside it; over the page on narrow ones. */
-:root { --hi-chat-w: 400px; }
-.hi-chat-drawer {
-  position: fixed; top: 0; right: 0; bottom: 0; z-index: 1045;
-  width: var(--hi-chat-w); max-width: 100vw;
-  display: flex; flex-direction: column;
-  background: var(--bs-body-bg); border-left: 1px solid var(--bs-border-color);
-  box-shadow: -.5rem 0 1.5rem rgba(0, 0, 0, .35);
-}
-.hi-chat-drawer[hidden] { display: none; }
-.hi-chat-head { display: flex; align-items: center; gap: .5rem; padding: .6rem .75rem; border-bottom: 1px solid var(--bs-border-color); }
-.hi-chat-head .flex-grow-1 { min-width: 0; }
-.hi-chat-drawer-body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: .75rem; }
-.hi-chat-drawer-body .hi-chat { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.hi-chat-drawer-body .hi-chat-messages { flex: 1; min-height: 0; overflow-y: auto; }
-.hi-chat-drawer-body details[open] form textarea { max-height: 6rem; }
-.hi-chat-messages { margin-bottom: .75rem; }
-.hi-chat-page .hi-chat-messages { max-height: 55vh; overflow-y: auto; padding: .75rem; border: 1px solid var(--bs-border-color); border-radius: var(--bs-border-radius); }
-.hi-chat-fab {
-  position: fixed; right: 1rem; z-index: 1040;
-  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
-}
-body.hi-chat-open .hi-chat-fab { display: none; }
-@media (min-width: 992px) {
-  body.hi-chat-open { padding-right: var(--hi-chat-w); }
-  body.hi-chat-open #toasts { right: var(--hi-chat-w) !important; }
-}
-@media (max-width: 991.98px) { .hi-chat-drawer { width: 100vw; } }
-
 /* Creation wizard: choices a player can pick with one tap. Each is a button (the value alone,
    so app.js's [data-fill] handler fills only that) plus its "why" as plain text below it, outside
    the button. */
@@ -91,6 +61,14 @@ body.hi-chat-open .hi-chat-fab { display: none; }
 .hi-choice-why { padding: 0 .2rem; }
 .hi-card-meaning { border-left: 3px solid var(--hi-accent); padding-left: .6rem; }
 .hi-wiz-foot { display: flex; justify-content: space-between; align-items: center; gap: .5rem; flex-wrap: wrap; border-top: 1px solid var(--bs-border-color); margin-top: 1rem; padding-top: .75rem; }
+
+/* Writing assistant (partials/choices.html "write-assist", app.js .hi-assist). */
+.hi-assist-result { border-color: var(--hi-accent); }
+
+/* @mentions (app.js, internal/web/mentions.go). */
+.hi-mention-list { z-index: 1060; max-height: 14rem; overflow-y: auto; display: none; background: var(--bs-body-bg); }
+a.hi-mention { font-weight: 600; }
+.hi-mention-user { font-weight: 600; color: var(--bs-secondary-color); }
 
 /* Rule browser (/rules). */
 .hi-rules-tabs { scrollbar-width: thin; }

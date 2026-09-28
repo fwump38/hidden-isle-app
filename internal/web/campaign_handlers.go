@@ -192,9 +192,8 @@ func (s *Server) campaignPage(w http.ResponseWriter, r *http.Request) {
 }
 
 type settingsData struct {
-	Users       []db.User
-	Members     map[uint]bool
-	ChatEnabled bool
+	Users   []db.User
+	Members map[uint]bool
 }
 
 func (s *Server) settingsPage(w http.ResponseWriter, r *http.Request) {
@@ -208,7 +207,7 @@ func (s *Server) settingsPage(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	d := settingsData{Members: map[uint]bool{}, ChatEnabled: s.Chat != nil}
+	d := settingsData{Members: map[uint]bool{}}
 	s.DB.Where("role = ? AND active = ?", db.RolePlayer, true).Order("name").Find(&d.Users)
 	members, _ := s.Svc.Members(a, c.ID)
 	for _, m := range members {
@@ -702,8 +701,12 @@ func (s *Server) journalPage(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) saveEntry(w http.ResponseWriter, r *http.Request) {
 	cid := pathID(r, "cid")
+	visibility := db.Visibility(r.FormValue("visibility"))
+	// "Save as draft" only matters for Everyone: a draft is visible to you (and the Seer, per the
+	// usual owner/Seer rules) until you untick it. Every other visibility is unaffected by it.
+	draft := r.FormValue("draft") == "on"
 	e := &db.Entry{CampaignID: cid, Kind: r.FormValue("kind"), Title: strings.TrimSpace(r.FormValue("title")),
-		Body: strings.TrimSpace(r.FormValue("body")), Visibility: db.Visibility(r.FormValue("visibility")), Published: r.FormValue("published") == "on"}
+		Body: strings.TrimSpace(r.FormValue("body")), Visibility: visibility, Published: visibility != db.VisParty || !draft}
 	if id, err := strconv.ParseUint(r.FormValue("id"), 10, 64); err == nil {
 		e.ID = uint(id)
 	}

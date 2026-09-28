@@ -18,7 +18,8 @@
         <div class="col-12"><select class="form-select" name="set.adventure" aria-label="Adventure"><option value="">Original scenario</option>{{range $snap.Adventures.Adventures}}<option value="{{.ID}}" {{if eq .ID $s.Adventure}}selected{{end}}>{{.Title}} ({{.Book}})</option>{{end}}</select></div>
         <div class="col-6"><input class="form-control" name="set.mission_type" value="{{$s.MissionType}}" placeholder="Mission type" aria-label="Mission type"></div>
         <div class="col-6"><input class="form-control" name="set.territory" value="{{$s.Territory}}" placeholder="Territory" aria-label="Territory"></div>
-        <div class="col-12"><label class="small text-body-secondary" for="summary">Summary as read to the players (player-safe)</label><textarea class="form-control" id="summary" name="set.summary" rows="2">{{$s.Summary}}</textarea></div>
+        <div class="col-12"><label class="small text-body-secondary" for="summary">Summary as read to the players (player-safe)</label><textarea class="form-control" id="summary" name="set.summary" rows="2">{{$s.Summary}}</textarea>
+        {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "session_summary" "Target" "summary" "AgentID" 0 "CampaignID" $c.ID "SessionID" $s.ID "Draft" true)}}{{end}}</div>
         <div class="col-12"><button class="btn btn-sm btn-outline-light" type="submit">Save</button></div>
       </form>
       {{else}}
@@ -33,9 +34,13 @@
       <h2 class="h5 card-title text-warning"><i class="bi bi-eye-slash"></i> Seer only</h2>
       <form method="post" action="{{$u}}" class="row g-2">
         <input type="hidden" name="back" value="{{$back}}">
-        <div class="col-12"><label class="small text-body-secondary" for="prep">Prep: cast, locations, clocks, likely challenges, twists</label><textarea class="form-control" id="prep" name="set.prep" rows="5">{{$s.Prep}}</textarea></div>
-        <div class="col-12"><label class="small text-body-secondary" for="div">Divination: adversary / stakes / goal / lead, visions given and kept</label><textarea class="form-control" id="div" name="set.divination" rows="3">{{$s.Divination}}</textarea></div>
-        <div class="col-12"><label class="small text-body-secondary" for="next">Notes for next time</label><textarea class="form-control" id="next" name="set.next_time" rows="3">{{$s.NextTime}}</textarea></div>
+        {{if $.AssistEnabled}}<div class="col-12">{{template "suggest-box" (dict "URL" (printf "/c/%d/suggest" $c.ID) "Kind" "session" "Label" "Suggest prep" "Placeholder" "Describe what you're after" "Value" "" "Form" "")}}</div>{{end}}
+        <div class="col-12"><label class="small text-body-secondary" for="prep">Prep: cast, locations, clocks, likely challenges, twists</label><textarea class="form-control" id="prep" name="set.prep" rows="5">{{$s.Prep}}</textarea>
+        {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "session_prep" "Target" "prep" "AgentID" 0 "CampaignID" $c.ID "SessionID" $s.ID "Draft" false)}}{{end}}</div>
+        <div class="col-12"><label class="small text-body-secondary" for="div">Divination: adversary / stakes / goal / lead, visions given and kept</label><textarea class="form-control" id="div" name="set.divination" rows="3">{{$s.Divination}}</textarea>
+        {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "session_divination" "Target" "div" "AgentID" 0 "CampaignID" $c.ID "SessionID" $s.ID "Draft" false)}}{{end}}</div>
+        <div class="col-12"><label class="small text-body-secondary" for="next">Notes for next time</label><textarea class="form-control" id="next" name="set.next_time" rows="3">{{$s.NextTime}}</textarea>
+        {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "session_next_time" "Target" "next" "AgentID" 0 "CampaignID" $c.ID "SessionID" $s.ID "Draft" true)}}{{end}}</div>
         <div class="col-12"><button class="btn btn-sm btn-outline-warning" type="submit">Save</button></div>
       </form>
     </div></div>
@@ -48,19 +53,20 @@
       <div class="mb-3">
         <div class="small text-body-secondary">{{.Kind}}{{if not .Published}} · draft{{end}}{{if eq .Visibility "seer"}} · <span class="text-warning">Seer only</span>{{end}}</div>
         <div class="fw-semibold">{{.Title}}</div>
-        <div class="hi-prose small">{{.Body}}</div>
+        <div class="hi-prose small">{{mentions .Body $c.ID}}</div>
       </div>
       {{else}}<p class="small text-body-secondary">Nothing written yet.</p>{{end}}
       <form method="post" action="/c/{{$c.ID}}/entries" class="row g-2">
         <input type="hidden" name="session_id" value="{{$s.ID}}"><input type="hidden" name="back" value="{{$back}}">
         <div class="col-12 col-md-4"><select class="form-select form-select-sm" name="kind" aria-label="Kind">
           {{if $seer}}<option value="session_log">Session log</option><option value="recap">Player-safe recap</option>{{end}}
-          <option value="note">Note</option><option value="journal">Journal</option></select></div>
+          <option value="journal">Journal</option></select></div>
         <div class="col-12 col-md-8"><input class="form-control form-control-sm" name="title" placeholder="Title" aria-label="Title"></div>
-        <div class="col-12"><textarea class="form-control form-control-sm" name="body" rows="4" placeholder="In your own words" required aria-label="Text"></textarea></div>
-        <div class="col-8"><select class="form-select form-select-sm" name="visibility" aria-label="Who can read it">
-          <option value="party">Everyone in the campaign</option><option value="owner" selected>Me and the Seer</option><option value="private">Only me</option>{{if $seer}}<option value="seer">Seer only</option>{{end}}</select></div>
-        <div class="col-4 d-flex align-items-center"><div class="form-check mb-0"><input class="form-check-input" type="checkbox" name="published" id="pub"><label class="form-check-label small" for="pub">Publish</label></div></div>
+        <div class="col-12"><textarea class="form-control form-control-sm" id="session-entry-body" name="body" rows="4" placeholder="In your own words" required aria-label="Text" data-mentions="{{$c.ID}}"></textarea>
+        {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "session_entry" "Target" "session-entry-body" "AgentID" 0 "CampaignID" $c.ID "SessionID" $s.ID "Draft" false)}}{{end}}</div>
+        <div class="col-8"><select class="form-select form-select-sm" name="visibility" aria-label="Who can see this" data-vis-select>
+          <option value="private">Only me</option><option value="owner" selected>Me and the Seer</option><option value="party">Everyone in the campaign</option>{{if $seer}}<option value="seer">Seer only</option>{{end}}</select></div>
+        <div class="col-4 d-flex align-items-center" data-draft-wrap hidden><div class="form-check mb-0"><input class="form-check-input" type="checkbox" name="draft" id="pub"><label class="form-check-label small" for="pub">Save as draft</label></div></div>
         <div class="col-12"><button class="btn btn-sm btn-outline-light" type="submit">Save</button></div>
       </form>
     </div></div>

@@ -26,16 +26,10 @@ This repo holds **no game text**. The rules data (classes, abilities, cards, tab
 >   background, never saving anything itself); plus a deterministic automatic generator (real
 >   card draws, no Claude needed);
 > - downtime a player plans and submits, and the Seer approves before it touches the sheet;
-> - an in-app Claude chat for players (rules Q&A, help with their Agent) in a side panel that
->   stays open beside any page and works before a player has even joined a campaign, on the
->   Seer's own Anthropic billing, with monthly spend caps and read-mostly tools scoped to what
->   that player may see. A suggested sheet change is
->   only a card in the chat until the player taps Apply.
->
 > - a rule browser (`/rules`) for players and the Seer: the loaded rules text in tabs (Rules,
 >   Characters, Reference, Setting, Errata, Summary, and Seer-only Adventures), with search and a
 >   marker on every printed page. Every page cite in the app ("p. 15", "pp. 72, 100-103",
->   "Sheet p. 3", "Ref p. 8"), including in help popups and chat replies, links straight to it.
+>   "Sheet p. 3", "Ref p. 8"), including in help popups, links straight to it.
 >
 > - MCP Apps widgets in claude.ai: an Agent sheet, the campaign's clocks and the challenge
 >   helper, drawn inline in the chat and editable in place.
@@ -121,16 +115,16 @@ claude mcp add --transport http hidden-isle https://isle.example.com/mcp --heade
 - **No setup:** the pages are served by the app itself as `ui://hidden-isle/…` resources and load nothing from outside.
 - **Other clients** (e.g. Claude Code) get the same data as JSON.
 
-## In-app chat for players
+## In-app AI assistance
 
-Players get their own Claude chat, for rules questions and help with their Agent. The **Chat** button in the top bar opens it as a panel on the right that stays open while they move around the app (on a phone it covers the page until closed); inside a campaign it's that campaign's chat. The same API key powers the creation wizard's "more ideas" buttons, which spend from the same monthly caps but never touch the chat. It's separate from the MCP connector above: MCP is the Seer's own claude.ai/Claude Code session; this is a chat the app itself runs on the Seer's Anthropic billing, so players never need (or get) their own Anthropic account, and it can't see or touch the Seer's claude.ai account, memories or connectors.
+There's no free-form chat in the app. Instead, AI shows up in place: a "describe what you have in mind" box plus a **Suggest** button on the creation wizard, which offers a few structured options for that step and never saves anything itself. Rules questions go through the rule browser (`/rules`, with search) or, when that's not enough, the Seer or the Seer's own Claude over MCP.
 
 1. **Get a key.** Go to the [Anthropic Console](https://console.anthropic.com/settings/keys) → **API Keys** → **Create Key**. If it offers identity federation, decline it — that's for workload identity in a cloud provider (AWS/GCP/Azure), not this app; just create a standard API key.
-2. **Expiration:** the app has no way to refresh or rotate this key itself — it's read once from `ANTHROPIC_API_KEY` at startup. If the key expires, the chat quietly stops working until you generate a new one and update it. Set it to **Never**, or note the date somewhere you'll actually see it before it lapses.
-3. **Set it:** add `ANTHROPIC_API_KEY` to the container's environment (see `compose.yaml`) and restart. The **Chat** tab appears for everyone in a campaign once it's set; with it unset, the tab is hidden entirely and nothing chat-related is reachable.
-4. **Optional caps:** `HI_CHAT_MONTHLY_CAP_USD` (table-wide) and `HI_CHAT_PLAYER_CAP_USD` (per player) stop new chat requests once that month's spend is reached; Admin shows the running total against them.
+2. **Expiration:** the app has no way to refresh or rotate this key itself — it's read once from `ANTHROPIC_API_KEY` at startup. If the key expires, AI assistance quietly stops working until you generate a new one and update it. Set it to **Never**, or note the date somewhere you'll actually see it before it lapses.
+3. **Set it:** add `ANTHROPIC_API_KEY` to the container's environment (see `compose.yaml`) and restart. Suggest buttons appear once it's set; with it unset, they're hidden entirely and nothing AI-related is reachable.
+4. **Optional caps:** `HI_AI_MONTHLY_CAP_USD` (table-wide) and `HI_AI_PLAYER_CAP_USD` (per player) stop new requests once that month's spend is reached; Admin shows the running total against them.
 
-Everything a player's chat can see or change is scoped to that player: it reads their own Agent, party-visible campaign state, and the rules text (never adventures or anything Seer-only), and the one thing it can write — a suggested change to the player's own Agent — only becomes real once the player taps **Apply** on the suggestion card. The Seer can read (not write) any player's chat from that campaign's Settings page.
+It's separate from the MCP connector above: MCP is the Seer's own claude.ai/Claude Code session; this runs on the Seer's Anthropic billing, so players never need (or get) their own Anthropic account, and it can't see or touch the Seer's claude.ai account, memories or connectors. Nothing it suggests is saved until the player picks an option and saves the step themselves.
 
 ## Configuration
 
@@ -155,11 +149,11 @@ Everything a player's chat can see or change is scoped to that player: it reads 
 | `GAMEDATA_KNOWN_HOSTS` | | A known_hosts file for SSH hosts other than github.com (GitHub's keys are built in) |
 | `GAMEDATA_INTERVAL` | `1h` | How often to check for new releases |
 | `HI_BACKUP_INTERVAL` | `24h` | Writes a consistent `/data/backup/hidden-isle.db` for your NAS backup (`0` = off) |
-| `ANTHROPIC_API_KEY` | | Turns on the in-app player chat (an [API key](https://platform.claude.com), billed per token — separate from a claude.ai subscription, and never able to see it) |
-| `HI_CHAT_MODEL` | `claude-sonnet-5` | Model for the in-app chat |
-| `HI_CHAT_MONTHLY_CAP_USD` | `20` | Table-wide monthly spend cap for the in-app chat (`0` = no cap) |
-| `HI_CHAT_PLAYER_CAP_USD` | `5` | Per-player monthly spend cap (`0` = no cap) |
-| `HI_CHAT_PRICE_IN` / `HI_CHAT_PRICE_OUT` | `3` / `15` | $ per million input/output tokens, for the app's own cost estimate (set these to match your model; they don't change what Anthropic bills you) |
+| `ANTHROPIC_API_KEY` | | Turns on in-app AI assistance (an [API key](https://platform.claude.com), billed per token — separate from a claude.ai subscription, and never able to see it) |
+| `HI_AI_MODEL` | `claude-sonnet-5` | Model for AI assistance (was `HI_CHAT_MODEL`) |
+| `HI_AI_MONTHLY_CAP_USD` | `20` | Table-wide monthly spend cap (`0` = no cap; was `HI_CHAT_MONTHLY_CAP_USD`) |
+| `HI_AI_PLAYER_CAP_USD` | `5` | Per-player monthly spend cap (`0` = no cap; was `HI_CHAT_PLAYER_CAP_USD`) |
+| `HI_AI_PRICE_IN` / `HI_AI_PRICE_OUT` | `3` / `15` | $ per million input/output tokens, for the app's own cost estimate (set these to match your model; they don't change what Anthropic bills you; was `HI_CHAT_PRICE_IN`/`HI_CHAT_PRICE_OUT`) |
 
 **Rules data sync:**
 - A sync that fails validation keeps the last good snapshot, and Admin shows the error.
@@ -186,7 +180,7 @@ scripts/vendor.sh                                                     # refresh 
   - `internal/cards`: draws
   - `internal/creation`: the automatic character-creation generator (no Claude; real draws only)
   - `internal/mcpsrv`: MCP (tools, prompts, and the widgets in `widgets/`)
-  - `internal/chat`: the in-app player chat (Anthropic API, tool loop, budget caps)
+  - `internal/assist`: in-app AI assistance (Anthropic API, structured suggestions, budget caps)
   - `internal/web`: UI
 - **Schema changes:** add models to `internal/db/models.go`, where `AutoMigrate` applies additive changes. Put renames and data fixes in `migrations`.
 - **CI:** gofmt, vet and race tests on every push. On pushes to `main` and on `v*` tags, it also builds a multi-arch image (amd64 and arm64) and pushes it to `ghcr.io/fwump38/hidden-isle-app`.

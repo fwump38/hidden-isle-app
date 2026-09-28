@@ -42,12 +42,12 @@ type Config struct {
 
 	BackupInterval time.Duration // HI_BACKUP_INTERVAL: consistent SQLite snapshot for the NAS backup (0 = off)
 
-	AnthropicAPIKey   string  // ANTHROPIC_API_KEY: enables the in-app player chat (unset = disabled)
-	ChatModel         string  // HI_CHAT_MODEL
-	ChatMonthlyCapUSD float64 // HI_CHAT_MONTHLY_CAP_USD: table-wide monthly spend cap (0 = no cap)
-	ChatPlayerCapUSD  float64 // HI_CHAT_PLAYER_CAP_USD: per-player monthly spend cap (0 = no cap)
-	ChatPriceInUSD    float64 // HI_CHAT_PRICE_IN: $ per million input tokens, for the cost estimate
-	ChatPriceOutUSD   float64 // HI_CHAT_PRICE_OUT: $ per million output tokens
+	AnthropicAPIKey     string  // ANTHROPIC_API_KEY: enables in-app AI assistance (unset = disabled)
+	AssistModel         string  // HI_AI_MODEL (was HI_CHAT_MODEL)
+	AssistMonthlyCapUSD float64 // HI_AI_MONTHLY_CAP_USD (was HI_CHAT_MONTHLY_CAP_USD): table-wide monthly spend cap (0 = no cap)
+	AssistPlayerCapUSD  float64 // HI_AI_PLAYER_CAP_USD (was HI_CHAT_PLAYER_CAP_USD): per-player monthly spend cap (0 = no cap)
+	AssistPriceInUSD    float64 // HI_AI_PRICE_IN (was HI_CHAT_PRICE_IN): $ per million input tokens, for the cost estimate
+	AssistPriceOutUSD   float64 // HI_AI_PRICE_OUT (was HI_CHAT_PRICE_OUT): $ per million output tokens
 }
 
 func Load() (*Config, error) {
@@ -70,19 +70,19 @@ func Load() (*Config, error) {
 		GameDataToken:      os.Getenv("GAMEDATA_TOKEN"),
 		GameDataKnownHosts: os.Getenv("GAMEDATA_KNOWN_HOSTS"),
 		AnthropicAPIKey:    os.Getenv("ANTHROPIC_API_KEY"),
-		ChatModel:          env("HI_CHAT_MODEL", "claude-sonnet-5"),
+		AssistModel:        envAlias("HI_AI_MODEL", "HI_CHAT_MODEL", "claude-sonnet-5"),
 	}
 	var err error
-	if c.ChatMonthlyCapUSD, err = floatEnv("HI_CHAT_MONTHLY_CAP_USD", "20"); err != nil {
+	if c.AssistMonthlyCapUSD, err = floatEnvAlias("HI_AI_MONTHLY_CAP_USD", "HI_CHAT_MONTHLY_CAP_USD", "20"); err != nil {
 		return nil, err
 	}
-	if c.ChatPlayerCapUSD, err = floatEnv("HI_CHAT_PLAYER_CAP_USD", "5"); err != nil {
+	if c.AssistPlayerCapUSD, err = floatEnvAlias("HI_AI_PLAYER_CAP_USD", "HI_CHAT_PLAYER_CAP_USD", "5"); err != nil {
 		return nil, err
 	}
-	if c.ChatPriceInUSD, err = floatEnv("HI_CHAT_PRICE_IN", "3"); err != nil {
+	if c.AssistPriceInUSD, err = floatEnvAlias("HI_AI_PRICE_IN", "HI_CHAT_PRICE_IN", "3"); err != nil {
 		return nil, err
 	}
-	if c.ChatPriceOutUSD, err = floatEnv("HI_CHAT_PRICE_OUT", "15"); err != nil {
+	if c.AssistPriceOutUSD, err = floatEnvAlias("HI_AI_PRICE_OUT", "HI_CHAT_PRICE_OUT", "15"); err != nil {
 		return nil, err
 	}
 	if c.LANCIDRs, err = prefixes("HI_LAN_CIDR", "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8,::1/128,fc00::/7"); err != nil {
@@ -116,6 +116,24 @@ func env(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// envAlias reads key, falling back to legacy (an older env var name kept for compatibility)
+// before def. Used for the HI_AI_* settings, renamed from HI_CHAT_*.
+func envAlias(key, legacy, def string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
+	}
+	return env(legacy, def)
+}
+
+func floatEnvAlias(key, legacy, def string) (float64, error) {
+	v := envAlias(key, legacy, def)
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", key, err)
+	}
+	return f, nil
 }
 
 func duration(key, def string) (time.Duration, error) {

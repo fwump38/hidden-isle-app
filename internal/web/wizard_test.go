@@ -3,10 +3,63 @@ package web
 import (
 	"encoding/json"
 	"html"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
+
+	"github.com/fwump38/hidden-isle-app/internal/assist"
+	"github.com/fwump38/hidden-isle-app/internal/rules"
 )
+
+// wireAssistFunc gives srv a working assist.Service backed by a fake Anthropic server running
+// handler, so web-layer tests can exercise the suggest and write-assist routes without any
+// network use.
+func wireAssistFunc(t *testing.T, srv *Server, handler http.HandlerFunc) {
+	t.Helper()
+	fake := httptest.NewServer(handler)
+	t.Cleanup(fake.Close)
+	idx, err := rules.New(srv.DB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv.Assist = assist.New(srv.DB, srv.Svc, srv.Data, idx, assist.Config{APIKey: "test", BaseURL: fake.URL})
+}
+
+// wireAssistWith is wireAssistFunc with a fixed raw response body (e.g. a tool_use block).
+func wireAssistWith(t *testing.T, srv *Server, body []byte) {
+	t.Helper()
+	wireAssistFunc(t, srv, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(body)
+	})
+}
+
+// wireAssistWithCounter is wireAssistWith plus a call counter, for tests that assert a request
+// was refused before ever reaching the API.
+func wireAssistWithCounter(t *testing.T, srv *Server, calls *int, body []byte) {
+	t.Helper()
+	var n int32
+	wireAssistFunc(t, srv, func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&n, 1)
+		*calls = int(atomic.LoadInt32(&n))
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(body)
+	})
+}
+
+// wireAssistWithCapture is wireAssistWith plus a copy of the last request body it received
+// (decoded), for tests that check exactly what context was sent to the model.
+func wireAssistWithCapture(t *testing.T, srv *Server, last *map[string]any, body []byte) {
+	t.Helper()
+	wireAssistFunc(t, srv, func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(last)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(body)
+	})
+}
 
 func suggestResp(options ...map[string]any) []byte {
 	b, _ := json.Marshal(map[string]any{
@@ -123,7 +176,7 @@ func TestWizardSuggest(t *testing.T) {
 		t.Error("the suggestion box shouldn't show with the assistant off")
 	}
 
-	wireChatWith(t, srv, suggestResp(map[string]any{"word": "Proud", "why": "fits"}, map[string]any{"word": "Stubborn", "why": "also"}))
+	wireAssistWith(t, srv, suggestResp(map[string]any{"word": "Proud", "why": "fits"}, map[string]any{"word": "Stubborn", "why": "also"}))
 	if _, body := st.get("Ana", "/agents/1/wizard?step=burden"); !strings.Contains(body, "More ideas") {
 		t.Error("the suggestion box should show with the assistant on")
 	}
@@ -142,26 +195,21 @@ func TestWizardSuggest(t *testing.T) {
 	if ag.Burden != "" {
 		t.Errorf("a suggestion was saved (%q); only the player saves", ag.Burden)
 	}
-	var msgs int64
-	svc.DB.Table("chat_messages").Count(&msgs)
-	if msgs != 0 {
-		t.Errorf("creation wrote %d chat messages; it shouldn't use the chat at all", msgs)
-	}
 
-	wireChatWith(t, srv, suggestResp(map[string]any{"ability": "Familiar", "why": "a companion"}, map[string]any{"ability": "FIREBALL", "why": "made up"}))
+	wireAssistWith(t, srv, suggestResp(map[string]any{"ability": "Familiar", "why": "a companion"}, map[string]any{"ability": "FIREBALL", "why": "made up"}))
 	_, body = st.postBody("Ana", "/agents/1/wizard/suggest", url.Values{"kind": {"abilities"}})
 	if !strings.Contains(body, `name="ability.add" value="familiar"`) || strings.Contains(body, "FIREBALL") {
 		t.Errorf("ability suggestions should be the class's own, pickable: %s", body)
 	}
 
-	wireChatWith(t, srv, suggestResp(map[string]any{"points": "Study +2, Nonsense +1, Slip +1", "why": "bookish"}))
+	wireAssistWith(t, srv, suggestResp(map[string]any{"points": "Study +2, Nonsense +1, Slip +1", "why": "bookish"}))
 	_, body = st.postBody("Ana", "/agents/1/wizard/suggest", url.Values{"kind": {"skills"}, "skill.Study": {"0"}})
 	body = html.UnescapeString(body)
 	if !strings.Contains(body, `"skill.Study":"2"`) || !strings.Contains(body, `"skill.Slip":"1"`) || strings.Contains(body, "Nonsense") {
 		t.Errorf("skill suggestions should become new totals for real skills: %s", body)
 	}
 
-	wireChatWith(t, srv, suggestResp(map[string]any{"class": "Prowler", "why": "sneaky"}, map[string]any{"class": "Wizard", "why": "no such class"}))
+	wireAssistWith(t, srv, suggestResp(map[string]any{"class": "Prowler", "why": "sneaky"}, map[string]any{"class": "Wizard", "why": "no such class"}))
 	_, body = st.postBody("Ana", "/agents/create/suggest", url.Values{"kind": {"class"}, "hint": {"a sneaky thief"}})
 	if !strings.Contains(body, `name="class" value="prowler"`) || strings.Contains(body, "Wizard") {
 		t.Errorf("class suggestions should pick a real class on the class page: %s", body)
@@ -169,9 +217,51 @@ func TestWizardSuggest(t *testing.T) {
 
 	// If every option Claude offers turns out not to match a real class, the player must see an
 	// error, not a silently empty box (a spinner that stops with nothing to show).
-	wireChatWith(t, srv, suggestResp(map[string]any{"class": "Wizard", "why": "no such class"}))
+	wireAssistWith(t, srv, suggestResp(map[string]any{"class": "Wizard", "why": "no such class"}))
 	_, body = st.postBody("Ana", "/agents/create/suggest", url.Values{"kind": {"class"}, "hint": {"a sneaky thief"}})
 	if !strings.Contains(body, "Nothing usable came back") {
 		t.Errorf("no usable class suggestions should say so, not render empty: %s", body)
+	}
+}
+
+// TestNoChatEverywhere is a regression test for removing the in-app chat: no page should carry
+// the old chat drawer, floating button or panel markup, whether or not AI assistance is
+// configured, and the old chat routes should no longer exist at all.
+func TestNoChatEverywhere(t *testing.T) {
+	st, _, srv := newSiteWithServer(t)
+	wireAssistWith(t, srv, suggestResp(map[string]any{"word": "Proud", "why": "fits"}))
+
+	for _, path := range []string{"/", "/agents/create", "/admin"} {
+		_, body := st.get("Seer", path)
+		for _, marker := range []string{"chat-drawer", "hi-chat-fab", "data-chat-toggle", `id="chat"`} {
+			if strings.Contains(body, marker) {
+				t.Errorf("%s: unexpected chat markup %q", path, marker)
+			}
+		}
+	}
+
+	for _, path := range []string{"/chat", "/chat/panel", "/chat/send"} {
+		code, _ := st.get("Seer", path)
+		if code != http.StatusNotFound {
+			t.Errorf("%s: code = %d, want 404 (the chat routes are gone)", path, code)
+		}
+	}
+}
+
+// TestAIControlsHiddenWithoutAssist covers the "gracefully hide, not disable" requirement: with
+// no ANTHROPIC_API_KEY (srv.Assist == nil), no page offers a Suggest control, and the suggest
+// endpoints refuse cleanly instead of panicking on a nil Service.
+func TestAIControlsHiddenWithoutAssist(t *testing.T) {
+	st, _ := newSite(t) // srv.Assist is nil: no key configured
+
+	if _, body := st.get("Ana", "/agents/create"); strings.Contains(body, "Suggest a class") {
+		t.Error("the class page shouldn't offer suggestions with the assistant off")
+	}
+	newWizardAgent(t, st, "occultist")
+	if _, body := st.get("Ana", "/agents/1/wizard?step=burden"); strings.Contains(body, "More ideas") {
+		t.Error("the wizard shouldn't offer suggestions with the assistant off")
+	}
+	if code, body := st.postBody("Ana", "/agents/1/wizard/suggest", url.Values{"kind": {"burden"}}); code != 200 || !strings.Contains(html.UnescapeString(body), "isn't set up") {
+		t.Errorf("suggest with no assistant should say so, not error: %d %q", code, body)
 	}
 }

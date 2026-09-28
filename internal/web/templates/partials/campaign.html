@@ -15,7 +15,7 @@
     {{if $.User.IsSeer}}
     <li class="nav-item"><a class="nav-link text-info {{if eq $sec "play"}}active{{end}}" href="/c/{{$c.ID}}/play"><i class="bi bi-controller"></i> Play</a></li>
     <li class="nav-item"><a class="nav-link text-info {{if eq $sec "downtime"}}active{{end}}" href="/c/{{$c.ID}}/downtime"><i class="bi bi-moon"></i> Downtime</a></li>
-    <li class="nav-item"><a class="nav-link text-warning {{if eq $sec "notes"}}active{{end}}" href="/c/{{$c.ID}}/notes"><i class="bi bi-eye-slash"></i> Notes</a></li>
+    <li class="nav-item"><a class="nav-link text-warning {{if eq $sec "notes"}}active{{end}}" href="/c/{{$c.ID}}/notes"><i class="bi bi-eye-slash"></i> Seer notes</a></li>
     <li class="nav-item"><a class="nav-link {{if eq $sec "settings"}}active{{end}}" href="/c/{{$c.ID}}/settings"><i class="bi bi-sliders"></i></a></li>
     {{end}}
   </ul>

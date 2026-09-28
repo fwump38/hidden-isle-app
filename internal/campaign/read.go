@@ -369,7 +369,7 @@ func (s *Service) Events(a Actor, campaignID uint, f EventFilter) ([]db.Event, e
 }
 
 // Entry kinds and who may write them.
-var entryKinds = map[string]bool{"session_log": true, "recap": true, "history": true, "journal": true, "note": true}
+var entryKinds = map[string]bool{"session_log": true, "recap": true, "history": true, "journal": true}
 
 // WriteEntry creates or updates long-form writing. Players may write journals and notes, and
 // history lines for their own Agents; session logs and recaps are the Seer's.

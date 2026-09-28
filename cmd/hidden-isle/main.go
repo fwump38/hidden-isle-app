@@ -19,9 +19,9 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/fwump38/hidden-isle-app/internal/assist"
 	"github.com/fwump38/hidden-isle-app/internal/auth"
 	"github.com/fwump38/hidden-isle-app/internal/campaign"
-	"github.com/fwump38/hidden-isle-app/internal/chat"
 	"github.com/fwump38/hidden-isle-app/internal/config"
 	"github.com/fwump38/hidden-isle-app/internal/db"
 	"github.com/fwump38/hidden-isle-app/internal/gamedata"
@@ -109,13 +109,13 @@ func run() error {
 	ui.Live = hub
 	ui.Rules = idx
 	if cfg.AnthropicAPIKey != "" {
-		ui.Chat = chat.New(g, svc, data, idx, chat.Config{
-			APIKey: cfg.AnthropicAPIKey, Model: cfg.ChatModel,
-			GlobalCapUSD: cfg.ChatMonthlyCapUSD, PlayerCapUSD: cfg.ChatPlayerCapUSD,
-			PriceInPerMTok: cfg.ChatPriceInUSD, PriceOutPerMTok: cfg.ChatPriceOutUSD,
+		ui.Assist = assist.New(g, svc, data, idx, assist.Config{
+			APIKey: cfg.AnthropicAPIKey, Model: cfg.AssistModel,
+			GlobalCapUSD: cfg.AssistMonthlyCapUSD, PlayerCapUSD: cfg.AssistPlayerCapUSD,
+			PriceInPerMTok: cfg.AssistPriceInUSD, PriceOutPerMTok: cfg.AssistPriceOutUSD,
 		})
 	} else {
-		slog.Info("ANTHROPIC_API_KEY not set: the in-app player chat is off")
+		slog.Info("ANTHROPIC_API_KEY not set: in-app AI assistance is off")
 	}
 	ui.Register(mux)
 	mcpsrv.New(g, cfg, data, svc, idx, build).Register(mux)

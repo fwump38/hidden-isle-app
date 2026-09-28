@@ -13,6 +13,22 @@ import (
 	"github.com/fwump38/hidden-isle-app/internal/gamedata"
 )
 
+// campaignOptions lists a campaign's checkbox options in use, in book order (pp. 65, 89): for
+// the campaign page, and folded into the "Options in use" line of the Markdown export.
+func campaignOptions(c *db.Campaign) []string {
+	var out []string
+	if c.Visions {
+		out = append(out, "visions")
+	}
+	if c.Thresholds {
+		out = append(out, "narrative thresholds")
+	}
+	if c.SkipFirstDowntime {
+		out = append(out, "no downtime before session one")
+	}
+	return out
+}
+
 func templateFuncs() template.FuncMap {
 	return template.FuncMap{
 		"seq": func(from, to int) []int { // inclusive
@@ -71,11 +87,13 @@ func templateFuncs() template.FuncMap {
 			return template.HTML(`<i class="bi bi-question-circle hi-help" tabindex="0" role="button" data-hi-help="` +
 				template.HTMLEscapeString(text) + `" aria-label="` + template.HTMLEscapeString(text) + `"></i>`)
 		},
-		"add":      func(a, b int) int { return a + b },
-		"sub":      func(a, b int) int { return a - b },
-		"contains": func(list []string, s string) bool { return slices.Contains(list, s) },
-		"join":     strings.Join,
-		"lines":    func(list []string) string { return strings.Join(list, "\n") },
+		"mentions":        mentions,
+		"campaignOptions": campaignOptions,
+		"add":             func(a, b int) int { return a + b },
+		"sub":             func(a, b int) int { return a - b },
+		"contains":        func(list []string, s string) bool { return slices.Contains(list, s) },
+		"join":            strings.Join,
+		"lines":           func(list []string) string { return strings.Join(list, "\n") },
 		"date": func(t any) string {
 			switch v := t.(type) {
 			case time.Time:

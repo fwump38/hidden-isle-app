@@ -249,7 +249,8 @@
           <form method="post" action="{{$act}}" class="row g-2 mt-1">
             <div class="col-8"><input class="form-control form-control-sm" name="ability.custom_name" placeholder="Name" aria-label="Custom ability name"></div>
             <div class="col-4"><select class="form-select form-select-sm" name="ability.source" aria-label="Source"><option>ritual</option><option>contact</option><option>other</option></select></div>
-            <div class="col-12"><textarea class="form-control form-control-sm" name="ability.custom_text" rows="2" placeholder="What it does" aria-label="Custom ability text"></textarea></div>
+            <div class="col-12"><textarea class="form-control form-control-sm" id="ability-custom-text" name="ability.custom_text" rows="2" placeholder="What it does" aria-label="Custom ability text"></textarea>
+            {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "ability_text" "Target" "ability-custom-text" "AgentID" $a.ID "CampaignID" $a.CampaignID "SessionID" 0 "Draft" false)}}{{end}}</div>
             <div class="col-12"><button class="btn btn-sm btn-outline-light" type="submit">Add</button></div>
           </form>
         </details>
@@ -297,7 +298,7 @@
       <div class="card-body">
         <h2 class="h5 card-title">Contacts</h2>
         {{range $d.Contacts}}{{$cu := printf "/r/contact/%d" .ID}}
-        <div class="border rounded px-2 py-1 mb-2">
+        <div class="border rounded px-2 py-1 mb-2" id="contact-{{.ID}}">
           <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
             <button class="btn btn-link p-0 fw-semibold text-start text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#ct-{{.ID}}"><i class="bi bi-chevron-down small"></i> {{.Name}}</button>
             <span class="small text-body-secondary">{{.Kind}}{{with .Card}} · {{.}}{{end}}{{with .Land}} · {{.}}{{end}}</span>
@@ -315,7 +316,8 @@
               <div class="col-6"><select class="form-select form-select-sm" name="set.kind" aria-label="Kind">{{$k := .Kind}}{{with $snap}}{{range .Campaign.ContactKind}}<option {{if eq . $k}}selected{{end}}>{{.}}</option>{{end}}{{end}}</select></div>
               <div class="col-6"><input class="form-control form-control-sm" name="set.card" value="{{.Card}}" list="vision-cards" placeholder="card" aria-label="Card"></div>
               <div class="col-6"><input class="form-control form-control-sm" name="set.land" value="{{.Land}}" placeholder="land" aria-label="Land"></div>
-              <div class="col-12"><textarea class="form-control form-control-sm" name="set.description" rows="2" aria-label="Description">{{.Description}}</textarea></div>
+              <div class="col-12"><textarea class="form-control form-control-sm" id="contact-desc-{{.ID}}" name="set.description" rows="2" aria-label="Description">{{.Description}}</textarea>
+              {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "contact_description" "Target" (printf "contact-desc-%d" .ID) "AgentID" $a.ID "CampaignID" $a.CampaignID "SessionID" 0 "Draft" false)}}{{end}}</div>
               <div class="col-12 d-flex justify-content-between"><button class="btn btn-sm btn-outline-light" type="submit">Save</button>
                 <button class="btn btn-sm btn-outline-danger" type="submit" formaction="{{$cu}}/delete" hx-post="{{$cu}}/delete" hx-confirm="Remove {{.Name}}? (You can undo it from the log.)">Remove</button></div>
             </form>
@@ -329,7 +331,8 @@
             <div class="col-6"><select class="form-select form-select-sm" name="set.kind" aria-label="Kind">{{with $snap}}{{range .Campaign.ContactKind}}<option>{{.}}</option>{{end}}{{end}}</select></div>
             <div class="col-6"><input class="form-control form-control-sm" name="set.card" list="vision-cards" placeholder="Card" aria-label="Card"></div>
             <div class="col-6"><input class="form-control form-control-sm" name="set.land" placeholder="Land" aria-label="Land"></div>
-            <div class="col-12"><textarea class="form-control form-control-sm" name="set.description" rows="2" placeholder="Who they are" aria-label="Description"></textarea></div>
+            <div class="col-12"><textarea class="form-control form-control-sm" id="contact-desc-new" name="set.description" rows="2" placeholder="Who they are" aria-label="Description"></textarea>
+            {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "contact_description" "Target" "contact-desc-new" "AgentID" $a.ID "CampaignID" $a.CampaignID "SessionID" 0 "Draft" false)}}{{end}}</div>
             <div class="col-6"><label class="small text-body-secondary" for="new-aff">Affection</label>
               <select class="form-select form-select-sm" id="new-aff" name="set.affection"><option value="1">1 (new Dioscorian contact)</option><option value="2">2 acquaintance</option><option value="4">4 friend</option><option value="6">6 very close</option></select></div>
             <div class="col-6 d-flex align-items-end"><button class="btn btn-sm btn-outline-light w-100" type="submit">Add contact</button></div>
@@ -375,9 +378,12 @@
           <div class="col-12 col-md-6"><label class="form-label small mb-0" for="name">Name</label><input class="form-control form-control-sm" id="name" name="set.name" value="{{$a.Name}}"></div>
           <div class="col-4 col-md-2"><label class="form-label small mb-0" for="age">Age</label><input class="form-control form-control-sm" id="age" name="set.age" value="{{$a.Age}}"></div>
           <div class="col-8 col-md-4"><label class="form-label small mb-0" for="culture">Culture</label><input class="form-control form-control-sm" id="culture" name="set.culture" value="{{$a.Culture}}"></div>
-          <div class="col-12"><label class="form-label small mb-0" for="look">Look</label><input class="form-control form-control-sm" id="look" name="set.look" value="{{$a.Look}}"></div>
-          <div class="col-12"><label class="form-label small mb-0" for="whyd">Why I came to Dioscoria</label><input class="form-control form-control-sm" id="whyd" name="set.why" value="{{$a.Why}}"></div>
-          <div class="col-12"><label class="form-label small mb-0" for="notes">Notes</label><textarea class="form-control form-control-sm" id="notes" name="set.notes" rows="3">{{$a.Notes}}</textarea></div>
+          <div class="col-12"><label class="form-label small mb-0" for="look">Look</label><textarea class="form-control form-control-sm" id="look" name="set.look" rows="2">{{$a.Look}}</textarea>
+          {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "agent_look" "Target" "look" "AgentID" $a.ID "CampaignID" $a.CampaignID "SessionID" 0 "Draft" false)}}{{end}}</div>
+          <div class="col-12"><label class="form-label small mb-0" for="whyd">Why I came to Dioscoria</label><textarea class="form-control form-control-sm" id="whyd" name="set.why" rows="2">{{$a.Why}}</textarea>
+          {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "agent_why" "Target" "whyd" "AgentID" $a.ID "CampaignID" $a.CampaignID "SessionID" 0 "Draft" false)}}{{end}}</div>
+          <div class="col-12"><label class="form-label small mb-0" for="notes">Notes</label><textarea class="form-control form-control-sm" id="notes" name="set.notes" rows="3">{{$a.Notes}}</textarea>
+          {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "agent_notes" "Target" "notes" "AgentID" $a.ID "CampaignID" $a.CampaignID "SessionID" 0 "Draft" false)}}{{end}}</div>
           <div class="col-12"><button class="btn btn-sm btn-outline-light" type="submit">Save</button></div>
         </form>
       </div>
@@ -411,7 +417,7 @@
       <div class="card-body">
         <h2 class="h5 card-title"><i class="bi bi-feather"></i> History</h2>
         {{range $d.History}}
-        <div class="mb-2"><div class="small text-body-secondary">{{date .CreatedAt}} · {{.Title}}</div><div class="hi-prose small">{{.Body}}</div></div>
+        <div class="mb-2"><div class="small text-body-secondary">{{date .CreatedAt}} · {{.Title}}</div><div class="hi-prose small">{{mentions .Body $a.CampaignID}}</div></div>
         {{else}}<p class="small text-body-secondary">The story so far, in your own words.</p>{{end}}
         {{if $d.CanEdit}}
         <form method="post" action="/c/{{$a.CampaignID}}/entries" class="mt-2">
@@ -419,7 +425,8 @@
           <input type="hidden" name="visibility" value="party"><input type="hidden" name="published" value="on">
           <input type="hidden" name="back" value="{{$act}}">
           <input class="form-control form-control-sm mb-1" name="title" placeholder="Title, e.g. Session 4: the harbor" aria-label="Title">
-          <textarea class="form-control form-control-sm mb-1" name="body" rows="3" placeholder="What happened, and why it mattered" required aria-label="History entry"></textarea>
+          <textarea class="form-control form-control-sm mb-1" id="history-body" name="body" rows="3" placeholder="What happened, and why it mattered" required aria-label="History entry" data-mentions="{{$a.CampaignID}}"></textarea>
+          {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "agent_history" "Target" "history-body" "AgentID" $a.ID "CampaignID" $a.CampaignID "SessionID" 0 "Draft" false)}}{{end}}
           <button class="btn btn-sm btn-outline-light" type="submit">Add to history</button>
         </form>
         {{end}}

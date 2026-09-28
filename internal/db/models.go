@@ -10,13 +10,45 @@ import (
 var models = []any{&SchemaMigration{}, &User{}, &APIToken{},
 	&Campaign{}, &Member{}, &Agent{}, &Contact{}, &Session{}, &Adversary{}, &Territory{}, &Clock{},
 	&HouseRuling{}, &SeerNote{}, &Event{}, &Entry{}, &Handout{}, &DowntimeSubmission{},
-	&ChatThread{}, &ChatMessage{}, &ChatSuggestion{}, &ChatUsage{}}
+	&AIUsage{}}
 
 // migrations are one-off steps AutoMigrate can't express (renames, data fixes). Append only.
 var migrations = []struct {
 	ID string
 	Up func(tx *gorm.DB) error
-}{}
+}{
+	{ID: "2025_drop_chat_tables", Up: func(tx *gorm.DB) error {
+		// The in-app chat is gone; chat_usages (now AIUsage) is the only table that survives it.
+		return tx.Migrator().DropTable("chat_threads", "chat_messages", "chat_suggestions")
+	}},
+	{ID: "2025_merge_note_entries", Up: func(tx *gorm.DB) error {
+		// The "note" entry kind is gone: a Seer-only one was really a Seer note, and every other
+		// one is just a journal entry under a different name. Publish now only matters for
+		// Everyone-visible entries, so everything else is marked published to match (it already
+		// behaved that way: Entries() never checked Published for anything but party visibility).
+		var notes []Entry
+		if err := tx.Where("kind = ? AND visibility = ?", "note", VisSeer).Find(&notes).Error; err != nil {
+			return err
+		}
+		for _, e := range notes {
+			title := e.Title
+			if title == "" {
+				title = "Note"
+			}
+			sn := SeerNote{CampaignID: e.CampaignID, Title: title, Body: e.Body, CreatedAt: e.CreatedAt, UpdatedAt: e.UpdatedAt}
+			if err := tx.Create(&sn).Error; err != nil {
+				return err
+			}
+			if err := tx.Delete(&Entry{}, e.ID).Error; err != nil {
+				return err
+			}
+		}
+		if err := tx.Model(&Entry{}).Where("kind = ?", "note").Update("kind", "journal").Error; err != nil {
+			return err
+		}
+		return tx.Model(&Entry{}).Where("visibility <> ?", VisParty).Update("published", true).Error
+	}},
+}
 
 type SchemaMigration struct {
 	ID        string `gorm:"primaryKey"`

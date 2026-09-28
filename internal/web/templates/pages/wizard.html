@@ -49,7 +49,7 @@
   </div>
   <div id="name-choices" class="d-flex flex-wrap gap-2 mt-2"></div>
   {{end}}
-  {{if $d.ChatEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "name" "Label" "Suggest names" "Placeholder" "Describe them, e.g. a Venetian widow with a sharp tongue" "Value" $a.Concept)}}{{end}}
+  {{if $d.AssistEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "name" "Label" "Suggest names" "Placeholder" "Describe them, e.g. a Venetian widow with a sharp tongue" "Value" $a.Concept)}}{{end}}
   <div class="hi-wiz-foot">
     <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Change class</a>
     <button class="btn btn-primary" type="submit">Save and continue <i class="bi bi-arrow-right"></i></button>
@@ -66,7 +66,7 @@
   {{template "wizard-card" ($d.Card "child")}}
   <label class="form-label small mb-0 mt-3" for="cc-phrase">As a child, I solved problems by…</label>
   <input class="form-control" id="cc-phrase" name="set.child_phrase" value="{{$a.ChildPhrase}}" placeholder="Pick a phrase above, or write your own" required autocomplete="off">
-  {{if $d.ChatEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "child" "Label" "More ideas" "Placeholder" "Or describe what you're thinking, e.g. talking my way out of things" "Value" $a.Concept)}}{{end}}
+  {{if $d.AssistEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "child" "Label" "More ideas" "Placeholder" "Or describe what you're thinking, e.g. talking my way out of things" "Value" $a.Concept)}}{{end}}
   <div class="hi-wiz-foot">
     <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
     <button class="btn btn-primary" type="submit">Save and continue <i class="bi bi-arrow-right"></i></button>
@@ -96,7 +96,7 @@
       <input class="form-control" id="ac-phrase" name="set.adult_phrase" value="{{$a.AdultPhrase}}" placeholder="Pick a phrase above, or write your own" required autocomplete="off">
     </div>
   </div>
-  {{if $d.ChatEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "adult" "Label" "More ideas" "Placeholder" "Or describe what you're thinking" "Value" $a.Concept)}}{{end}}
+  {{if $d.AssistEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "adult" "Label" "More ideas" "Placeholder" "Or describe what you're thinking" "Value" $a.Concept)}}{{end}}
   <div class="hi-wiz-foot">
     <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
     <button class="btn btn-primary" type="submit">Save and continue <i class="bi bi-arrow-right"></i></button>
@@ -113,7 +113,7 @@
   {{template "wizard-card" ($d.Card "burden")}}
   <label class="form-label small mb-0 mt-3" for="b-word">Burden</label>
   <input class="form-control" id="b-word" name="set.burden" value="{{$a.Burden}}" placeholder="e.g. Reckless" required autocomplete="off">
-  {{if $d.ChatEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "burden" "Label" "More ideas" "Placeholder" "Or describe the flaw you have in mind" "Value" $a.Concept)}}{{end}}
+  {{if $d.AssistEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "burden" "Label" "More ideas" "Placeholder" "Or describe the flaw you have in mind" "Value" $a.Concept)}}{{end}}
   <div class="hi-wiz-foot">
     <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
     <button class="btn btn-primary" type="submit">Save and continue <i class="bi bi-arrow-right"></i></button>
@@ -131,7 +131,7 @@
   {{template "wizard-card" ($d.Card "ideal")}}
   <label class="form-label small mb-0 mt-3" for="i-word">Ideal</label>
   <input class="form-control" id="i-word" name="set.ideal" value="{{$a.Ideal}}" placeholder="e.g. Curious" required autocomplete="off">
-  {{if $d.ChatEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "ideal" "Label" "More ideas" "Placeholder" "Or describe what drives them" "Value" $a.Concept)}}{{end}}
+  {{if $d.AssistEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "ideal" "Label" "More ideas" "Placeholder" "Or describe what drives them" "Value" $a.Concept)}}{{end}}
   <div class="hi-wiz-foot">
     <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
     <button class="btn btn-primary" type="submit">Save and continue <i class="bi bi-arrow-right"></i></button>
@@ -169,7 +169,7 @@
     </div>
     {{end}}{{end}}{{end}}
   </div>
-  {{if $d.ChatEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "abilities" "Label" "Which fit my Agent?" "Placeholder" "Optional: how you want to play them" "Value" $a.Concept)}}{{end}}
+  {{if $d.AssistEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "abilities" "Label" "Which fit my Agent?" "Placeholder" "Optional: how you want to play them" "Value" $a.Concept)}}{{end}}
   {{end}}
   <div class="hi-wiz-foot">
     <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
@@ -207,7 +207,7 @@
     </div>
     {{end}}
   </div>
-  {{if $d.ChatEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "skills" "Label" "Suggest where to put them" "Placeholder" "Optional: what you want to be good at" "Value" $a.Concept)}}{{end}}
+  {{if $d.AssistEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "skills" "Label" "Suggest where to put them" "Placeholder" "Optional: what you want to be good at" "Value" $a.Concept)}}{{end}}
   <div class="hi-wiz-foot">
     <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
     <div class="d-flex gap-2">
@@ -243,7 +243,7 @@
     {{end}}
     <label class="form-label small mb-0" for="m-school">School</label>
     <input class="form-control" id="m-school" name="prof.add" placeholder="Pick one above, e.g. Illusion" required autocomplete="off">
-    {{if $d.ChatEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "magic" "Label" "Which fits my Agent?" "Placeholder" "Optional: the kind of magic you imagine" "Value" $a.Concept)}}{{end}}
+    {{if $d.AssistEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "magic" "Label" "Which fits my Agent?" "Placeholder" "Optional: the kind of magic you imagine" "Value" $a.Concept)}}{{end}}
     <div class="hi-wiz-foot">
       <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
       <button class="btn btn-primary" type="submit">Save and continue <i class="bi bi-arrow-right"></i></button>
@@ -271,7 +271,7 @@
     <div class="col-6 col-md-3"><label class="form-label small mb-0" for="w-culture">Culture</label><input class="form-control" id="w-culture" name="set.culture" value="{{$a.Culture}}" placeholder="e.g. Turkish" autocomplete="off"></div>
     <div class="col-12"><label class="form-label small mb-0" for="w-look">Look</label><textarea class="form-control" id="w-look" name="set.look" rows="2" placeholder="How they appear" required>{{$a.Look}}</textarea></div>
   </div>
-  {{if $d.ChatEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "look" "Label" "Suggest a look" "Placeholder" "Optional: anything you already picture" "Value" $a.Concept)}}{{end}}
+  {{if $d.AssistEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "look" "Label" "Suggest a look" "Placeholder" "Optional: anything you already picture" "Value" $a.Concept)}}{{end}}
   <div class="hi-wiz-foot">
     <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
     <button class="btn btn-primary" type="submit">Save and continue <i class="bi bi-arrow-right"></i></button>
@@ -290,7 +290,7 @@
   </div>
   <label class="form-label small mb-0" for="w-why">Why Dioscoria</label>
   <textarea class="form-control" id="w-why" name="set.why" rows="2" required>{{$a.Why}}</textarea>
-  {{if $d.ChatEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "why" "Label" "More ideas" "Placeholder" "Optional: what you're thinking" "Value" $a.Concept)}}{{end}}
+  {{if $d.AssistEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "why" "Label" "More ideas" "Placeholder" "Optional: what you're thinking" "Value" $a.Concept)}}{{end}}
   <div class="hi-wiz-foot">
     <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
     <button class="btn btn-primary" type="submit">Save and continue <i class="bi bi-arrow-right"></i></button>
@@ -324,7 +324,7 @@
       {{else}}<input type="hidden" name="set.affection" value="1">{{end}}
       <div class="col-12"><label class="form-label small mb-0" for="c-desc">Who they are</label><textarea class="form-control" id="c-desc" name="set.description" rows="2" placeholder="Profession, personality"></textarea></div>
     </div>
-    {{if $d.ChatEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "contact" "Label" "Suggest who they are" "Placeholder" "Optional: what you imagine" "Value" $a.Concept)}}{{end}}
+    {{if $d.AssistEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "contact" "Label" "Suggest who they are" "Placeholder" "Optional: what you imagine" "Value" $a.Concept)}}{{end}}
     <div class="hi-wiz-foot">
       <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
       <div class="d-flex gap-2 align-items-center">

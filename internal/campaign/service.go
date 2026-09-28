@@ -1,6 +1,6 @@
 // Package campaign holds every read and write of campaign state. Each write checks the actor's
 // permissions, validates against the rules data, and records a raw event in the same
-// transaction. The web UI, the MCP tools and the in-app chat all go through here, so the
+// transaction. The web UI, the MCP tools and the AI assistant all go through here, so the
 // checks can't drift apart.
 package campaign
 
@@ -38,7 +38,7 @@ func (e *ConflictError) Error() string {
 // Actor is who is acting and through which door.
 type Actor struct {
 	User *db.User
-	Via  string // web | mcp | chat | system
+	Via  string // web | mcp | assist | system
 }
 
 func (a Actor) IsSeer() bool { return a.User.IsSeer() }
@@ -56,7 +56,7 @@ func (a Actor) name() string {
 	if a.User != nil {
 		n = a.User.Name
 	}
-	if a.Via == "mcp" || a.Via == "chat" {
+	if a.Via == "mcp" || a.Via == "assist" {
 		n += " (Claude)"
 	}
 	return n

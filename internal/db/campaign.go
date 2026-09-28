@@ -19,21 +19,26 @@ const (
 // match the GORM column names, so keep them snake_case and unique per model.
 
 type Campaign struct {
-	ID              uint      `gorm:"primaryKey" json:"id"`
-	Name            string    `gorm:"not null" json:"name"`
-	Mode            string    `gorm:"not null;default:group" json:"mode"` // group | solitaire | Seer-less
-	Merciful        bool      `json:"merciful"`
-	Season          int       `gorm:"not null;default:1" json:"season"`
-	ScenariosPlayed int       `json:"scenarios_played"`
-	HandMascot      string    `json:"hand_mascot"`
-	HandName        string    `json:"hand_name"`
-	Table           string    `json:"table"`   // session length, cadence, lines and veils, tone
-	Options         string    `json:"options"` // optional rules in use
-	OpenThreads     string    `json:"open_threads"`
-	Archived        bool      `json:"archived"`
-	TableKey        string    `json:"-"` // secret for the read-only TV view link
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID              uint   `gorm:"primaryKey" json:"id"`
+	Name            string `gorm:"not null" json:"name"`
+	Mode            string `gorm:"not null;default:group" json:"mode"` // group | solitaire | Seer-less
+	Merciful        bool   `json:"merciful"`
+	Season          int    `gorm:"not null;default:1" json:"season"`
+	ScenariosPlayed int    `json:"scenarios_played"`
+	HandMascot      string `json:"hand_mascot"`
+	HandName        string `json:"hand_name"`
+	Table           string `json:"table"` // table agreements: schedule, tone, lines and veils; players see this
+	// Optional rules in use (see the Options card, p. 89 for Visions and Thresholds, p. 65 for
+	// SkipFirstDowntime). Options is free text for anything else.
+	Visions           bool      `json:"visions"`
+	Thresholds        bool      `json:"thresholds"`
+	SkipFirstDowntime bool      `json:"skip_first_downtime"`
+	Options           string    `json:"options"`
+	OpenThreads       string    `json:"open_threads"` // loose ends to pick up later; players see this
+	Archived          bool      `json:"archived"`
+	TableKey          string    `json:"-"` // secret for the read-only TV view link
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 // Member lets a player see a campaign. The Seer sees every campaign.
@@ -80,7 +85,7 @@ type Agent struct {
 	Age     string `json:"age"`
 	Culture string `json:"culture"`
 	Look    string `json:"look"`
-	Why     string `json:"why"` // why they came to Dioscoria
+	Why     string `json:"why"`     // why they came to Dioscoria
 	Concept string `json:"concept"` // player's own rough description, reused to drive wizard suggestions
 
 	ChildPhrase string `json:"child_phrase"`
@@ -229,7 +234,7 @@ type Event struct {
 	SessionID  *uint           `gorm:"index" json:"session_id,omitempty"`
 	ActorID    *uint           `json:"actor_id,omitempty"`
 	ActorName  string          `json:"actor_name"`
-	Via        string          `json:"via"`         // web | mcp | chat | system
+	Via        string          `json:"via"`         // web | mcp | assist | system
 	EntityType string          `json:"entity_type"` // agent, contact, clock, …
 	EntityID   uint            `json:"entity_id"`
 	EntityName string          `json:"entity_name"`
@@ -261,7 +266,7 @@ type Entry struct {
 	SessionID  *uint      `gorm:"index" json:"session_id,omitempty"`
 	AgentID    *uint      `gorm:"index" json:"agent_id,omitempty"`
 	AuthorID   uint       `gorm:"not null" json:"author_id"`
-	Kind       string     `gorm:"not null" json:"kind"` // session_log | recap | history | journal | note
+	Kind       string     `gorm:"not null" json:"kind"` // session_log | recap | history | journal
 	Title      string     `json:"title"`
 	Body       string     `json:"body"`
 	Visibility Visibility `gorm:"not null;default:owner" json:"visibility"`

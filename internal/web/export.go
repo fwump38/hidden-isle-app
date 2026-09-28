@@ -24,9 +24,13 @@ func renderMarkdown(x *export, snap *gamedata.Snapshot) string {
 			w("## %s\n%s\n\n", title, strings.TrimSpace(body))
 		}
 	}
-	section("Table", c.Table)
-	section("Options in use", c.Options)
-	section("Open threads", c.OpenThreads)
+	section("Table agreements", plainMentions(c.Table))
+	opts := campaignOptions(c)
+	if optsText := strings.TrimSpace(c.Options); optsText != "" {
+		opts = append(opts, plainMentions(optsText))
+	}
+	section("Options in use", strings.Join(opts, "; "))
+	section("Open threads", plainMentions(c.OpenThreads))
 
 	w("## Agents\n\n")
 	for _, a := range x.Agents {
@@ -119,13 +123,13 @@ func renderMarkdown(x *export, snap *gamedata.Snapshot) string {
 	if len(x.Entries) > 0 {
 		w("## Writing\n\n")
 		for _, e := range x.Entries {
-			w("### %s (%s, %s)\n%s\n\n", e.Title, e.Kind, e.CreatedAt.Format("2006-01-02"), e.Body)
+			w("### %s (%s, %s)\n%s\n\n", e.Title, e.Kind, e.CreatedAt.Format("2006-01-02"), plainMentions(e.Body))
 		}
 	}
 	if len(x.SeerNotes) > 0 {
 		w("## Seer notes (SEER ONLY)\n\n")
 		for _, n := range x.SeerNotes {
-			w("### %s\n%s\n\n", n.Title, n.Body)
+			w("### %s\n%s\n\n", n.Title, plainMentions(n.Body))
 		}
 	}
 	return b.String()

@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/fwump38/hidden-isle-app/internal/assist"
 	"github.com/fwump38/hidden-isle-app/internal/campaign"
 	"github.com/fwump38/hidden-isle-app/internal/cards"
-	"github.com/fwump38/hidden-isle-app/internal/chat"
 	"github.com/fwump38/hidden-isle-app/internal/creation"
 	"github.com/fwump38/hidden-isle-app/internal/db"
 	"github.com/fwump38/hidden-isle-app/internal/gamedata"
@@ -76,26 +76,26 @@ const unnamed = "New Agent"
 
 // wizardData is what the wizard template renders.
 type wizardData struct {
-	Agent       *db.Agent
-	Class       *gamedata.Class
-	Solo        bool
-	Limits      *gamedata.Limits
-	Step        int
-	Key         string
-	Steps       []wizStepInfo
-	Done        map[int]bool
-	Vision      []string
-	Homeland    *db.Contact
-	Dioscorian  *db.Contact
-	Chosen      map[string]bool // ability id -> already on the sheet
-	Abil        []wizardAbility // the Agent's chosen abilities, resolved to their name and text
-	ChatEnabled bool            // Claude's background suggestions are available
-	Regions     []string        // where names can come from
-	Schools     []creation.School
-	WhyReasons  []string
-	Skills      map[string][]string // suit -> skill names
-	Cards       map[string]wizCard  // the card pickers on this screen, by step key
-	Error       string
+	Agent         *db.Agent
+	Class         *gamedata.Class
+	Solo          bool
+	Limits        *gamedata.Limits
+	Step          int
+	Key           string
+	Steps         []wizStepInfo
+	Done          map[int]bool
+	Vision        []string
+	Homeland      *db.Contact
+	Dioscorian    *db.Contact
+	Chosen        map[string]bool // ability id -> already on the sheet
+	Abil          []wizardAbility // the Agent's chosen abilities, resolved to their name and text
+	AssistEnabled bool            // Claude's background suggestions are available
+	Regions       []string        // where names can come from
+	Schools       []creation.School
+	WhyReasons    []string
+	Skills        map[string][]string // suit -> skill names
+	Cards         map[string]wizCard  // the card pickers on this screen, by step key
+	Error         string
 }
 
 // URL is the wizard URL for a step key.
@@ -289,7 +289,7 @@ func (s *Server) buildWizardData(a campaign.Actor, ag *db.Agent, snap *gamedata.
 	}
 	d := wizardData{Agent: ag, Class: class, Solo: solo, Limits: &snap.Limits, Steps: wizStepList,
 		Done: map[int]bool{}, Homeland: findContact(contacts, "Homeland"), Dioscorian: findContact(contacts, "Dioscorian"),
-		Chosen: chosen, Abil: resolveAbilities(ag.Abilities, class), ChatEnabled: s.Chat != nil,
+		Chosen: chosen, Abil: resolveAbilities(ag.Abilities, class), AssistEnabled: s.Assist != nil,
 		Regions: creation.NameRegions(snap), Schools: creation.MagicSchools(snap), WhyReasons: creation.WhyReasons,
 		Skills: map[string][]string{}}
 	current := creationStep(ag, class, &snap.Limits, solo, contacts)
@@ -516,7 +516,7 @@ func (s *Server) wizardSuggest(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	kind := r.FormValue("kind")
 	d := wizSuggestions{Exclude: r.Form["exclude"]}
-	if s.Chat == nil {
+	if s.Assist == nil {
 		d.Error = "Suggestions need the in-app assistant, which isn't set up. Pick from the book's options or write your own."
 		s.partial(w, "wizard", "choices", d)
 		return
@@ -529,7 +529,7 @@ func (s *Server) wizardSuggest(w http.ResponseWriter, r *http.Request) {
 	req, bookOptions := wizardContext(a, s, ag, snap, kind, r.Form)
 	req.Hint = hint
 	req.Exclude = append(slices.Clone(d.Exclude), bookOptions...)
-	sugs, err := s.Chat.Suggest(r.Context(), a.User, req)
+	sugs, err := s.Assist.Suggest(r.Context(), a.User, req)
 	if err != nil {
 		d.Error = sentence(friendly(err))
 		s.partial(w, "wizard", "choices", d)
@@ -569,8 +569,8 @@ func cardLine(snap *gamedata.Snapshot, label, name string) (string, *gamedata.Vi
 
 // wizardContext describes the Agent so far for one step's request, and returns the book options
 // already on screen for it (so Claude offers different ones).
-func wizardContext(a campaign.Actor, s *Server, ag *db.Agent, snap *gamedata.Snapshot, kind string, form url.Values) (chat.SuggestRequest, []string) {
-	req := chat.SuggestRequest{Kind: kind}
+func wizardContext(a campaign.Actor, s *Server, ag *db.Agent, snap *gamedata.Snapshot, kind string, form url.Values) (assist.SuggestRequest, []string) {
+	req := assist.SuggestRequest{Kind: kind}
 	add := func(format string, args ...any) { req.Context = append(req.Context, fmt.Sprintf(format, args...)) }
 	class := snap.Class(ag.Class)
 	if class != nil {
@@ -715,7 +715,7 @@ func wizFormSkills(ag *db.Agent, form url.Values) map[string]int {
 
 // wizChoiceFor turns one of Claude's options into something the player can pick, checking it
 // against the rules data (an ability or class that doesn't exist is dropped, not shown).
-func wizChoiceFor(kind string, sg chat.Suggestion, ag *db.Agent, class *gamedata.Class, snap *gamedata.Snapshot, form url.Values) (wizChoice, bool) {
+func wizChoiceFor(kind string, sg assist.Suggestion, ag *db.Agent, class *gamedata.Class, snap *gamedata.Snapshot, form url.Values) (wizChoice, bool) {
 	f := sg.Fields
 	c := wizChoice{Why: sg.Why, Fill: map[string]string{}}
 	switch kind {
