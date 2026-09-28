@@ -34,8 +34,11 @@ func TestCreateAgentFlowAutomatic(t *testing.T) {
 	if strings.Contains(body, "Help me choose") {
 		t.Error("chat is off in this test; the class page shouldn't offer it")
 	}
+	if strings.Contains(body, "ca-name") {
+		t.Error("automatic draws its own name; the class page shouldn't ask for one")
+	}
 
-	code, flash := st.post("Ana", "/agents/create/class", url.Values{"path": {"automatic"}, "name": {"Vex"}, "class": {"occultist"}, "campaign_id": {"0"}})
+	code, flash := st.post("Ana", "/agents/create/class", url.Values{"path": {"automatic"}, "class": {"occultist"}, "campaign_id": {"0"}})
 	if code != 303 || flash != "" {
 		t.Fatalf("automatic: %d %q", code, flash)
 	}
@@ -144,6 +147,9 @@ func TestCreateAgentManual(t *testing.T) {
 	if strings.Contains(body, "Surprise me") {
 		t.Error("the manual class page shouldn't offer a random draw")
 	}
+	if !strings.Contains(body, "ca-name") {
+		t.Error("manual has no other prompt for a name; the class page should ask for one")
+	}
 
 	code, flash := st.post("Ana", "/agents/create/class", url.Values{"path": {"manual"}, "name": {"Ines"}, "class": {"occultist"}, "campaign_id": {"0"}})
 	if code != 303 || flash != "" {
@@ -162,6 +168,19 @@ func TestCreateAgentManual(t *testing.T) {
 	code, body = st.get("Ana", "/agents/1/wizard")
 	if code != 200 || !strings.Contains(body, "Childhood") {
 		t.Fatalf("wizard should open on childhood, class already set: %d %q", code, body)
+	}
+}
+
+// TestCreateAgentGuidedDefersNaming covers the Guided path: naming comes after class selection,
+// in chat, so the suggestions can be themed to the class instead of asked for blind up front.
+func TestCreateAgentGuidedDefersNaming(t *testing.T) {
+	st, _ := newSite(t)
+	code, body := st.get("Ana", "/agents/create/class?path=guided")
+	if code != 200 || !strings.Contains(body, "Occultist") {
+		t.Fatalf("class select page: %d %q", code, body)
+	}
+	if strings.Contains(body, "ca-name") {
+		t.Error("guided defers naming to chat; the class page shouldn't ask for one")
 	}
 }
 

@@ -167,7 +167,7 @@ func guidedChatURL(ag *db.Agent, snap *gamedata.Snapshot) string {
 	if c := snap.Class(ag.Class); c != nil {
 		className = c.Name
 	}
-	ask := fmt.Sprintf("I'm creating my Agent %s, a %s. Let's go through core self, burden, ideal, abilities, skills and the rest step by step (pp. 40-41).", ag.Name, className)
+	ask := fmt.Sprintf("I'm creating a new %s Agent. Let's start with a name themed to the class, then go through core self, burden, ideal, abilities, skills and the rest step by step (pp. 40-41).", className)
 	return base + "?ask=" + url.QueryEscape(ask)
 }
 

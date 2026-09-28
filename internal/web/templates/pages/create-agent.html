@@ -1,15 +1,17 @@
 {{define "content"}}
 {{$d := .Data}}
 <h1 class="h4 mb-1">Choose a class</h1>
-<p class="small text-body-secondary">{{if $d.Campaign}}For {{$d.Campaign.Name}}. {{end}}{{if eq $d.Path "automatic"}}Pick one, or draw a random one below. Real card draws will make every other choice for you.{{else if eq $d.Path "manual"}}Pick one to start. You'll fill in the rest yourself, step by step.{{else}}Pick one to start. Chat will walk you through the rest.{{end}}</p>
+<p class="small text-body-secondary">{{if $d.Campaign}}For {{$d.Campaign.Name}}. {{end}}{{if eq $d.Path "automatic"}}Pick one, or draw a random one below. Real card draws will make every other choice for you, including a name.{{else if eq $d.Path "manual"}}Pick one to start. You'll fill in the rest yourself, step by step.{{else}}Pick one to start. Chat will help you name your Agent, themed to the class, and walk you through the rest.{{end}}</p>
 
 <form id="create-agent-form" method="post" action="/agents/create/class" class="row g-2 mb-3">
   <input type="hidden" name="path" value="{{$d.Path}}">
   <input type="hidden" name="campaign_id" value="{{$d.CampaignID}}">
+  {{if eq $d.Path "manual"}}
   <div class="col-12 col-md-6">
     <label class="form-label small mb-0" for="ca-name">Name</label>
     <input class="form-control" id="ca-name" name="name" placeholder="You can change this later" aria-label="Agent name">
   </div>
+  {{end}}
   {{if $d.AllPlayers}}
   <div class="col-12 col-md-6">
     <label class="form-label small mb-0" for="ca-owner">Played by</label>
