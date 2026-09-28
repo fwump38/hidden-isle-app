@@ -168,8 +168,12 @@ func (s *Service) Suggest(ctx context.Context, u *db.User, req SuggestRequest) (
 		fmt.Fprintf(&b, "\nAlready shown: %s\n", strings.Join(req.Exclude, "; "))
 	}
 
-	props := map[string]any{"why": strProp("One short line: why this fits")}
-	required := []string{"why"}
+	// The rationale property is named "reason" rather than "why" so it can't collide with a
+	// field the kind itself defines (the "why" kind's own field is named "why" — p. 41's "why
+	// Dioscoria" — which previously duplicated this key and produced an invalid JSON schema:
+	// draft 2020-12 requires "required" to list unique names).
+	props := map[string]any{"reason": strProp("One short line: why this fits")}
+	required := []string{"reason"}
 	for _, f := range kind.Fields {
 		p := strProp(f.Desc)
 		if enum := req.Enum[f.Name]; len(enum) > 0 {
@@ -215,7 +219,7 @@ func (s *Service) Suggest(ctx context.Context, u *db.User, req SuggestRequest) (
 		var out []Suggestion
 		for _, o := range in.Options {
 			sg := Suggestion{Fields: map[string]string{}}
-			if w, ok := o["why"].(string); ok {
+			if w, ok := o["reason"].(string); ok {
 				sg.Why = strings.TrimSpace(w)
 			}
 			for _, f := range kind.Fields {

@@ -22,10 +22,13 @@
 {{end}}
 
 {{/* suggest-box asks Claude for more options in the background: (dict "URL" … "Kind" … "Label" … "Placeholder" … "Value" … "Form" …).
-     Inside a form, the request carries the form as filled in so far. "Value" pre-fills the hint
-     with the Agent's saved concept, so an untouched click still resends it; "Form" (optional) also
-     attaches the hint input to another <form> by id, so its value is captured on that form's own
-     submit (e.g. the class page, where the hint box isn't nested in the class-selection form). */}}
+     Inside a form, the request carries the form as filled in so far, plus the Agent's saved
+     concept and everything else on the sheet already (wizardContext) — the hint box itself starts
+     empty on every step ("Value" ""), since it's a one-off steer for that step, not the character
+     description; passing a non-empty "Value" only matters for the class page's own box, the
+     concept's actual source. "Form" (optional) attaches the hint input to another <form> by id, so
+     its value is captured on that form's own submit (e.g. the class page, where the hint box isn't
+     nested in the class-selection form). */}}
 {{define "suggest-box"}}
 <div class="hi-suggest mt-3">
   <div class="hi-suggest-out d-flex flex-wrap gap-2 mb-2" aria-live="polite"></div>

@@ -111,9 +111,9 @@ func TestSuggestForcesTheToolAndParsesOptions(t *testing.T) {
 		json.NewDecoder(r.Body).Decode(&body)
 		rw.Header().Set("Content-Type", "application/json")
 		rw.Write(toolUseResp("toolu_1", "offer_suggestions", map[string]any{"options": []map[string]any{
-			{"word": "Reckless", "why": "The Chariot charges ahead"},
-			{"word": "Proud", "why": "Too sure of the road"},
-			{"why": "missing its word"},
+			{"word": "Reckless", "reason": "The Chariot charges ahead"},
+			{"word": "Proud", "reason": "Too sure of the road"},
+			{"reason": "missing its word"},
 		}}))
 	})
 	got, err := w.assist.Suggest(context.Background(), w.ana, SuggestRequest{
@@ -144,6 +144,43 @@ func TestSuggestForcesTheToolAndParsesOptions(t *testing.T) {
 	}
 }
 
+// TestSuggestWhyKindFieldDoesntCollideWithReason is a regression test: the "why" kind's own field
+// is also named "why" (p. 41's "why Dioscoria"), which used to collide with the rationale
+// property (also named "why" at the time) and produce two identical entries in the tool's
+// "required" array — an invalid JSON schema (draft 2020-12 requires "required" to be unique),
+// rejected by the API with a 400 before the model ever ran.
+func TestSuggestWhyKindFieldDoesntCollideWithReason(t *testing.T) {
+	var body map[string]any
+	w := setup(t, func(rw http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&body)
+		rw.Header().Set("Content-Type", "application/json")
+		rw.Write(toolUseResp("toolu_1", "offer_suggestions", map[string]any{"options": []map[string]any{
+			{"why": "Fleeing famine, disaster or war", "reason": "fits a refugee concept"},
+		}}))
+	})
+	got, err := w.assist.Suggest(context.Background(), w.ana, SuggestRequest{Kind: "why"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Fields["why"] != "Fleeing famine, disaster or war" || got[0].Why != "fits a refugee concept" {
+		t.Fatalf("suggestions = %+v", got)
+	}
+	tools, _ := body["tools"].([]any)
+	if len(tools) != 1 {
+		t.Fatalf("tools = %+v", body["tools"])
+	}
+	schema, _ := tools[0].(map[string]any)["input_schema"].(map[string]any)
+	opts, _ := schema["properties"].(map[string]any)["options"].(map[string]any)
+	req, _ := opts["items"].(map[string]any)["required"].([]any)
+	seen := map[any]bool{}
+	for _, r := range req {
+		if seen[r] {
+			t.Fatalf("required lists %v more than once — invalid JSON schema: %v", r, req)
+		}
+		seen[r] = true
+	}
+}
+
 // TestSuggestSeerKindUsesSeerInstructionsAndBrief covers the Seer's own suggestion boxes
 // (adversary, session, clock, territory_event, handout): the Seer instructions are sent, not the
 // player ones, and the brief's lines reach the request alongside any Context.
@@ -153,7 +190,7 @@ func TestSuggestSeerKindUsesSeerInstructionsAndBrief(t *testing.T) {
 		json.NewDecoder(r.Body).Decode(&body)
 		rw.Header().Set("Content-Type", "application/json")
 		rw.Write(toolUseResp("toolu_1", "offer_suggestions", map[string]any{"options": []map[string]any{
-			{"name": "The Choir", "leader": "Brother Anselm", "plot": "smuggling", "motivation": "profit", "members": "Brother Anselm — greedy", "why": "fits the docks"},
+			{"name": "The Choir", "leader": "Brother Anselm", "plot": "smuggling", "motivation": "profit", "members": "Brother Anselm — greedy", "reason": "fits the docks"},
 		}}))
 	})
 	brief := &Brief{}

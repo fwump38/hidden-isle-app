@@ -176,7 +176,7 @@ func TestWizardSuggest(t *testing.T) {
 		t.Error("the suggestion box shouldn't show with the assistant off")
 	}
 
-	wireAssistWith(t, srv, suggestResp(map[string]any{"word": "Proud", "why": "fits"}, map[string]any{"word": "Stubborn", "why": "also"}))
+	wireAssistWith(t, srv, suggestResp(map[string]any{"word": "Proud", "reason": "fits"}, map[string]any{"word": "Stubborn", "reason": "also"}))
 	if _, body := st.get("Ana", "/agents/1/wizard?step=burden"); !strings.Contains(body, "More ideas") {
 		t.Error("the suggestion box should show with the assistant on")
 	}
@@ -196,20 +196,20 @@ func TestWizardSuggest(t *testing.T) {
 		t.Errorf("a suggestion was saved (%q); only the player saves", ag.Burden)
 	}
 
-	wireAssistWith(t, srv, suggestResp(map[string]any{"ability": "Familiar", "why": "a companion"}, map[string]any{"ability": "FIREBALL", "why": "made up"}))
+	wireAssistWith(t, srv, suggestResp(map[string]any{"ability": "Familiar", "reason": "a companion"}, map[string]any{"ability": "FIREBALL", "reason": "made up"}))
 	_, body = st.postBody("Ana", "/agents/1/wizard/suggest", url.Values{"kind": {"abilities"}})
 	if !strings.Contains(body, `name="ability.add" value="familiar"`) || strings.Contains(body, "FIREBALL") {
 		t.Errorf("ability suggestions should be the class's own, pickable: %s", body)
 	}
 
-	wireAssistWith(t, srv, suggestResp(map[string]any{"points": "Study +2, Nonsense +1, Slip +1", "why": "bookish"}))
+	wireAssistWith(t, srv, suggestResp(map[string]any{"points": "Study +2, Nonsense +1, Slip +1", "reason": "bookish"}))
 	_, body = st.postBody("Ana", "/agents/1/wizard/suggest", url.Values{"kind": {"skills"}, "skill.Study": {"0"}})
 	body = html.UnescapeString(body)
 	if !strings.Contains(body, `"skill.Study":"2"`) || !strings.Contains(body, `"skill.Slip":"1"`) || strings.Contains(body, "Nonsense") {
 		t.Errorf("skill suggestions should become new totals for real skills: %s", body)
 	}
 
-	wireAssistWith(t, srv, suggestResp(map[string]any{"class": "Prowler", "why": "sneaky"}, map[string]any{"class": "Wizard", "why": "no such class"}))
+	wireAssistWith(t, srv, suggestResp(map[string]any{"class": "Prowler", "reason": "sneaky"}, map[string]any{"class": "Wizard", "reason": "no such class"}))
 	_, body = st.postBody("Ana", "/agents/create/suggest", url.Values{"kind": {"class"}, "hint": {"a sneaky thief"}})
 	if !strings.Contains(body, `name="class" value="prowler"`) || strings.Contains(body, "Wizard") {
 		t.Errorf("class suggestions should pick a real class on the class page: %s", body)
@@ -217,7 +217,7 @@ func TestWizardSuggest(t *testing.T) {
 
 	// If every option Claude offers turns out not to match a real class, the player must see an
 	// error, not a silently empty box (a spinner that stops with nothing to show).
-	wireAssistWith(t, srv, suggestResp(map[string]any{"class": "Wizard", "why": "no such class"}))
+	wireAssistWith(t, srv, suggestResp(map[string]any{"class": "Wizard", "reason": "no such class"}))
 	_, body = st.postBody("Ana", "/agents/create/suggest", url.Values{"kind": {"class"}, "hint": {"a sneaky thief"}})
 	if !strings.Contains(body, "Nothing usable came back") {
 		t.Errorf("no usable class suggestions should say so, not render empty: %s", body)
@@ -229,7 +229,7 @@ func TestWizardSuggest(t *testing.T) {
 // configured, and the old chat routes should no longer exist at all.
 func TestNoChatEverywhere(t *testing.T) {
 	st, _, srv := newSiteWithServer(t)
-	wireAssistWith(t, srv, suggestResp(map[string]any{"word": "Proud", "why": "fits"}))
+	wireAssistWith(t, srv, suggestResp(map[string]any{"word": "Proud", "reason": "fits"}))
 
 	for _, path := range []string{"/", "/agents/create", "/admin"} {
 		_, body := st.get("Seer", path)

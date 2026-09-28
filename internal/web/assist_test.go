@@ -198,7 +198,7 @@ func suggestOptResp(options ...map[string]any) []byte {
 func TestSeerSuggestAdversary(t *testing.T) {
 	st, srv := assistWorld(t)
 	wireAssistWith(t, srv, suggestOptResp(map[string]any{
-		"name": "The Choir", "leader": "Brother Anselm", "plot": "smuggling", "motivation": "profit", "members": "Anselm — greedy", "why": "fits the docks",
+		"name": "The Choir", "leader": "Brother Anselm", "plot": "smuggling", "motivation": "profit", "members": "Anselm — greedy", "reason": "fits the docks",
 	}))
 	code, body := st.postBody("Seer", "/c/1/suggest", url.Values{"kind": {"adversary"}, "hint": {"docks"}})
 	if code != 200 {

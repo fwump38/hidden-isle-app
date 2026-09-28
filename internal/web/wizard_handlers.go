@@ -94,6 +94,7 @@ type wizardData struct {
 	Schools       []creation.School
 	WhyReasons    []string
 	Skills        map[string][]string // suit -> skill names
+	SuitHelp      map[string]string   // suit -> the same explanation the full sheet shows (p. 14, p. 23)
 	Cards         map[string]wizCard  // the card pickers on this screen, by step key
 	Error         string
 }
@@ -293,7 +294,7 @@ func (s *Server) buildWizardData(a campaign.Actor, ag *db.Agent, snap *gamedata.
 		Done: map[int]bool{}, Homeland: findContact(contacts, "Homeland"), Dioscorian: findContact(contacts, "Dioscorian"),
 		Chosen: chosen, Abil: resolveAbilities(ag.Abilities, class), AssistEnabled: s.Assist != nil,
 		Regions: creation.NameRegions(snap), Schools: creation.MagicSchools(snap), WhyReasons: creation.WhyReasons,
-		Skills: map[string][]string{}}
+		Skills: map[string][]string{}, SuitHelp: suitHelp}
 	current := creationStep(ag, class, &snap.Limits, solo, contacts)
 	for _, st := range wizStepList {
 		d.Done[st.N] = st.N < current
@@ -523,11 +524,11 @@ func (s *Server) wizardSuggest(w http.ResponseWriter, r *http.Request) {
 		s.partial(w, "wizard", "choices", d)
 		return
 	}
+	// The hint box on a wizard step is a one-off steer for that step's suggestions, not the
+	// Agent's concept: the concept is set once, on the class page, and wizardContext below
+	// already carries it into every step's request, so a hint here (e.g. describing a contact)
+	// must not overwrite it.
 	hint := strings.TrimSpace(r.FormValue("hint"))
-	if hint != "" && hint != ag.Concept {
-		s.saveConcept(a, ag.ID, hint)
-		ag.Concept = hint
-	}
 	req, bookOptions := wizardContext(a, s, ag, snap, kind, r.Form)
 	req.Hint = hint
 	req.Exclude = append(slices.Clone(d.Exclude), bookOptions...)
@@ -597,6 +598,37 @@ func wizardContext(a campaign.Actor, s *Server, ag *db.Agent, snap *gamedata.Sna
 		if v := formOr(form, f.field, f.saved); v != "" && kind != "look" {
 			add("%s: %s", f.label, v)
 		}
+	}
+	// Abilities, skills and magic already have their own, more detailed line under their own
+	// step below; elsewhere, a short summary lets a later step (e.g. why they came to Dioscoria,
+	// or a contact) build on choices made on an earlier or later screen — the player can fill the
+	// wizard's steps in any order, so this doesn't assume any of them ran first.
+	if kind != "abilities" {
+		if abil := resolveAbilities(ag.Abilities, class); len(abil) > 0 {
+			var names []string
+			for _, ab := range abil {
+				names = append(names, ab.Name)
+			}
+			add("Abilities chosen: %s", strings.Join(names, ", "))
+		}
+	}
+	if kind != "skills" {
+		var parts []string
+		for _, sk := range snap.Skills.Skills {
+			if v := ag.Skills[sk.Name]; v > 0 {
+				parts = append(parts, fmt.Sprintf("%s %d", sk.Name, v))
+			}
+		}
+		if len(parts) > 0 {
+			add("Skills so far: %s", strings.Join(parts, ", "))
+		}
+	}
+	if kind != "magic" && len(ag.Proficiencies) > 0 {
+		var parts []string
+		for _, p := range ag.Proficiencies {
+			parts = append(parts, fmt.Sprintf("%s (%s)", p.School, p.Rank))
+		}
+		add("Magic: %s", strings.Join(parts, ", "))
 	}
 
 	var book []string
