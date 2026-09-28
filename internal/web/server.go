@@ -22,6 +22,8 @@ import (
 	"github.com/fwump38/hidden-isle-app/internal/db"
 	"github.com/fwump38/hidden-isle-app/internal/gamedata"
 	"github.com/fwump38/hidden-isle-app/internal/live"
+	"github.com/fwump38/hidden-isle-app/internal/rulebook"
+	"github.com/fwump38/hidden-isle-app/internal/rules"
 )
 
 //go:embed templates static
@@ -35,9 +37,11 @@ type Server struct {
 	Svc   *campaign.Service
 	Live  *live.Hub     // live updates; nil disables them
 	Chat  *chat.Service // in-app player chat; nil disables it (no ANTHROPIC_API_KEY)
+	Rules *rules.Index  // rules search in the rule browser; nil hides it
 	Build string
 
 	pages map[string]*template.Template
+	book  rulebook.Cache // the rule browser's rendered text
 }
 
 func New(g *gorm.DB, cfg *config.Config, a *auth.Authenticator, data *gamedata.Store, svc *campaign.Service, build string) (*Server, error) {
@@ -77,6 +81,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	s.registerDowntime(mux)
 	s.registerChat(mux)
 	s.registerCreation(mux)
+	s.registerRules(mux)
 
 	mux.Handle("GET /admin", s.requireSeer(http.HandlerFunc(s.admin)))
 	mux.Handle("POST /admin/gamedata/sync", s.requireSeer(http.HandlerFunc(s.syncGameData)))
@@ -109,6 +114,9 @@ type pageData struct {
 	Live  bool         // subscribe to the campaign's live updates
 
 	ChatEnabled bool // the in-app player chat is configured (ANTHROPIC_API_KEY)
+	// Cites maps the rules' page-cite prefixes to book keys ({"p.":"p","Sheet p.":"sheet"}), so
+	// app.js can link every cite on the page to the rule browser.
+	Cites map[string]string
 }
 
 func (s *Server) render(w http.ResponseWriter, r *http.Request, page string, status int, pd pageData) {
@@ -117,6 +125,14 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, page string, sta
 	pd.ChatEnabled = s.Chat != nil
 	pd.Info = auth.Info(r.Context())
 	pd.Build = s.Build
+	if s.Data != nil {
+		if snap := s.Data.Current(); snap != nil {
+			pd.Cites = map[string]string{}
+			for prefix := range snap.Manifest.Citations {
+				pd.Cites[prefix] = rulebook.BookKey(prefix)
+			}
+		}
+	}
 	t, ok := s.pages[page]
 	if !ok {
 		http.Error(w, "no page "+page, http.StatusInternalServerError)

@@ -107,6 +107,7 @@ func run() error {
 
 	mux := http.NewServeMux()
 	ui.Live = hub
+	ui.Rules = idx
 	if cfg.AnthropicAPIKey != "" {
 		ui.Chat = chat.New(g, svc, data, idx, chat.Config{
 			APIKey: cfg.AnthropicAPIKey, Model: cfg.ChatModel,

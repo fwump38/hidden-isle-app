@@ -72,19 +72,192 @@ document.addEventListener("htmx:afterSettle", (e) => {
     window.scrollTo(0, 0);
   }
   hiScroll = null;
+  if (wholePage) scrollToTarget();
   initTooltips(document.getElementById("main") || document);
 });
-// Close tooltips on elements about to be replaced, so none are left floating.
+// Close tooltips and help popovers on elements about to be replaced, so none are left floating.
 document.addEventListener("htmx:beforeSwap", () => {
   document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((el) => bootstrap.Tooltip.getInstance(el)?.dispose());
+  document.querySelectorAll("[data-hi-help]").forEach((el) => bootstrap.Popover.getInstance(el)?.dispose());
 });
 
-// Bootstrap tooltips for the "?" help icons (tap to show on phones).
+// Bootstrap tooltips (for any plain data-bs-toggle="tooltip").
 function initTooltips(root) {
   if (!window.bootstrap) return;
   root.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((el) => bootstrap.Tooltip.getOrCreateInstance(el, { trigger: "hover focus click" }));
 }
 document.addEventListener("DOMContentLoaded", () => initTooltips(document));
+
+// ---------------------------------------------------------------- page cites → rule browser
+// Every page cite on screen ("p. 15", "pp. 72, 100-103", "Sheet p. 3", "Ref p. 8") links to
+// that page in the rule browser. The prefixes come from the rules manifest (<body data-cites>).
+// A MutationObserver catches anything added later: htmx swaps, chat replies, handouts.
+const citeSkip = "a, button, select, option, textarea, input, script, style, code, pre, [contenteditable], [data-no-cites], .hi-page";
+let citeRe = null, citeBooks = {};
+
+function citePattern() {
+  if (citeRe !== null) return citeRe;
+  try { citeBooks = JSON.parse(document.body.dataset.cites || "{}"); } catch { citeBooks = {}; }
+  // "Sheet p." → "Sheet"; plain "p." has no word before it.
+  const words = Object.keys(citeBooks).map((p) => p.replace(/\s*p\.\s*$/, "")).filter(Boolean)
+    .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  if (!Object.keys(citeBooks).length) { citeRe = false; return citeRe; }
+  const pre = words.length ? `(?:\\b(${words.join("|")})\\s+)?` : "()";
+  const range = "\\d+(?:\\s*[-–]\\s*\\d+)?";
+  citeRe = new RegExp(`${pre}\\b(pp?)\\.\\s?(${range}(?:\\s*,\\s*${range})*)`, "g");
+  return citeRe;
+}
+
+function bookFor(word) {
+  for (const [prefix, key] of Object.entries(citeBooks)) {
+    const w = prefix.replace(/\s*p\.\s*$/, "");
+    if ((word || "") === w) return key;
+  }
+  return null;
+}
+
+function citeLink(book, text) {
+  const a = document.createElement("a");
+  a.className = "hi-cite";
+  a.href = `/rules/page/${book}/${parseInt(text.match(/\d+/)[0], 10)}`;
+  a.textContent = text;
+  a.title = "Open in the rule browser";
+  return a;
+}
+
+function linkifyText(node, re) {
+  const text = node.nodeValue;
+  re.lastIndex = 0;
+  if (!re.test(text)) return;
+  re.lastIndex = 0;
+  const frag = document.createDocumentFragment();
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    const book = bookFor(m[1]);
+    if (!book) continue;
+    frag.append(text.slice(last, m.index));
+    // "pp. 72, 100-103": the first link carries the prefix, the rest are bare numbers. A single
+    // "p." takes only its first number ("p. 23, 2 harm" isn't a list).
+    const nums = m[2] === "pp" ? m[3].split(/(\s*,\s*)/) : [m[3].match(/^\d+(?:\s*[-–]\s*\d+)?/)[0]];
+    const head = m[0].slice(0, m[0].length - m[3].length);
+    frag.append(citeLink(book, head + nums[0]));
+    for (let i = 1; i < nums.length; i++) frag.append(i % 2 ? nums[i] : citeLink(book, nums[i]));
+    last = m.index + head.length + nums.join("").length;
+    re.lastIndex = last;
+  }
+  if (last === 0) return;
+  frag.append(text.slice(last));
+  const links = [...frag.querySelectorAll("a")];
+  node.replaceWith(frag);
+  // Inside #main, let hx-boost follow them like any other link (it only sees links it processed).
+  if (window.htmx) links.forEach((a) => { if (a.closest("[hx-boost]")) htmx.process(a); });
+}
+
+function linkifyCites(root) {
+  const re = citePattern();
+  if (!re || !root) return;
+  if (root.nodeType === Node.TEXT_NODE) {
+    if (root.parentElement && !root.parentElement.closest(citeSkip)) linkifyText(root, re);
+    return;
+  }
+  if (root.nodeType !== Node.ELEMENT_NODE || root.closest(citeSkip)) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => (n.parentElement.closest(citeSkip) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+  });
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach((n) => linkifyText(n, re));
+}
+
+const citeRoots = "#main, #chat-drawer, #handout-modal";
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll(citeRoots).forEach(linkifyCites);
+  const obs = new MutationObserver((muts) => {
+    for (const mu of muts) {
+      for (const n of mu.addedNodes) {
+        const el = n.nodeType === Node.ELEMENT_NODE ? n : n.parentElement;
+        if (el && el.closest(citeRoots) && !(n.nodeType === Node.ELEMENT_NODE && n.matches("a.hi-cite"))) linkifyCites(n);
+      }
+    }
+    obs.takeRecords(); // our own changes
+  });
+  obs.observe(document.body, { childList: true, subtree: true });
+  scrollToTarget();
+});
+// Again once images and fonts are in, in case they moved the target.
+window.addEventListener("load", scrollToTarget);
+
+// The rule browser marks the element to open at (a page from a cite, a search hit).
+function scrollToTarget() {
+  const toc = document.querySelector(".hi-rules-toc");
+  if (toc && window.matchMedia("(min-width: 992px)").matches) toc.open = true;
+  const box = document.querySelector("#main [data-scroll-to]");
+  const el = box && document.getElementById(box.dataset.scrollTo);
+  if (!el) return;
+  el.scrollIntoView({ block: "start", behavior: "instant" });
+  el.classList.remove("hi-target");
+  void el.offsetWidth;
+  el.classList.add("hi-target");
+}
+
+// ---------------------------------------------------------------- help popovers
+// The "?" icons ({{help}} in templates): a popover on hover, focus or tap, with its page cites
+// linked. It stays open while the pointer is over it, so the links can be clicked; a tap pins it
+// until the next tap elsewhere.
+let helpHide = null;
+
+function helpPopover(el) {
+  return bootstrap.Popover.getOrCreateInstance(el, {
+    trigger: "manual", html: true, placement: "top", customClass: "hi-help-pop",
+    content: () => { const div = document.createElement("div"); div.textContent = el.dataset.hiHelp; linkifyCites(div); return div; },
+  });
+}
+function showHelp(el) {
+  if (!window.bootstrap) return;
+  clearTimeout(helpHide);
+  document.querySelectorAll("[data-hi-help][aria-describedby]").forEach((o) => { if (o !== el) hideHelp(o); });
+  const p = helpPopover(el);
+  if (!el.getAttribute("aria-describedby")) p.show();
+}
+function hideHelp(el) {
+  delete el.dataset.pinned;
+  bootstrap.Popover.getInstance(el)?.hide();
+}
+function hideHelpSoon() {
+  clearTimeout(helpHide);
+  helpHide = setTimeout(() => {
+    document.querySelectorAll("[data-hi-help][aria-describedby]").forEach((el) => { if (!el.dataset.pinned) hideHelp(el); });
+  }, 250);
+}
+document.addEventListener("mouseover", (e) => {
+  const icon = e.target.closest?.("[data-hi-help]");
+  if (icon) { showHelp(icon); return; }
+  if (e.target.closest?.(".hi-help-pop")) { clearTimeout(helpHide); return; }
+});
+document.addEventListener("mouseout", (e) => {
+  if (e.target.closest?.("[data-hi-help], .hi-help-pop") && !e.relatedTarget?.closest?.("[data-hi-help], .hi-help-pop")) hideHelpSoon();
+});
+document.addEventListener("focusin", (e) => {
+  const icon = e.target.closest?.("[data-hi-help]");
+  if (icon) showHelp(icon);
+});
+document.addEventListener("focusout", (e) => {
+  if (e.target.closest?.("[data-hi-help]") && !e.relatedTarget?.closest?.(".hi-help-pop")) hideHelpSoon();
+});
+document.addEventListener("click", (e) => {
+  const icon = e.target.closest("[data-hi-help]");
+  if (icon) {
+    e.preventDefault();
+    if (icon.dataset.pinned) { hideHelp(icon); return; }
+    showHelp(icon);
+    icon.dataset.pinned = "1";
+    return;
+  }
+  if (!e.target.closest(".hi-help-pop")) document.querySelectorAll("[data-hi-help][aria-describedby]").forEach(hideHelp);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") document.querySelectorAll("[data-hi-help][aria-describedby]").forEach(hideHelp);
+});
 
 // ---------------------------------------------------------------- live updates
 // Campaign pages subscribe to the campaign's event stream. Someone else's change refreshes the

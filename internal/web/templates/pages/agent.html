@@ -85,8 +85,8 @@
         <label class="form-label mb-0" for="ch-diff">Seer's difficulty</label>
         <select class="form-select form-select-sm" id="ch-diff" name="difficulty"><option value="easy">Easy (2)</option><option value="medium" selected>Medium (3)</option><option value="hard">Hard (4)</option></select>
       </div>
-      <div class="col-3 col-md-2"><label class="form-label mb-0" for="ch-extra">Danger +</label><input class="form-control form-control-sm" type="number" id="ch-extra" name="seer_extra" value="0" title="Extra Seer cards for dangerous context (p. 15)"></div>
-      <div class="col-3 col-md-3"><label class="form-label mb-0" for="ch-group">Group of</label><input class="form-control form-control-sm" type="number" min="0" id="ch-group" name="participants" value="0" title="Group action: participants, +1 Seer card each (p. 22)"></div>
+      <div class="col-3 col-md-2"><label class="form-label mb-0" for="ch-extra">Danger + {{help "Extra Seer cards for dangerous context (p. 15)"}}</label><input class="form-control form-control-sm" type="number" id="ch-extra" name="seer_extra" value="0"></div>
+      <div class="col-3 col-md-3"><label class="form-label mb-0" for="ch-group">Group of {{help "Group action: participants, +1 Seer card each (p. 22)"}}</label><input class="form-control form-control-sm" type="number" min="0" id="ch-group" name="participants" value="0"></div>
       <div class="col-12 d-flex flex-wrap gap-3">
         <span class="form-check"><input class="form-check-input" type="checkbox" name="burden" id="ch-b"><label class="form-check-label" for="ch-b">Burden{{with $a.Burden}} ({{.}}){{end}}: +1 card</label></span>
         <span class="form-check"><input class="form-check-input" type="checkbox" name="vice" id="ch-v"><label class="form-check-label" for="ch-v">Vice: +1 card</label></span>

@@ -32,6 +32,11 @@ This repo holds **no game text**. The rules data (classes, abilities, cards, tab
 >   that player may see. A suggested sheet change is
 >   only a card in the chat until the player taps Apply.
 >
+> - a rule browser (`/rules`) for players and the Seer: the loaded rules text in tabs (Rules,
+>   Characters, Reference, Setting, Errata, Summary, and Seer-only Adventures), with search and a
+>   marker on every printed page. Every page cite in the app ("p. 15", "pp. 72, 100-103",
+>   "Sheet p. 3", "Ref p. 8"), including in help popups and chat replies, links straight to it.
+>
 > - MCP Apps widgets in claude.ai: an Agent sheet, the campaign's clocks and the challenge
 >   helper, drawn inline in the chat and editable in place.
 
