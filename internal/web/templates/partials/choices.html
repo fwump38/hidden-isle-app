@@ -9,13 +9,16 @@
 {{end}}
 
 {{define "choice"}}
+<div class="hi-choice-wrap">
 {{if .ClassID}}
-<button class="btn btn-sm btn-outline-light hi-choice" type="submit" form="create-agent-form" name="class" value="{{.ClassID}}">Choose {{.Label}}{{with .Why}}<span class="why">{{.}}</span>{{end}}</button>
+<button class="btn btn-sm btn-outline-light hi-choice" type="submit" form="create-agent-form" name="class" value="{{.ClassID}}">Choose {{.Label}}</button>
 {{else if .AbilityID}}
-<button class="btn btn-sm btn-outline-light hi-choice" type="submit" form="wiz-ability-add" name="ability.add" value="{{.AbilityID}}">Choose {{.Label}}{{with .Why}}<span class="why">{{.}}</span>{{end}}</button>
+<button class="btn btn-sm btn-outline-light hi-choice" type="submit" form="wiz-ability-add" name="ability.add" value="{{.AbilityID}}">Choose {{.Label}}</button>
 {{else}}
-<button class="btn btn-sm btn-outline-light hi-choice" type="button" data-fill="{{fill .Fill}}">{{.Label}}{{with .Why}}<span class="why">{{.}}</span>{{end}}</button>
+<button class="btn btn-sm btn-outline-light hi-choice" type="button" data-fill="{{fill .Fill}}">{{.Label}}</button>
 {{end}}
+{{with .Why}}<div class="hi-choice-why small text-body-secondary">{{.}}</div>{{end}}
+</div>
 {{end}}
 
 {{/* suggest-box asks Claude for more options in the background: (dict "URL" … "Kind" … "Label" … "Placeholder" …).

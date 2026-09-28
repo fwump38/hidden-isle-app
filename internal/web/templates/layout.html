@@ -7,10 +7,10 @@
   <title>{{.Title}} · The Hidden Isle</title>
   <link rel="stylesheet" href="/static/vendor/bootstrap.min.css">
   <link rel="stylesheet" href="/static/vendor/bootstrap-icons.min.css">
-  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/app.css?v={{.AssetVer}}">
   <script src="/static/vendor/htmx.min.js" defer></script>
   <script src="/static/vendor/bootstrap.bundle.min.js" defer></script>
-  <script src="/static/app.js" defer></script>
+  <script src="/static/app.js?v={{.AssetVer}}" defer></script>
 </head>
 <body{{with .Cites}} data-cites="{{json .}}"{{end}}>
   <nav class="navbar navbar-expand-md border-bottom mb-3 d-print-none">

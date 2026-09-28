@@ -193,9 +193,15 @@ func (s *Server) createClassSuggest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req := chat.SuggestRequest{Kind: "class", Hint: r.FormValue("hint"), Exclude: d.Exclude}
+	names := make([]string, 0, len(snap.Classes.Classes))
 	for _, c := range snap.Classes.Classes {
 		req.Context = append(req.Context, fmt.Sprintf("%s (%s): %s", c.Name, c.Guild, c.Summary))
+		names = append(names, c.Name)
 	}
+	// Force the model to pick one of the real classes: with a free-text field, a strongly
+	// off-list concept (e.g. "a grave digger dabbling in necromancy") can tempt it into inventing
+	// a plausible-sounding class name that then matches nothing and vanishes silently.
+	req.Enum = map[string][]string{"class": names}
 	sugs, err := s.Chat.Suggest(r.Context(), a.User, req)
 	if err != nil {
 		d.Error = sentence(friendly(err))

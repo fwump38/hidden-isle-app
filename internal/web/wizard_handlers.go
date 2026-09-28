@@ -619,13 +619,16 @@ func wizardContext(a campaign.Actor, s *Server, ag *db.Agent, snap *gamedata.Sna
 	case "abilities":
 		if class != nil {
 			add("Choose %d. The class's abilities:", snap.Limits.Creation.Abilities)
+			var pickable []string
 			for _, ab := range class.Abilities {
 				text := ab.Text
 				if len(text) > 400 {
 					text = text[:400] + "…"
 				}
 				add("%s: %s", ab.Name, text)
+				pickable = append(pickable, ab.Name)
 			}
+			req.Enum = map[string][]string{"ability": pickable}
 		}
 		for _, ab := range resolveAbilities(ag.Abilities, class) {
 			book = append(book, ab.Name)
@@ -656,6 +659,7 @@ func wizardContext(a campaign.Actor, s *Server, ag *db.Agent, snap *gamedata.Sna
 			}
 		}
 		add("Schools: %s", strings.Join(names, ", "))
+		req.Enum = map[string][]string{"school": names}
 	case "look":
 		for _, c := range []struct{ label, field, saved string }{
 			{"Childhood card", "set.child_card", ag.ChildCard}, {"Adulthood card", "set.adult_card", ag.AdultCard},
