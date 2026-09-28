@@ -82,7 +82,7 @@ document.addEventListener("htmx:beforeSwap", () => {
 // Bootstrap tooltips for the "?" help icons (tap to show on phones).
 function initTooltips(root) {
   if (!window.bootstrap) return;
-  root.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((el) => bootstrap.Tooltip.getOrCreateInstance(el, { trigger: "hover focus" }));
+  root.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((el) => bootstrap.Tooltip.getOrCreateInstance(el, { trigger: "hover focus click" }));
 }
 document.addEventListener("DOMContentLoaded", () => initTooltips(document));
 

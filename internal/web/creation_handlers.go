@@ -206,6 +206,9 @@ func (s *Server) createClassSuggest(w http.ResponseWriter, r *http.Request) {
 			d.Exclude = append(d.Exclude, c.Label)
 		}
 	}
+	if d.Error == "" && len(d.Choices) == 0 {
+		d.Error = "Nothing usable came back. Try again, or describe what you're after."
+	}
 	s.partial(w, "create-agent", "choices", d)
 }
 

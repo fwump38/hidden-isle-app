@@ -166,4 +166,12 @@ func TestWizardSuggest(t *testing.T) {
 	if !strings.Contains(body, `name="class" value="prowler"`) || strings.Contains(body, "Wizard") {
 		t.Errorf("class suggestions should pick a real class on the class page: %s", body)
 	}
+
+	// If every option Claude offers turns out not to match a real class, the player must see an
+	// error, not a silently empty box (a spinner that stops with nothing to show).
+	wireChatWith(t, srv, suggestResp(map[string]any{"class": "Wizard", "why": "no such class"}))
+	_, body = st.postBody("Ana", "/agents/create/suggest", url.Values{"kind": {"class"}, "hint": {"a sneaky thief"}})
+	if !strings.Contains(body, "Nothing usable came back") {
+		t.Errorf("no usable class suggestions should say so, not render empty: %s", body)
+	}
 }
