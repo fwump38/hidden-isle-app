@@ -1,0 +1,65 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+  <h1 class="h4 mb-0 me-auto"><i class="bi bi-book"></i> Rules</h1>
+  {{if $d.CanSearch}}
+  <form class="d-flex gap-1 hi-rules-search" method="get" action="/rules/search" role="search">
+    <input class="form-control form-control-sm" type="search" name="q" value="{{$d.Query}}" placeholder="Search the rules" aria-label="Search the rules">
+    <button class="btn btn-sm btn-outline-light" type="submit" aria-label="Search"><i class="bi bi-search"></i></button>
+  </form>
+  {{end}}
+</div>
+
+{{if $d.Tabs}}
+<ul class="nav nav-tabs hi-tabs hi-rules-tabs flex-nowrap overflow-x-auto mb-3">
+  {{range $d.Tabs}}
+  <li class="nav-item"><a class="nav-link{{if eq . $d.Tab}} active{{end}}" {{if eq . $d.Tab}}aria-current="page"{{end}} href="/rules/{{.Key}}">{{.Label}}{{if .SeerOnly}} <i class="bi bi-eye-slash small text-warning" title="Seer only"></i>{{end}}</a></li>
+  {{end}}
+</ul>
+{{end}}
+
+{{with $d.Notice}}<div class="alert alert-warning py-2 small">{{.}}</div>{{end}}
+
+{{if $d.Searched}}
+<h2 class="h5">Results for “{{$d.Query}}”</h2>
+{{range $d.Hits}}
+<a class="card card-body mb-2 text-decoration-none hi-rule-hit" href="{{.URL}}">
+  <div class="fw-semibold">{{.Heading}}{{if .SeerOnly}} <span class="badge text-bg-warning">Seer only</span>{{end}}</div>
+  <div class="small text-body-secondary mb-1">{{.Doc}}{{with .Page}} · {{.}}{{end}}</div>
+  <div class="small text-body" data-no-cites>{{.Snippet}}</div>
+</a>
+{{else}}
+<p class="text-body-secondary">Nothing matched. Try fewer or different words.</p>
+{{end}}
+{{else if $d.Doc}}
+{{$doc := $d.Doc}}
+<div class="row g-3"{{with $d.ScrollTo}} data-scroll-to="{{.}}"{{end}}>
+  <nav class="col-lg-3 hi-rules-side" aria-label="{{$d.Tab.Label}} contents">
+    <details class="hi-rules-toc">
+      <summary class="small text-body-secondary mb-1">Contents</summary>
+      <ul class="list-unstyled small mb-0">
+        {{range $d.Tab.Docs}}
+        <li class="mb-1">
+          <a class="d-block{{if eq . $doc}} fw-semibold text-warning{{else}} link-body-emphasis{{end}} text-decoration-none" href="{{.URL}}">{{.Title}}{{with .Pages}} <span class="text-body-secondary fw-normal" data-no-cites>({{.}})</span>{{end}}</a>
+          {{if and (eq . $doc) (gt (len .TOC) 1)}}
+          <ul class="list-unstyled ms-2 ps-2 border-start mt-1">
+            {{range .TOC}}<li><a class="d-block text-decoration-none link-secondary py-1{{if eq .Level 2}} ms-2{{end}}" href="#{{.ID}}">{{.Text}}</a></li>{{end}}
+          </ul>
+          {{end}}
+        </li>
+        {{end}}
+      </ul>
+    </details>
+  </nav>
+  <article class="col-lg-9 hi-rules">
+    {{if or $doc.Pages $doc.SeerOnly}}<div class="small text-body-secondary mb-2">{{with $doc.Pages}}<span data-no-cites>{{.}}</span>{{end}}{{if $doc.SeerOnly}} <span class="badge text-bg-warning">Seer only</span>{{end}}</div>{{end}}
+    {{$doc.HTML}}
+    <div class="d-flex justify-content-between gap-2 border-top pt-3 mt-4 small">
+      <span>{{with $d.Prev}}<a href="{{.URL}}"><i class="bi bi-arrow-left"></i> {{.Title}}</a>{{end}}</span>
+      <span class="text-end">{{with $d.Next}}<a href="{{.URL}}">{{.Title}} <i class="bi bi-arrow-right"></i></a>{{end}}</span>
+    </div>
+    {{with $d.Label}}<div class="small text-body-secondary mt-3">Rules data {{.}}</div>{{end}}
+  </article>
+</div>
+{{end}}
+{{end}}

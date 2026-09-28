@@ -12,7 +12,7 @@
   <script src="/static/vendor/bootstrap.bundle.min.js" defer></script>
   <script src="/static/app.js" defer></script>
 </head>
-<body>
+<body{{with .Cites}} data-cites="{{json .}}"{{end}}>
   <nav class="navbar navbar-expand-md border-bottom mb-3 d-print-none">
     <div class="container">
       <a class="navbar-brand d-flex align-items-center gap-2" href="/"><i class="bi bi-moon-stars"></i> The Hidden Isle</a>
@@ -23,6 +23,7 @@
       <div class="collapse navbar-collapse" id="nav">
         <ul class="navbar-nav me-auto">
           <li class="nav-item"><a class="nav-link" href="/"><i class="bi bi-house"></i> Home</a></li>
+          <li class="nav-item"><a class="nav-link" href="/rules"><i class="bi bi-book"></i> Rules</a></li>
           {{if .User.IsSeer}}<li class="nav-item"><a class="nav-link" href="/admin"><i class="bi bi-gear"></i> Admin</a></li>{{end}}
         </ul>
         <div class="d-flex align-items-center gap-2">
