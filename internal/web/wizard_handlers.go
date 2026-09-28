@@ -521,8 +521,13 @@ func (s *Server) wizardSuggest(w http.ResponseWriter, r *http.Request) {
 		s.partial(w, "wizard", "choices", d)
 		return
 	}
+	hint := strings.TrimSpace(r.FormValue("hint"))
+	if hint != "" && hint != ag.Concept {
+		s.saveConcept(a, ag.ID, hint)
+		ag.Concept = hint
+	}
 	req, bookOptions := wizardContext(a, s, ag, snap, kind, r.Form)
-	req.Hint = r.FormValue("hint")
+	req.Hint = hint
 	req.Exclude = append(slices.Clone(d.Exclude), bookOptions...)
 	sugs, err := s.Chat.Suggest(r.Context(), a.User, req)
 	if err != nil {
@@ -570,6 +575,9 @@ func wizardContext(a campaign.Actor, s *Server, ag *db.Agent, snap *gamedata.Sna
 	class := snap.Class(ag.Class)
 	if class != nil {
 		add("Class: %s (%s). %s", class.Name, class.Guild, class.Summary)
+	}
+	if ag.Concept != "" {
+		add("The player's own description of this Agent: %s", ag.Concept)
 	}
 	if n := formOr(form, "set.name", ag.Name); n != "" && n != unnamed {
 		add("Name: %s", n)

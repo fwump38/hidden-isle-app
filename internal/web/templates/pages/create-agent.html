@@ -21,7 +21,7 @@
 {{if $d.ChatEnabled}}
 <div class="card mb-3 border-info-subtle"><div class="card-body py-2">
   <div class="small"><i class="bi bi-stars text-info"></i> <strong>Not sure?</strong> Describe the character you have in mind, or how you like to play, and get a suggestion.</div>
-  {{template "suggest-box" (dict "URL" "/agents/create/suggest" "Kind" "class" "Label" "Suggest a class" "Placeholder" "e.g. a silver-tongued rogue who hates violence")}}
+  {{template "suggest-box" (dict "URL" "/agents/create/suggest" "Kind" "class" "Label" "Suggest a class" "Placeholder" "e.g. a silver-tongued rogue who hates violence" "Value" $d.Concept "Form" "create-agent-form")}}
 </div></div>
 {{end}}
 

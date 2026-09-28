@@ -348,7 +348,7 @@ func (s *Server) addTools() {
 			}
 			return s.svc.CreateRecord(a, in.Kind, in.CampaignID, p, opts(in.reasonField))
 		})
-	tool(s, "update_record", "Change fields of any record, validated against the rules' limits and logged. Agent fields include name, status, burden, burden_card, burden_track, ideal, ideal_card, ideal_track, vices, virtues, fulfilled_virtues (lists), skills (map skill→points; send the whole map), unlocked_fourth, harm (map suit→[P/S/T]; send the whole map), xp_swords/xp_wands/xp_cups/xp_pentacles/xp_ability, abilities ([{id}] or custom [{name,text,source}]), proficiencies ([{school,rank,boxes,segments}]), magical_sources, items, load_used, age, culture, look, why, child_phrase, child_card, adult_verb, adult_phrase, adult_card, notes. Prefer add_harm/heal/award_xp/tick_clock/advance_adversary for those.",
+	tool(s, "update_record", "Change fields of any record, validated against the rules' limits and logged. Agent fields include name, status, burden, burden_card, burden_track, ideal, ideal_card, ideal_track, vices, virtues, fulfilled_virtues (lists), skills (map skill→points; send the whole map), unlocked_fourth, harm (map suit→[P/S/T]; send the whole map), xp_swords/xp_wands/xp_cups/xp_pentacles/xp_ability, abilities ([{id}] or custom [{name,text,source}]), proficiencies ([{school,rank,boxes,segments}]), magical_sources, items, load_used, age, culture, look, why, concept, child_phrase, child_card, adult_verb, adult_phrase, adult_card, notes. Prefer add_harm/heal/award_xp/tick_clock/advance_adversary for those.",
 		func(ctx context.Context, a campaign.Actor, in updateRecordIn) (any, error) {
 			p, err := in.Fields.patch()
 			if err != nil {

@@ -21,14 +21,17 @@
 </div>
 {{end}}
 
-{{/* suggest-box asks Claude for more options in the background: (dict "URL" … "Kind" … "Label" … "Placeholder" …).
-     Inside a form, the request carries the form as filled in so far. */}}
+{{/* suggest-box asks Claude for more options in the background: (dict "URL" … "Kind" … "Label" … "Placeholder" … "Value" … "Form" …).
+     Inside a form, the request carries the form as filled in so far. "Value" pre-fills the hint
+     with the Agent's saved concept, so an untouched click still resends it; "Form" (optional) also
+     attaches the hint input to another <form> by id, so its value is captured on that form's own
+     submit (e.g. the class page, where the hint box isn't nested in the class-selection form). */}}
 {{define "suggest-box"}}
 <div class="hi-suggest mt-3">
   <div class="hi-suggest-out d-flex flex-wrap gap-2 mb-2" aria-live="polite"></div>
   <input type="hidden" name="kind" value="{{.Kind}}">
   <div class="d-flex flex-column flex-sm-row gap-2">
-    <input class="form-control form-control-sm" name="hint" placeholder="{{.Placeholder}}" aria-label="Describe what you're thinking" autocomplete="off">
+    <input class="form-control form-control-sm" name="hint" value="{{.Value}}" {{with .Form}}form="{{.}}"{{end}} placeholder="{{.Placeholder}}" aria-label="Describe what you're thinking" autocomplete="off">
     <button class="btn btn-sm btn-outline-info text-nowrap" type="button" data-suggest hx-post="{{.URL}}" hx-include="closest .hi-suggest" hx-target="previous .hi-suggest-out" hx-select="unset" hx-swap="innerHTML">
       <span class="htmx-indicator spinner-border spinner-border-sm"></span> <i class="bi bi-stars"></i> {{.Label}}
     </button>

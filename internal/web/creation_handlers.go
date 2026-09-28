@@ -3,6 +3,7 @@ package web
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -68,6 +69,7 @@ type createAgentData struct {
 	Classes     []gamedata.Class
 	ChatEnabled bool
 	Agent       *db.Agent // set when going back from the wizard to change an Agent's class
+	Concept     string    // the Agent's saved concept, if any, to prefill the suggest box
 }
 
 // normalizePath reads the creation path; "guided" and "manual" are the old names of the
@@ -93,7 +95,7 @@ func (s *Server) createClassPage(w http.ResponseWriter, r *http.Request) {
 			s.fail(w, r, orForbidden(err))
 			return
 		}
-		d.Agent, d.Path = ag, "step"
+		d.Agent, d.Path, d.Concept = ag, "step", ag.Concept
 	}
 	cid, c, err := s.resolveCampaignParam(a, r)
 	if err != nil {
@@ -137,8 +139,9 @@ func (s *Server) createClassSubmit(w http.ResponseWriter, r *http.Request) {
 		s.done(w, r, fmt.Errorf("pick a class"), back)
 		return
 	}
+	concept := strings.TrimSpace(r.FormValue("hint"))
 	if aid, err := strconv.ParseUint(r.FormValue("agent_id"), 10, 64); err == nil && aid > 0 {
-		s.changeClass(w, r, a, uint(aid), classID)
+		s.changeClass(w, r, a, uint(aid), classID, concept)
 		return
 	}
 	var owner *uint
@@ -155,6 +158,9 @@ func (s *Server) createClassSubmit(w http.ResponseWriter, r *http.Request) {
 		s.done(w, r, err, back)
 		return
 	}
+	if concept != "" {
+		s.saveConcept(a, ag.ID, concept)
+	}
 	if path == "automatic" {
 		redirect, err := s.runAutomatic(a, ag, snap)
 		if err != nil {
@@ -169,9 +175,26 @@ func (s *Server) createClassSubmit(w http.ResponseWriter, r *http.Request) {
 
 // changeClass is the wizard's Back from its first screen: the player picked a different class
 // for an Agent they're still creating (campaign.Service.ChangeClass says what that resets).
-func (s *Server) changeClass(w http.ResponseWriter, r *http.Request, a campaign.Actor, agentID uint, classID string) {
+func (s *Server) changeClass(w http.ResponseWriter, r *http.Request, a campaign.Actor, agentID uint, classID, concept string) {
 	_, err := s.Svc.ChangeClass(a, agentID, classID, campaign.Opts{})
+	if err == nil && concept != "" {
+		s.saveConcept(a, agentID, concept)
+	}
 	s.done(w, r, err, fmt.Sprintf("/agents/%d/wizard?step=name", agentID))
+}
+
+// saveConcept persists the player's own rough description of an Agent, so every later wizard
+// step's suggest box can reuse it (wizardContext) instead of asking again from scratch. Best
+// effort: a failure here shouldn't block the suggestion or the class/step the player is on.
+func (s *Server) saveConcept(a campaign.Actor, agentID uint, concept string) {
+	patch, err := fieldsPatch(map[string]any{"concept": concept})
+	if err != nil {
+		slog.Error("save concept", "agent", agentID, "err", err)
+		return
+	}
+	if _, err := s.Svc.Update(a, "agent", agentID, patch, campaign.Opts{Reason: "character concept"}); err != nil {
+		slog.Error("save concept", "agent", agentID, "err", err)
+	}
 }
 
 // createClassSuggest asks Claude, in the background, which classes fit what the player describes.
