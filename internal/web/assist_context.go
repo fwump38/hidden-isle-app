@@ -1,6 +1,8 @@
 package web
 
 import (
+	"strings"
+
 	"github.com/fwump38/hidden-isle-app/internal/assist"
 	"github.com/fwump38/hidden-isle-app/internal/campaign"
 	"github.com/fwump38/hidden-isle-app/internal/db"
@@ -39,8 +41,15 @@ func buildBrief(a campaign.Actor, svc *campaign.Service, campaignID uint, opts b
 		if c.Table != "" {
 			b.Add("Table agreements (tone, lines and veils): %s", c.Table)
 		}
-		if c.Options != "" {
-			b.Add("House options in use: %s", c.Options)
+		if opts := campaignOptions(c); len(opts) > 0 || c.Options != "" {
+			line := strings.Join(opts, ", ")
+			if c.Options != "" {
+				if line != "" {
+					line += "; "
+				}
+				line += c.Options
+			}
+			b.Add("House options in use: %s", line)
 		}
 		if c.OpenThreads != "" {
 			b.Add("Open threads: %s", c.OpenThreads)

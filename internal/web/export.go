@@ -24,9 +24,13 @@ func renderMarkdown(x *export, snap *gamedata.Snapshot) string {
 			w("## %s\n%s\n\n", title, strings.TrimSpace(body))
 		}
 	}
-	section("Table", c.Table)
-	section("Options in use", c.Options)
-	section("Open threads", c.OpenThreads)
+	section("Table agreements", plainMentions(c.Table))
+	opts := campaignOptions(c)
+	if optsText := strings.TrimSpace(c.Options); optsText != "" {
+		opts = append(opts, plainMentions(optsText))
+	}
+	section("Options in use", strings.Join(opts, "; "))
+	section("Open threads", plainMentions(c.OpenThreads))
 
 	w("## Agents\n\n")
 	for _, a := range x.Agents {

@@ -19,21 +19,26 @@ const (
 // match the GORM column names, so keep them snake_case and unique per model.
 
 type Campaign struct {
-	ID              uint      `gorm:"primaryKey" json:"id"`
-	Name            string    `gorm:"not null" json:"name"`
-	Mode            string    `gorm:"not null;default:group" json:"mode"` // group | solitaire | Seer-less
-	Merciful        bool      `json:"merciful"`
-	Season          int       `gorm:"not null;default:1" json:"season"`
-	ScenariosPlayed int       `json:"scenarios_played"`
-	HandMascot      string    `json:"hand_mascot"`
-	HandName        string    `json:"hand_name"`
-	Table           string    `json:"table"`   // session length, cadence, lines and veils, tone
-	Options         string    `json:"options"` // optional rules in use
-	OpenThreads     string    `json:"open_threads"`
-	Archived        bool      `json:"archived"`
-	TableKey        string    `json:"-"` // secret for the read-only TV view link
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID              uint   `gorm:"primaryKey" json:"id"`
+	Name            string `gorm:"not null" json:"name"`
+	Mode            string `gorm:"not null;default:group" json:"mode"` // group | solitaire | Seer-less
+	Merciful        bool   `json:"merciful"`
+	Season          int    `gorm:"not null;default:1" json:"season"`
+	ScenariosPlayed int    `json:"scenarios_played"`
+	HandMascot      string `json:"hand_mascot"`
+	HandName        string `json:"hand_name"`
+	Table           string `json:"table"` // table agreements: schedule, tone, lines and veils; players see this
+	// Optional rules in use (see the Options card, p. 89 for Visions and Thresholds, p. 65 for
+	// SkipFirstDowntime). Options is free text for anything else.
+	Visions           bool      `json:"visions"`
+	Thresholds        bool      `json:"thresholds"`
+	SkipFirstDowntime bool      `json:"skip_first_downtime"`
+	Options           string    `json:"options"`
+	OpenThreads       string    `json:"open_threads"` // loose ends to pick up later; players see this
+	Archived          bool      `json:"archived"`
+	TableKey          string    `json:"-"` // secret for the read-only TV view link
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 // Member lets a player see a campaign. The Seer sees every campaign.

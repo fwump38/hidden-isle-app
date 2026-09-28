@@ -68,6 +68,22 @@
   </div>
 
   <div class="col-12 col-xl-4">
+    {{if or $c.Table $c.Visions $c.Thresholds $c.Options $c.OpenThreads}}
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <h2 class="h5 card-title mb-0"><i class="bi bi-journal-bookmark"></i> This campaign</h2>
+          {{if $seer}}<a class="small" href="/c/{{$c.ID}}/settings">Edit</a>{{end}}
+        </div>
+        {{with $c.Table}}<p class="small mb-1"><strong>Table agreements:</strong> {{mentions . $c.ID}}</p>{{end}}
+        {{$opts := campaignOptions $c}}
+        {{if or $opts $c.Options}}
+        <p class="small mb-1"><strong>Options in use:</strong> {{join $opts ", "}}{{with $c.Options}}{{if $opts}}; {{end}}{{mentions . $c.ID}}{{end}}</p>
+        {{end}}
+        {{with $c.OpenThreads}}<p class="small mb-0"><strong>Open threads:</strong> {{mentions . $c.ID}}</p>{{end}}
+      </div>
+    </div>
+    {{end}}
     <div class="card mb-3">
       <div class="card-body">
         <h2 class="h5 card-title"><i class="bi bi-person-lines-fill"></i> Players {{help "Players in a campaign can open it, read its Agents, adversaries and territories, and bring their own Agents in. Only the Seer adds or removes players."}}</h2>
