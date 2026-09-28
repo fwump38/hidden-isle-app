@@ -11,9 +11,10 @@ import (
 	"github.com/fwump38/hidden-isle-app/internal/db"
 )
 
-// AssignAgent moves an Agent into a campaign, or out of any campaign (campaignID 0). The owner
-// may move it into campaigns they belong to; the Seer may move any Agent, which adds its player
-// to the campaign. Its contacts move with it.
+// AssignAgent moves an Agent into a campaign, or out of any campaign (campaignID 0). It's always
+// in at most one campaign at a time, since CampaignID is a single field. The owner may move it
+// into campaigns they belong to; the Seer may move any Agent, which adds its player to the
+// campaign. Its contacts move with it.
 func (s *Service) AssignAgent(a Actor, agentID, campaignID uint, o Opts) error {
 	k, _ := kindOf("agent")
 	return s.DB.Transaction(func(tx *gorm.DB) error {
@@ -29,6 +30,12 @@ func (s *Service) AssignAgent(a Actor, agentID, campaignID uint, o Opts) error {
 		}
 		if ag.CampaignID == campaignID {
 			return nil
+		}
+		if !a.IsSeer() && ag.CampaignID != 0 && ag.LockedAt != nil {
+			return fmt.Errorf("%s is locked in to this campaign; only the Seer can move it out (e.g. if it's Captured, Broken or Dead): %w", ag.Name, ErrForbidden)
+		}
+		if campaignID != 0 && ag.Status != "Active" && !a.IsSeer() {
+			return fmt.Errorf("only an Active Agent can join a campaign (this one is %s): %w", ag.Status, ErrForbidden)
 		}
 		if campaignID != 0 {
 			var c db.Campaign

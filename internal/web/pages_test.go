@@ -139,7 +139,8 @@ func TestPagesRenderAndKeepSecrets(t *testing.T) {
 	}
 	ok(st.post("Ana", "/c/1/agents", url.Values{"name": {"Ines"}, "class": {"prowler"}}))
 	ok(st.post("Bram", "/c/1/agents", url.Values{"name": {"Cyrus"}, "class": {"occultist"}}))
-	ok(st.post("Ana", "/agents/1", url.Values{"skill.Slip": {"3"}, "harm.Cups.0": {"P"}, "harm.Cups.1": {"S"}, "ability.add": {"wisp"}, "why": {"trained"}}))
+	ok(st.post("Ana", "/agents/1", url.Values{"skill.Slip": {"3"}, "harm.Cups.0": {"P"}, "harm.Cups.1": {"S"}, "why": {"trained"}}))
+	ok(st.post("Ana", "/agents/1/abilities", url.Values{"ability_id": {"wisp"}}))
 	ok(st.post("Ana", "/agents/1", url.Values{"item.toggle": {"Rope"}, "prof.add": {"Illusion"}, "prof.rank": {"Adept"}}))
 	ok(st.post("Ana", "/agents/1/contacts", url.Values{"set.name": {"Mother Agnese"}, "set.kind": {"Homeland"}, "set.affection": {"4"}}))
 	ok(st.post("Seer", "/c/1/r/clock", url.Values{"set.name": {"SECRET-CLOCK"}, "set.segments": {"6"}, "set.scope": {"Scenario"}, "set.visibility": {"seer"}}))
@@ -196,10 +197,19 @@ func TestPagesRenderAndKeepSecrets(t *testing.T) {
 		t.Error("Seer should see adversary secrets and hidden adversaries")
 	}
 	_, anaSheet := st.get("Ana", "/agents/1")
-	for _, want := range []string{"<fieldset >", "WISP", "Mother Agnese", "2 harm: draw 1 fewer card with Cups", "Test ability text."} {
+	for _, want := range []string{"<fieldset >", "WISP", "Mother Agnese", "2 harm: draw 1 fewer card with Cups", "Test ability text.",
+		`<option value="P" selected>Physical</option>`, `<option value="S" selected>Spiritual</option>`, "Cups: subtlety, emotion"} {
 		if !strings.Contains(anaSheet, want) {
 			t.Errorf("Ana's sheet is missing %q", want)
 		}
+	}
+	// Other classes' abilities are offered only once a contact at max affection can teach them (p. 25).
+	if strings.Contains(anaSheet, "(taught by") {
+		t.Error("other classes' abilities offered without a max-affection contact")
+	}
+	ok(st.post("Ana", "/r/contact/1", url.Values{"set.affection": {"6"}, "back": {"/agents/1"}}))
+	if _, body := st.get("Ana", "/agents/1"); !strings.Contains(body, "(taught by Mother Agnese)") {
+		t.Error("a max-affection contact should offer other classes' abilities")
 	}
 	if _, bramView := st.get("Bram", "/agents/1"); !strings.Contains(bramView, "<fieldset disabled>") {
 		t.Error("Bram's view of Ana's sheet should be read-only")
@@ -502,11 +512,11 @@ func TestCreationWizard(t *testing.T) {
 	if _, body := st.get("Ana", "/agents/1/wizard"); !strings.Contains(body, "Abilities") || !strings.Contains(body, "WISP") {
 		t.Fatal("should be on step 5 with the class ability list")
 	}
-	ok(st.post("Ana", "/agents/1", url.Values{"ability.add": {"wisp"}, "back": {"/agents/1/wizard?step=5"}}))
+	ok(st.post("Ana", "/agents/1/abilities", url.Values{"ability_id": {"wisp"}, "back": {"/agents/1/wizard?step=5"}}))
 	if _, body := st.get("Ana", "/agents/1/wizard"); strings.Contains(body, `value="wisp"`) {
 		t.Error("an already-chosen ability shouldn't be offered again")
 	}
-	ok(st.post("Ana", "/agents/1", url.Values{"ability.add": {"burglar"}, "back": {"/agents/1/wizard?step=5"}}))
+	ok(st.post("Ana", "/agents/1/abilities", url.Values{"ability_id": {"burglar"}, "back": {"/agents/1/wizard?step=5"}}))
 	if _, body := st.get("Ana", "/agents/1/wizard"); !strings.Contains(body, "Skills") {
 		t.Fatal("should auto-advance to step 6 once 2 abilities are chosen")
 	}
@@ -549,10 +559,14 @@ func TestWizardMagicStepAndDraw(t *testing.T) {
 	form(url.Values{"set.adult_phrase": {"x"}, "set.adult_card": {"The Fool"}, "set.adult_verb": {"survived"}})
 	form(url.Values{"set.burden": {"Reckless"}})
 	form(url.Values{"set.ideal": {"Curious"}})
-	form(url.Values{"ability.add": {"evil-eye"}})
+	if code, flash := st.post("Ana", "/agents/1/abilities", url.Values{"ability_id": {"evil-eye"}}); code != http.StatusSeeOther || flash != "" {
+		t.Fatalf("add evil-eye: %d %q", code, flash)
+	}
 	// Occultist creation.Abilities is 2 in the fixture but only 1 ability exists on the class;
 	// add a custom one to satisfy the count.
-	form(url.Values{"ability.custom_name": {"Extra"}, "ability.custom_text": {"test"}})
+	if code, flash := st.post("Ana", "/agents/1/abilities", url.Values{"name": {"Extra"}, "text": {"test"}}); code != http.StatusSeeOther || flash != "" {
+		t.Fatalf("add custom ability: %d %q", code, flash)
+	}
 	form(url.Values{"skill.Skirmish": {"2"}, "skill.Convince": {"2"}, "skill.Study": {"2"}}) // Unleash1+Channel2 prefilled + 6 = 9, over target but fine for this test
 
 	if _, body := st.get("Ana", "/agents/1/wizard?step=magic"); !strings.Contains(body, "Occultists, Illusionists, Siphoners") {
@@ -656,5 +670,80 @@ func TestDowntimeSubmitApproveFlow(t *testing.T) {
 	}
 	if _, body := st.get("Ana", "/agents/1/downtime"); !strings.Contains(body, "rejected") || !strings.Contains(body, "too much harm this week") {
 		t.Error("the player should see the rejection reason")
+	}
+}
+
+// TestAbilityContactPrompt: an ability that grants a contact (The Old Ways, Celestial Bargain)
+// prompts for its name on the wizard's abilities step and nags on the review step until it's
+// named; naming it creates the contact, on the sheet and everywhere else.
+func TestAbilityContactPrompt(t *testing.T) {
+	st, svc := newSite(t)
+	snap := svc.Data.Current()
+	class := snap.Class("occultist")
+	class.Abilities[1].ID, class.Abilities[1].Name = "the-old-ways", "THE OLD WAYS"
+
+	if code, _ := st.post("Ana", "/agents", url.Values{"name": {"Cyrus"}, "class": {"occultist"}, "campaign_id": {"0"}}); code != http.StatusSeeOther {
+		t.Fatal("create agent")
+	}
+	form := func(v url.Values) {
+		if code, flash := st.post("Ana", "/agents/1", v); code != http.StatusSeeOther || flash != "" {
+			t.Fatalf("post %v: %d %q", v, code, flash)
+		}
+	}
+	form(url.Values{"set.child_phrase": {"x"}, "set.child_card": {"The Fool"}})
+	form(url.Values{"set.adult_phrase": {"x"}, "set.adult_card": {"The Fool"}, "set.adult_verb": {"survived"}})
+	form(url.Values{"set.burden": {"Reckless"}})
+	form(url.Values{"set.ideal": {"Curious"}})
+
+	ok := func(code int, flash string) {
+		t.Helper()
+		if code != http.StatusSeeOther || flash != "" {
+			t.Fatalf("post: %d %q", code, flash)
+		}
+	}
+	ok(st.post("Ana", "/agents/1/abilities", url.Values{"ability_id": {"the-old-ways"}}))
+	_, body := st.get("Ana", "/agents/1/wizard?step=abilities")
+	if !strings.Contains(body, "This ability grants a contact") {
+		t.Fatal("wizard should prompt for the granted contact's name, not skip it silently")
+	}
+
+	ok(st.post("Ana", "/agents/1/abilities", url.Values{"ability_id": {"evil-eye"}}))
+	_, body = st.get("Ana", "/agents/1/wizard?step=done")
+	if !strings.Contains(body, "still needs its contact named") {
+		t.Error("the review step should nag about the unnamed contact")
+	}
+
+	ok(st.post("Ana", "/agents/1/abilities/contact", url.Values{"index": {"0"}, "name": {"Old Verminus"}, "description": {"a rat god"}}))
+	_, body = st.get("Ana", "/agents/1/wizard?step=done")
+	if strings.Contains(body, "still needs its contact named") {
+		t.Error("the nag should clear once the contact is named")
+	}
+	_, sheet := st.get("Ana", "/agents/1")
+	if !strings.Contains(sheet, "Old Verminus") {
+		t.Error("the granted contact should be on the sheet")
+	}
+	if strings.Contains(sheet, "This ability grants a contact") {
+		t.Error("the sheet's prompt should be gone once named")
+	}
+}
+
+// TestAutomaticCreationNamesGrantedContacts: the Automatic creation path (pp. 40-41) must not
+// leave a contact-granting ability's contact for the player to remember by hand.
+func TestAutomaticCreationNamesGrantedContacts(t *testing.T) {
+	st, svc := newSite(t)
+	snap := svc.Data.Current()
+	class := snap.Class("occultist")
+	class.Abilities[0].ID, class.Abilities[0].Name = "celestial-bargain", "CELESTIAL BARGAIN"
+	class.Abilities[1].ID, class.Abilities[1].Name = "the-old-ways", "THE OLD WAYS"
+
+	if code, flash := st.post("Ana", "/agents/create/class", url.Values{"path": {"automatic"}, "class": {"occultist"}, "campaign_id": {"0"}, "name": {"Cyrus"}}); code != http.StatusSeeOther || flash != "" {
+		t.Fatalf("automatic creation: %d %q", code, flash)
+	}
+	_, sheet := st.get("Ana", "/agents/1")
+	if !strings.Contains(sheet, "Deity (The Old Ways)") || !strings.Contains(sheet, "Angel or Demon (Celestial Bargain)") {
+		t.Errorf("automatic creation should have named both granted contacts; sheet:\n%s", sheet)
+	}
+	if strings.Contains(sheet, "This ability grants a contact") {
+		t.Error("automatic creation shouldn't leave a granted contact unnamed")
 	}
 }

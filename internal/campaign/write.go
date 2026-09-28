@@ -26,6 +26,11 @@ type Opts struct {
 	Override bool
 
 	allowClass bool // set only by ChangeClass, which does its own check
+	// system marks a patch built by a trusted server-side flow (SpendSuitXP, SpendAbilityXP,
+	// AddAbility, RemoveAbility, LockAgents) rather than assembled from raw form fields. It lets
+	// checkAgentPatch skip the checks those flows already enforce themselves (see agent_lock.go);
+	// it never bypasses the hard-locked creation fields, since those flows never touch them.
+	system bool
 }
 
 // Patch sets whole fields by their JSON name, e.g. {"burden_track": 3, "harm": {"Cups": ["P"]}}.
@@ -95,6 +100,11 @@ func (s *Service) Update(a Actor, kindName string, id uint, patch Patch, o Opts)
 			}
 			if !a.IsSeer() && (slices.Contains(k.seerOnly, f) || slices.Contains(k.secret, f)) {
 				return fmt.Errorf("only the Seer can change %s: %w", f, ErrForbidden)
+			}
+		}
+		if k.checkPatch != nil {
+			if err := k.checkPatch(s, tx, a, obj, patch, o); err != nil {
+				return err
 			}
 		}
 		before := fields(obj)

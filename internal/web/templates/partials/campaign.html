@@ -54,6 +54,20 @@
 {{else}}<p class="small text-body-secondary mb-0">Nothing yet.</p>{{end}}
 {{end}}
 
+{{/* An ability (The Old Ways, Celestial Bargain) that grants a contact but hasn't named one yet:
+     a prompt, not a silent skip, so it doesn't get forgotten. args: dict "Action" url "Index" i,
+     optional "Back" url. */}}
+{{define "ability-contact-prompt"}}
+<form method="post" action="{{.Action}}" class="row g-1 mt-1">
+  <input type="hidden" name="index" value="{{.Index}}">
+  {{with .Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
+  <div class="col-12 small text-warning"><i class="bi bi-exclamation-diamond"></i> This ability grants a contact (p. 43) — name them:</div>
+  <div class="col-6"><input class="form-control form-control-sm" name="name" placeholder="Name" required aria-label="Granted contact's name"></div>
+  <div class="col-6"><input class="form-control form-control-sm" name="description" placeholder="Who or what they are" aria-label="Granted contact's description"></div>
+  <div class="col-12"><button class="btn btn-sm btn-outline-warning" type="submit">Create the contact</button></div>
+</form>
+{{end}}
+
 {{define "pips"}}{{/* args: dict "name" field "value" n "max" m */}}
 <span class="hi-pips" role="group">
   {{range $i := seq 1 .max}}

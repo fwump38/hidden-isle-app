@@ -31,8 +31,15 @@ func fixtureSnap(t *testing.T) *gamedata.Snapshot {
 		}
 	}
 	s.Classes.Classes = []gamedata.Class{{ID: "hunter", Name: "Hunter", PrefilledSkills: map[string]int{"Skirmish": 1, "Unleash": 2},
-		Abilities: []gamedata.Ability{{ID: "butcher", Name: "BUTCHER", Text: "…", Page: 49}}},
-		{ID: "prowler", Name: "Prowler", PrefilledSkills: map[string]int{"Slip": 2, "Finesse": 1}}}
+		Abilities: []gamedata.Ability{
+			{ID: "butcher", Name: "BUTCHER", Text: "…", Page: 49, Clock: &gamedata.Clock{Segments: 4, Name: "Butcher"}},
+			{ID: "master-of-matter", Name: "MASTER OF MATTER", Text: "…", Page: 49},
+		}},
+		{ID: "prowler", Name: "Prowler", PrefilledSkills: map[string]int{"Slip": 2, "Finesse": 1},
+			Abilities: []gamedata.Ability{
+				{ID: "burglar", Name: "BURGLAR", Text: "…", Page: 55},
+				{ID: "the-old-ways", Name: "THE OLD WAYS", Text: "…", Page: 45},
+			}}}
 	s.Campaign = gamedata.Campaign{
 		AgentStatus: []string{"Active", "Dead"}, ContactKind: []string{"Homeland", "Dioscorian", "Deity (The Old Ways)", "Fellow Agent"}, SessionStatus: []string{"Prep", "Played"},
 		AdversaryStatus: []string{"Rumored", "Active"}, ClockScope: []string{"Scenario", "Ability"}, ClockStatus: []string{"Running", "Filled"},

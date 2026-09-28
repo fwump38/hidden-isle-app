@@ -49,7 +49,7 @@ func Fixture() *Snapshot {
 				{ID: "familiar", Name: "FAMILIAR", Text: "Test familiar text.", Page: 46}}},
 	}
 	s.Campaign = Campaign{
-		AgentStatus: []string{"Active", "Resting", "Dead"}, ContactKind: []string{"Homeland", "Dioscorian", "Other"},
+		AgentStatus: []string{"Active", "Resting", "Dead"}, ContactKind: []string{"Homeland", "Dioscorian", "Fellow Agent", "Deity (The Old Ways)", "Angel or Demon (Celestial Bargain)", "Other"},
 		SessionStatus: []string{"Prep", "Played"}, AdversaryStatus: []string{"Rumored", "Active", "Defeated"},
 		ClockScope: []string{"Scenario", "Ability", "Campaign"}, ClockStatus: []string{"Running", "Filled", "Abandoned"},
 		Territories: []string{"Dioscoria", "Venice"}, CampaignMode: []string{"group", "solitaire"},

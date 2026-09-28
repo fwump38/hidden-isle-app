@@ -28,7 +28,9 @@
 .hi-track span { flex: 1 1 0; min-width: 8px; height: 10px; border: 1px solid var(--bs-danger-border-subtle); border-radius: 2px; }
 .hi-track span.on { background: var(--bs-danger); }
 
-.hi-harm { width: 3.6rem; padding-right: 1.6rem; }
+.hi-harm { width: 7.5rem; }
+.hi-skills th, .hi-skills td { white-space: nowrap; }
+.hi-skills tbody + tbody { border-top-width: 2px; }
 .hi-harm.has-harm { border-color: var(--bs-danger); color: var(--bs-danger-text-emphasis); }
 .hi-suit-Swords { color: #8fb3ff; } .hi-suit-Wands { color: #ff9f7a; }
 .hi-suit-Cups { color: #7ad7ff; } .hi-suit-Pentacles { color: #b5d67a; }

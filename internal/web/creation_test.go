@@ -181,7 +181,7 @@ func TestCreateAgentChangeClassFromWizard(t *testing.T) {
 	if code, _ := st.post("Ana", "/agents/create/class", url.Values{"path": {"step"}, "class": {"occultist"}, "campaign_id": {"0"}}); code != 303 {
 		t.Fatal("create")
 	}
-	if code, flash := st.post("Ana", "/agents/1", url.Values{"ability.add": {"evil-eye"}}); code != 303 || flash != "" {
+	if code, flash := st.post("Ana", "/agents/1/abilities", url.Values{"ability_id": {"evil-eye"}}); code != 303 || flash != "" {
 		t.Fatalf("add ability: %d %q", code, flash)
 	}
 	code, body := st.get("Ana", "/agents/create/class?agent=1&campaign_id=0")

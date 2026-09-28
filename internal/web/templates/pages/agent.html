@@ -1,5 +1,8 @@
 {{define "content"}}
 {{$d := .Data}}{{$a := $d.Agent}}{{$snap := .Nav.Snap}}{{$act := printf "/agents/%d" $a.ID}}
+{{/* $locked: true once a non-Seer's creation-time fields (name, core self, burden, ideal,
+     culture, why, starting skills/abilities/contacts) are fixed by the Seer's lock-in. */}}
+{{$locked := and $a.LockedAt (not $.User.IsSeer)}}
 <datalist id="vision-cards">{{with $snap}}{{range .Cards.Vision}}<option value="{{.Name}}">{{end}}{{end}}</datalist>
 
 <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
@@ -27,35 +30,32 @@
 
 <div class="card mb-3">
   <div class="card-body py-2">
-    <div class="row g-2 align-items-center small">
-      <div class="col-12 col-md-5">
-        <i class="bi bi-map"></i>
-        {{with $d.Campaign}}In <a href="/c/{{.ID}}">{{.Name}}</a>{{else}}<span class="text-body-secondary">Not in a campaign</span> {{help "Only its player (and the Seer) can see an Agent that isn't in a campaign."}}{{end}}
-      </div>
-      {{if $d.CanEdit}}
-      <div class="col-12 col-md-7">
-        <form method="post" action="{{$act}}/campaign" class="input-group input-group-sm">
-          <select class="form-select" name="campaign_id" aria-label="Campaign">
-            <option value="0" {{if eq $a.CampaignID 0}}selected{{end}}>No campaign</option>
-            {{range $d.Campaigns}}<option value="{{.ID}}" {{if eq .ID $a.CampaignID}}selected{{end}}>{{.Name}}</option>{{end}}
-          </select>
-          <button class="btn btn-outline-light" type="submit">Move</button>
-        </form>
-      </div>
-      <div class="col-12 col-md-5">
-        <form method="post" action="{{$act}}" class="input-group input-group-sm" hx-trigger="change">
-          <label class="input-group-text" for="status">Status</label>
-          <select class="form-select" id="status" name="set.status">
-            {{with $snap}}{{range .Campaign.AgentStatus}}<option {{if eq . $a.Status}}selected{{end}}>{{.}}</option>{{end}}{{end}}
-          </select>
-          <noscript><button class="btn btn-outline-light" type="submit">Save</button></noscript>
-        </form>
-      </div>
-      <div class="col-12 col-md-7 form-text mt-0">Active: in play. Resting: sitting out for now. Retired, Captured, Broken or Dead: out of play; the sheet and its history are kept.</div>
+    <div class="small mb-2">
+      <i class="bi bi-map"></i>
+      {{with $d.Campaign}}In <a href="/c/{{.ID}}">{{.Name}}</a>
+        {{if $a.LockedAt}} <span class="badge text-bg-warning" title="Locked in {{date $a.LockedAt}}"><i class="bi bi-lock-fill"></i> Locked in</span>{{end}}
+      {{else}}<span class="text-body-secondary">Not in a campaign</span> {{help "Only its player (and the Seer) can see an Agent that isn't in a campaign. Join one from your Agents list on the home page, or from the campaign's own page."}}
       {{end}}
     </div>
+    {{if $d.CanEdit}}
+    {{if $a.LockedAt}}<div class="small text-body-secondary mb-2"><i class="bi bi-lock"></i> This Agent is locked in: name, core self, burden, ideal, culture, why, starting skills, abilities and contacts now change only through play, or the Seer.</div>{{end}}
+    {{if and $a.CampaignID (not $a.LockedAt)}}
+    <form method="post" action="{{$act}}/campaign" class="mb-2">
+      <input type="hidden" name="campaign_id" value="0">
+      <button class="btn btn-sm btn-outline-secondary" type="submit" hx-confirm="Leave {{with $d.Campaign}}{{.Name}}{{end}}?"><i class="bi bi-box-arrow-left"></i> Leave campaign</button>
+    </form>
+    {{end}}
+    <label class="form-label small mb-0" for="status">Status</label>
+    <form method="post" action="{{$act}}" class="input-group input-group-sm" hx-trigger="change">
+      <select class="form-select" id="status" name="set.status">
+        {{with $snap}}{{range .Campaign.AgentStatus}}<option {{if eq . $a.Status}}selected{{end}}>{{.}}</option>{{end}}{{end}}
+      </select>
+      <noscript><button class="btn btn-outline-light" type="submit">Save</button></noscript>
+    </form>
+    <div class="form-text mt-0">Active: in play, and the only status that can join a campaign. Resting: sitting out for now. Retired, Captured, Broken or Dead: out of play; the sheet and its history are kept.</div>
+    {{end}}
     {{if $.User.IsSeer}}
-    <form class="row g-2 align-items-center small mt-1 pt-2 border-top border-warning-subtle" method="post" action="{{$act}}">
+    <form class="row g-2 align-items-center small mt-2 pt-2 border-top border-warning-subtle" method="post" action="{{$act}}">
       <div class="col-auto text-warning"><i class="bi bi-eye"></i> Seer</div>
       <div class="col-6 col-md-4"><select class="form-select form-select-sm" name="set.owner_id" aria-label="Played by">
         <option value="">Played by the Seer</option>
@@ -65,6 +65,14 @@
         {{with $snap}}{{range .Classes.Classes}}<option value="{{.ID}}" {{if eq .ID $a.Class}}selected{{end}}>{{.Name}}</option>{{end}}{{end}}
       </select></div>
       <div class="col-auto"><button class="btn btn-sm btn-outline-warning" type="submit">Save</button></div>
+    </form>
+    <form class="row g-2 align-items-center small mt-1" method="post" action="{{$act}}/campaign">
+      <div class="col-auto text-warning"><i class="bi bi-eye"></i> Move to campaign {{help "Only the Seer can move an Agent once it's locked in, e.g. to handle Captured, Broken or Dead."}}</div>
+      <div class="col-6 col-md-5"><select class="form-select form-select-sm" name="campaign_id" aria-label="Campaign">
+        <option value="0" {{if eq $a.CampaignID 0}}selected{{end}}>No campaign</option>
+        {{range $d.Campaigns}}<option value="{{.ID}}" {{if eq .ID $a.CampaignID}}selected{{end}}>{{.Name}}</option>{{end}}
+      </select></div>
+      <div class="col-auto"><button class="btn btn-sm btn-outline-warning" type="submit">Move</button></div>
     </form>
     {{end}}
   </div>
@@ -123,38 +131,56 @@
     <div class="card h-100">
       <div class="card-body">
         <h2 class="h5 card-title">Skills</h2>
-        {{range $d.Suits}}{{$suit := .}}
-        <div class="hi-suit mb-3">
-          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom pb-1 mb-1">
-            <strong class="hi-suit-{{.Suit}}">{{.Suit}}</strong>{{if eq .Suit "Swords"}} {{help "Tap a dot to set a value; tap the highest filled dot to lower it. Harm boxes: P physical, S spiritual, T trauma (p. 23). XP: a full track of 7 gives +1 skill point in that suit (p. 25)."}}{{end}}
-            <form method="post" action="{{$act}}" class="d-flex align-items-center gap-1 small">
-              <span class="text-body-secondary">XP</span>{{template "pips" dict "name" (printf "set.%s" .XPKey) "value" .XP "max" 7}}
-            </form>
-            <form method="post" action="{{$act}}" hx-trigger="change" class="d-flex align-items-center gap-1 small">
-              <span class="text-body-secondary">Harm</span>
-              <input type="hidden" name="back" value="{{$act}}">
-              {{range $i, $m := .Harm}}
-              <select class="form-select form-select-sm hi-harm {{if $m}}has-harm{{end}}" name="harm.{{$suit.Suit}}.{{$i}}" aria-label="{{$suit.Suit}} harm box {{add $i 1}}">
-                <option value="" {{if eq $m ""}}selected{{end}}>—</option>
-                <option value="P" {{if eq $m "P"}}selected{{end}}>P</option>
-                <option value="S" {{if eq $m "S"}}selected{{end}}>S</option>
-                <option value="T" {{if eq $m "T"}}selected{{end}}>T</option>
-              </select>
+        <div class="table-responsive">
+        <table class="table table-sm align-middle mb-2 hi-skills">
+          <thead class="small text-body-secondary">
+            <tr>
+              <th scope="col">Suit</th>
+              <th scope="col">Skill</th>
+              <th scope="col">Points {{help "Tap a dot to set a value; tap the highest filled dot to lower it. Skills go to 3, or 4 once the 4th pip is unlocked (pp. 25, 66)."}}</th>
+              <th scope="col">XP {{help "One track per suit. When a track fills (7), gain 1 skill point in a skill of that suit and reset the track (p. 25)."}}</th>
+              <th scope="col">Harm {{help "Two boxes per suit (p. 23). Physical or spiritual harm goes in the suit the Seer names, or one you choose. Trauma comes from a burden fully leveled; it heals only by leveling an ideal or with an intimate contact's support. With 2 harm in a suit, draw 1 fewer card with its skills. With every box full the Agent is broken."}}</th>
+            </tr>
+          </thead>
+          {{range $d.Suits}}{{$suit := .}}
+          <tbody class="hi-suit">
+            {{range $j, $sk := .Skills}}
+            <tr>
+              {{if eq $j 0}}
+              <th scope="rowgroup" rowspan="{{len $suit.Skills}}" class="text-nowrap"><span class="hi-suit-{{$suit.Suit}}">{{$suit.Suit}}</span> {{help $suit.Help}}</th>
               {{end}}
-              <noscript><button class="btn btn-sm btn-outline-light" type="submit">Save</button></noscript>
-            </form>
-          </div>
-          {{if index .Harm 1}}<div class="small text-danger mb-1"><i class="bi bi-exclamation-triangle"></i> 2 harm: draw 1 fewer card with {{.Suit}} skills (p. 23).</div>{{end}}
-          <form method="post" action="{{$act}}">
-            {{range .Skills}}
-            <div class="d-flex justify-content-between align-items-center">
-              <span>{{.Name}}</span>
-              {{if .Unlocked}}{{template "pips" dict "name" (printf "skill.%s" .Name) "value" .Points "max" 4}}{{else}}{{template "pips" dict "name" (printf "skill.%s" .Name) "value" .Points "max" 3}}{{end}}
-            </div>
+              <td{{with $sk.Desc}} title="{{.}}"{{end}}>{{$sk.Name}}</td>
+              <td>
+                <form method="post" action="{{$act}}"><fieldset {{if $locked}}disabled{{end}}>{{template "pips" dict "name" (printf "skill.%s" $sk.Name) "value" $sk.Points "max" $sk.Max}}</fieldset></form>
+                {{if and $locked (ge $suit.XP 7) (lt $sk.Points $sk.Max)}}
+                <form method="post" action="{{$act}}/xp/skill" class="mt-1"><input type="hidden" name="skill" value="{{$sk.Name}}">
+                  <button class="btn btn-sm btn-outline-warning py-0 px-1" type="submit" title="Spend the full {{$suit.Suit}} XP track for a point in {{$sk.Name}} (p. 25)">Spend XP <i class="bi bi-arrow-right"></i></button></form>
+                {{end}}
+              </td>
+              {{if eq $j 0}}
+              <td rowspan="{{len $suit.Skills}}"><form method="post" action="{{$act}}" aria-label="{{$suit.Suit}} XP">{{template "pips" dict "name" (printf "set.%s" $suit.XPKey) "value" $suit.XP "max" 7}}</form></td>
+              <td rowspan="{{len $suit.Skills}}">
+                <form method="post" action="{{$act}}" hx-trigger="change" class="d-flex flex-column gap-1">
+                  <input type="hidden" name="back" value="{{$act}}">
+                  {{range $i, $m := $suit.Harm}}
+                  <select class="form-select form-select-sm hi-harm {{if $m}}has-harm{{end}}" name="harm.{{$suit.Suit}}.{{$i}}" aria-label="{{$suit.Suit}} harm box {{add $i 1}}">
+                    <option value="" {{if eq $m ""}}selected{{end}}>—</option>
+                    <option value="P" {{if eq $m "P"}}selected{{end}}>Physical</option>
+                    <option value="S" {{if eq $m "S"}}selected{{end}}>Spiritual</option>
+                    <option value="T" {{if eq $m "T"}}selected{{end}}>Trauma</option>
+                  </select>
+                  {{end}}
+                  <noscript><button class="btn btn-sm btn-outline-light" type="submit">Save</button></noscript>
+                </form>
+              </td>
+              {{end}}
+            </tr>
             {{end}}
-          </form>
+            {{if index .Harm 1}}<tr><td colspan="5" class="small text-danger"><i class="bi bi-exclamation-triangle"></i> 2 harm: draw 1 fewer card with {{.Suit}} skills (p. 23).</td></tr>{{end}}
+          </tbody>
+          {{end}}
+        </table>
         </div>
-        {{end}}
         <details class="small">
           <summary class="text-body-secondary">Unlocked 4th pips</summary>
           <form method="post" action="{{$act}}" class="mt-2">
@@ -181,31 +207,31 @@
           <div class="d-flex justify-content-between align-items-center"><span class="small text-body-secondary">Ideal track {{help "Mark it each time you use your ideal: -1 card but +3 to every card's number (p. 20). When it fills (7), the ideal becomes a virtue in downtime (pp. 66-67)."}}</span>{{template "pips" dict "name" "set.ideal_track" "value" $a.IdealTrack "max" 7}}</div>
         </form>
         <form method="post" action="{{$act}}" class="row g-2">
-          <div class="col-6"><label class="form-label small mb-0" for="burden">Burden</label><input class="form-control form-control-sm" id="burden" name="set.burden" value="{{$a.Burden}}"></div>
-          <div class="col-6"><label class="form-label small mb-0" for="burden_card">Card</label><input class="form-control form-control-sm" id="burden_card" name="set.burden_card" value="{{$a.BurdenCard}}" list="vision-cards"></div>
-          <div class="col-6"><label class="form-label small mb-0" for="ideal">Ideal</label><input class="form-control form-control-sm" id="ideal" name="set.ideal" value="{{$a.Ideal}}"></div>
-          <div class="col-6"><label class="form-label small mb-0" for="ideal_card">Card</label><input class="form-control form-control-sm" id="ideal_card" name="set.ideal_card" value="{{$a.IdealCard}}" list="vision-cards"></div>
+          <div class="col-6"><label class="form-label small mb-0" for="burden">Burden{{if $locked}} <i class="bi bi-lock small" title="Locked in"></i>{{end}}</label><input class="form-control form-control-sm" id="burden" name="set.burden" value="{{$a.Burden}}" {{if $locked}}disabled{{end}}></div>
+          <div class="col-6"><label class="form-label small mb-0" for="burden_card">Card</label><input class="form-control form-control-sm" id="burden_card" name="set.burden_card" value="{{$a.BurdenCard}}" list="vision-cards" {{if $locked}}disabled{{end}}></div>
+          <div class="col-6"><label class="form-label small mb-0" for="ideal">Ideal{{if $locked}} <i class="bi bi-lock small" title="Locked in"></i>{{end}}</label><input class="form-control form-control-sm" id="ideal" name="set.ideal" value="{{$a.Ideal}}" {{if $locked}}disabled{{end}}></div>
+          <div class="col-6"><label class="form-label small mb-0" for="ideal_card">Card</label><input class="form-control form-control-sm" id="ideal_card" name="set.ideal_card" value="{{$a.IdealCard}}" list="vision-cards" {{if $locked}}disabled{{end}}></div>
           <div class="col-4"><label class="form-label small mb-0" for="vices">Vices (+1 card)</label><textarea class="form-control form-control-sm" id="vices" name="set.vices" rows="2">{{lines $a.Vices}}</textarea></div>
           <div class="col-4"><label class="form-label small mb-0" for="virtues">Virtues (+3)</label><textarea class="form-control form-control-sm" id="virtues" name="set.virtues" rows="2">{{lines $a.Virtues}}</textarea></div>
           <div class="col-4"><label class="form-label small mb-0" for="fulfilled">Fulfilled</label><textarea class="form-control form-control-sm" id="fulfilled" name="set.fulfilled_virtues" rows="2">{{lines $a.FulfilledVirtues}}</textarea></div>
-          <div class="col-12"><button class="btn btn-sm btn-outline-light" type="submit">Save traits</button> <span class="small text-body-secondary">One per line. Max 3 virtues (p. 14).</span></div>
+          <div class="col-12"><button class="btn btn-sm btn-outline-light" type="submit">Save traits</button> <span class="small text-body-secondary">One per line. Max 3 virtues (p. 14).{{if $locked}} The burden and ideal words are locked in; vices and virtues still change through play.{{end}}</span></div>
         </form>
       </div>
     </div>
     <div class="card">
       <div class="card-body">
-        <h2 class="h5 card-title">Core self</h2>
+        <h2 class="h5 card-title">Core self{{if $locked}} <i class="bi bi-lock small" title="Locked in"></i>{{end}}</h2>
         <form method="post" action="{{$act}}" class="row g-2">
           <div class="col-12"><label class="form-label small mb-0" for="child">As a child, I solved problems by…</label>
-            <div class="input-group input-group-sm"><input class="form-control" id="child" name="set.child_phrase" value="{{$a.ChildPhrase}}"><input class="form-control" style="max-width: 11rem" name="set.child_card" value="{{$a.ChildCard}}" placeholder="card" list="vision-cards" aria-label="Childhood card"></div></div>
+            <div class="input-group input-group-sm"><input class="form-control" id="child" name="set.child_phrase" value="{{$a.ChildPhrase}}" {{if $locked}}disabled{{end}}><input class="form-control" style="max-width: 11rem" name="set.child_card" value="{{$a.ChildCard}}" placeholder="card" list="vision-cards" aria-label="Childhood card" {{if $locked}}disabled{{end}}></div></div>
           <div class="col-12"><label class="form-label small mb-0" for="adult">As an adult, I
-              <select class="form-select form-select-sm d-inline-block w-auto py-0" name="set.adult_verb" aria-label="survived or flourished">
+              <select class="form-select form-select-sm d-inline-block w-auto py-0" name="set.adult_verb" aria-label="survived or flourished" {{if $locked}}disabled{{end}}>
                 <option value="" {{if eq $a.AdultVerb ""}}selected{{end}}>…</option>
                 <option {{if eq $a.AdultVerb "survived"}}selected{{end}}>survived</option>
                 <option {{if eq $a.AdultVerb "flourished"}}selected{{end}}>flourished</option>
               </select> by…</label>
-            <div class="input-group input-group-sm"><input class="form-control" id="adult" name="set.adult_phrase" value="{{$a.AdultPhrase}}"><input class="form-control" style="max-width: 11rem" name="set.adult_card" value="{{$a.AdultCard}}" placeholder="card" list="vision-cards" aria-label="Adulthood card"></div></div>
-          <div class="col-12"><button class="btn btn-sm btn-outline-light" type="submit">Save</button></div>
+            <div class="input-group input-group-sm"><input class="form-control" id="adult" name="set.adult_phrase" value="{{$a.AdultPhrase}}" {{if $locked}}disabled{{end}}><input class="form-control" style="max-width: 11rem" name="set.adult_card" value="{{$a.AdultCard}}" placeholder="card" list="vision-cards" aria-label="Adulthood card" {{if $locked}}disabled{{end}}></div></div>
+          <div class="col-12"><button class="btn btn-sm btn-outline-light" type="submit">Save</button>{{if $locked}} <span class="small text-body-secondary">Locked in.</span>{{end}}</div>
         </form>
       </div>
     </div>
@@ -227,33 +253,53 @@
             </button>
             <span class="d-flex align-items-center gap-2 small text-body-secondary">
               {{if .Page}}p. {{.Page}}{{else if .Custom}}{{.Source}}{{end}}
-              <form method="post" action="{{$act}}"><button class="btn btn-sm btn-link text-danger p-0" type="submit" name="ability.remove" value="{{.Index}}" title="Remove" aria-label="Remove {{.Name}}" hx-confirm="Remove {{.Name}}?"><i class="bi bi-x-lg"></i></button></form>
+              {{if not $locked}}
+              <form method="post" action="{{$act}}/abilities/remove"><button class="btn btn-sm btn-link text-danger p-0" type="submit" name="index" value="{{.Index}}" title="Remove (to fix a mistake)" aria-label="Remove {{.Name}}" hx-confirm="Remove {{.Name}}? The rules have no way to lose an ability, so do this only to fix a mistake. (You can undo it from the log.)"><i class="bi bi-x-lg"></i></button></form>
+              {{else}}<i class="bi bi-lock" title="Locked in; only the Seer can remove it now"></i>{{end}}
             </span>
           </div>
           <div class="collapse" id="ab-{{.Index}}">
             <p class="small mb-1">{{.Text}}</p>
             {{with .Sheet}}<p class="small text-warning mb-1"><i class="bi bi-exclamation-diamond"></i> Character Sheets 1.3 words it: “{{.}}” (the Rulebook wins unless the Seer rules otherwise)</p>{{end}}
           </div>
+          {{if .NeedsContact}}{{template "ability-contact-prompt" dict "Action" (printf "%s/abilities/contact" $act) "Index" .Index}}{{end}}
         </div>
         {{else}}<p class="small text-body-secondary">No abilities yet. Choose 2 at creation (p. 41).</p>{{end}}
-        <form method="post" action="{{$act}}" class="input-group input-group-sm mt-2">
-          <select class="form-select" name="ability.add" aria-label="Add a class ability">
+        {{if $locked}}
+          {{if ge $a.XPAbility 7}}
+          <form method="post" action="{{$act}}/xp/ability" class="row g-2 mt-2">
+            <div class="col-12 small text-body-secondary">The ability XP track is full — spend it for a new ability:</div>
+            <div class="col-12 col-md-7"><select class="form-select form-select-sm" name="ability_id" required aria-label="New ability">
+              <option value="">Choose…</option>
+              {{with $d.Class}}<optgroup label="{{.Name}}">{{range $d.Unused}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</optgroup>{{end}}
+              {{range $d.Taught}}<optgroup label="{{.Name}} (taught by {{join $d.Teachers " or "}})">{{range .Abilities}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</optgroup>{{end}}
+            </select></div>
+            <div class="col-12 col-md-5"><button class="btn btn-sm btn-outline-warning w-100" type="submit">Learn it</button></div>
+            <div class="col-12"><input class="form-control form-control-sm" name="contact_name" placeholder="Grants a contact? Name them here (optional)" aria-label="Granted contact's name"></div>
+          </form>
+          {{else}}<p class="small text-body-secondary mt-2">Abilities are locked in; fill the ability XP track above to learn a new one (p. 25).</p>{{end}}
+        {{else}}
+        <form method="post" action="{{$act}}/abilities" class="row g-2 mt-2">
+          <div class="col-12 col-md-7"><select class="form-select form-select-sm" name="ability_id" aria-label="Add a class ability">
             <option value="">Add an ability…</option>
             {{with $d.Class}}<optgroup label="{{.Name}}">{{range $d.Unused}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</optgroup>{{end}}
-            {{with $snap}}{{range .Classes.Classes}}{{if ne .ID $a.Class}}<optgroup label="{{.Name}} (taught by a max-affection contact)">{{range .Abilities}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</optgroup>{{end}}{{end}}{{end}}
-          </select>
-          <button class="btn btn-outline-light" type="submit">Add</button>
+            {{range $d.Taught}}<optgroup label="{{.Name}} (taught by {{join $d.Teachers " or "}})">{{range .Abilities}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</optgroup>{{end}}
+          </select></div>
+          <div class="col-12 col-md-5"><button class="btn btn-sm btn-outline-light w-100" type="submit">Add</button></div>
+          <div class="col-12"><input class="form-control form-control-sm" name="contact_name" placeholder="Grants a contact? Name them here (optional)" aria-label="Granted contact's name"></div>
         </form>
+        <div class="form-text">When the ability XP track fills, learn one ability from your class{{if not $d.Teachers}}. A contact at maximum affection could teach you one from another class{{else}}, or one {{join $d.Teachers " or "}} could teach you{{end}} (p. 25). A few abilities also start a clock, fill proficiency segments, or grant a contact automatically.</div>
         <details class="small mt-2">
           <summary class="text-body-secondary">Custom ability (ritual, house rule…)</summary>
-          <form method="post" action="{{$act}}" class="row g-2 mt-1">
-            <div class="col-8"><input class="form-control form-control-sm" name="ability.custom_name" placeholder="Name" aria-label="Custom ability name"></div>
-            <div class="col-4"><select class="form-select form-select-sm" name="ability.source" aria-label="Source"><option>ritual</option><option>contact</option><option>other</option></select></div>
-            <div class="col-12"><textarea class="form-control form-control-sm" id="ability-custom-text" name="ability.custom_text" rows="2" placeholder="What it does" aria-label="Custom ability text"></textarea>
+          <form method="post" action="{{$act}}/abilities" class="row g-2 mt-1">
+            <div class="col-8"><input class="form-control form-control-sm" name="name" placeholder="Name" aria-label="Custom ability name"></div>
+            <div class="col-4"><select class="form-select form-select-sm" name="source" aria-label="Source"><option>ritual</option><option>contact</option><option>other</option></select></div>
+            <div class="col-12"><textarea class="form-control form-control-sm" id="ability-custom-text" name="text" rows="2" placeholder="What it does" aria-label="Custom ability text"></textarea>
             {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "ability_text" "Target" "ability-custom-text" "AgentID" $a.ID "CampaignID" $a.CampaignID "SessionID" 0 "Draft" false)}}{{end}}</div>
             <div class="col-12"><button class="btn btn-sm btn-outline-light" type="submit">Add</button></div>
           </form>
         </details>
+        {{end}}
       </div>
     </div>
   </div>
@@ -375,13 +421,13 @@
       <div class="card-body">
         <h2 class="h5 card-title">Who they are</h2>
         <form method="post" action="{{$act}}" class="row g-2">
-          <div class="col-12 col-md-6"><label class="form-label small mb-0" for="name">Name</label><input class="form-control form-control-sm" id="name" name="set.name" value="{{$a.Name}}"></div>
+          <div class="col-12 col-md-6"><label class="form-label small mb-0" for="name">Name{{if $locked}} <i class="bi bi-lock small" title="Locked in"></i>{{end}}</label><input class="form-control form-control-sm" id="name" name="set.name" value="{{$a.Name}}" {{if $locked}}disabled{{end}}></div>
           <div class="col-4 col-md-2"><label class="form-label small mb-0" for="age">Age</label><input class="form-control form-control-sm" id="age" name="set.age" value="{{$a.Age}}"></div>
-          <div class="col-8 col-md-4"><label class="form-label small mb-0" for="culture">Culture</label><input class="form-control form-control-sm" id="culture" name="set.culture" value="{{$a.Culture}}"></div>
+          <div class="col-8 col-md-4"><label class="form-label small mb-0" for="culture">Culture{{if $locked}} <i class="bi bi-lock small" title="Locked in"></i>{{end}}</label><input class="form-control form-control-sm" id="culture" name="set.culture" value="{{$a.Culture}}" {{if $locked}}disabled{{end}}></div>
           <div class="col-12"><label class="form-label small mb-0" for="look">Look</label><textarea class="form-control form-control-sm" id="look" name="set.look" rows="2">{{$a.Look}}</textarea>
           {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "agent_look" "Target" "look" "AgentID" $a.ID "CampaignID" $a.CampaignID "SessionID" 0 "Draft" false)}}{{end}}</div>
-          <div class="col-12"><label class="form-label small mb-0" for="whyd">Why I came to Dioscoria</label><textarea class="form-control form-control-sm" id="whyd" name="set.why" rows="2">{{$a.Why}}</textarea>
-          {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "agent_why" "Target" "whyd" "AgentID" $a.ID "CampaignID" $a.CampaignID "SessionID" 0 "Draft" false)}}{{end}}</div>
+          <div class="col-12"><label class="form-label small mb-0" for="whyd">Why I came to Dioscoria{{if $locked}} <i class="bi bi-lock small" title="Locked in"></i>{{end}}</label><textarea class="form-control form-control-sm" id="whyd" name="set.why" rows="2" {{if $locked}}disabled{{end}}>{{$a.Why}}</textarea>
+          {{if and $.AssistEnabled (not $locked)}}{{template "write-assist" (dict "Field" "agent_why" "Target" "whyd" "AgentID" $a.ID "CampaignID" $a.CampaignID "SessionID" 0 "Draft" false)}}{{end}}</div>
           <div class="col-12"><label class="form-label small mb-0" for="notes">Notes</label><textarea class="form-control form-control-sm" id="notes" name="set.notes" rows="3">{{$a.Notes}}</textarea>
           {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "agent_notes" "Target" "notes" "AgentID" $a.ID "CampaignID" $a.CampaignID "SessionID" 0 "Draft" false)}}{{end}}</div>
           <div class="col-12"><button class="btn btn-sm btn-outline-light" type="submit">Save</button></div>

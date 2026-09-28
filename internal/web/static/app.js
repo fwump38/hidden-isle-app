@@ -57,6 +57,17 @@ document.addEventListener("click", async (e) => {
   }
 });
 
+// hx-confirm on a submit button: htmx reads it only from the element making the request, which
+// for a boosted form is the form, so a button's question would never be asked. Ask it here.
+document.addEventListener("htmx:confirm", (e) => {
+  const d = e.detail;
+  const btn = d.triggeringEvent && d.triggeringEvent.submitter;
+  const q = btn && btn.getAttribute("hx-confirm");
+  if (!q || d.question || d.elt.tagName !== "FORM") return;
+  e.preventDefault();
+  if (window.confirm(q)) d.issueRequest(true);
+});
+
 // Keep the scroll position when a form re-renders the same page (htmx swaps #main in place);
 // go to the top when a link opens a different page.
 let hiScroll = null;

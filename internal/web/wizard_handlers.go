@@ -140,15 +140,17 @@ func (d wizardData) Card(key string) wizCard { return d.Cards[key] }
 // wizardAbility is one chosen ability with its text resolved from the class data: the sheet
 // stores only the ability's id (rules text can be corrected later without touching every Agent).
 type wizardAbility struct {
-	Index int
-	Name  string
-	Text  string
+	Index        int
+	Name         string
+	Text         string
+	NeedsContact bool // grants a contact (The Old Ways, Celestial Bargain) that isn't named yet
 }
 
 func resolveAbilities(abilities []db.AgentAbility, class *gamedata.Class) []wizardAbility {
 	var out []wizardAbility
 	for i, ab := range abilities {
-		v := wizardAbility{Index: i, Name: ab.Name, Text: ab.Text}
+		v := wizardAbility{Index: i, Name: ab.Name, Text: ab.Text,
+			NeedsContact: campaign.AbilityGrantsContact(ab.ID) && ab.GrantedContactID == nil}
 		if ab.ID != "" && class != nil {
 			for _, x := range class.Abilities {
 				if x.ID == ab.ID {

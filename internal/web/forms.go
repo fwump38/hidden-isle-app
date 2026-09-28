@@ -115,9 +115,6 @@ func mustJSON(v any) json.RawMessage {
 //	skill.<Skill>=n                    set a skill's points
 //	fourth=<Skill> (repeated)          the skills with the 4th pip unlocked (send fourth_present=1)
 //	harm.<Suit>.0 / harm.<Suit>.1      a harm box: "", P, S or T
-//	ability.add=<id>                   add a class ability
-//	ability.custom_name / custom_text  add a custom ability
-//	ability.remove=<index>
 //	prof.add=<school>, prof.rank       add a proficiency
 //	prof.<i>.segments / .rank / .boxes edit one; prof.remove=<i>
 //	item.toggle=<name>                 pull (or put back) an item this scenario
@@ -171,29 +168,6 @@ func agentPatch(ag *db.Agent, form url.Values) (campaign.Patch, error) {
 			harm[suit] = marks
 		}
 		p["harm"] = mustJSON(harm)
-	}
-
-	abilities := slices.Clone(cur.Abilities)
-	abChanged := false
-	if id := form.Get("ability.add"); id != "" {
-		abilities = append(abilities, db.AgentAbility{ID: id, Source: "class"})
-		abChanged = true
-	}
-	if name := strings.TrimSpace(form.Get("ability.custom_name")); name != "" {
-		abilities = append(abilities, db.AgentAbility{Name: name, Text: strings.TrimSpace(form.Get("ability.custom_text")),
-			Source: orDefault(form.Get("ability.source"), "other")})
-		abChanged = true
-	}
-	if s := form.Get("ability.remove"); s != "" {
-		i, err := strconv.Atoi(s)
-		if err != nil || i < 0 || i >= len(abilities) {
-			return nil, fmt.Errorf("no ability %q", s)
-		}
-		abilities = slices.Delete(abilities, i, i+1)
-		abChanged = true
-	}
-	if abChanged {
-		p["abilities"] = mustJSON(abilities)
 	}
 
 	profs := slices.Clone(cur.Proficiencies)

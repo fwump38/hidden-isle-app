@@ -169,3 +169,38 @@ func TestGenerateRequiresClassAndSnapshot(t *testing.T) {
 		t.Error("expected an error with no snapshot")
 	}
 }
+
+// TestGenerateFillsInAContactGrantingAbility: an ability that creates a contact (The Old Ways,
+// Celestial Bargain, p. 43-45) mustn't be left for the player to notice and fill in by hand — the
+// generator should pick one for it, named and described, ready for the caller to save.
+func TestGenerateFillsInAContactGrantingAbility(t *testing.T) {
+	snap := gamedata.Fixture()
+	class := snap.Class("occultist")
+	class.Abilities[0].ID = "the-old-ways"
+	class.Abilities[0].Name = "THE OLD WAYS"
+
+	res, err := Generate(snap, class, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, ok := res.AbilityContacts["the-old-ways"]
+	if !ok {
+		t.Fatal("expected a generated contact for the-old-ways")
+	}
+	if c.Name == "" || c.Kind != "Deity (The Old Ways)" || c.Card == "" {
+		t.Errorf("generated contact = %+v", c)
+	}
+	found := false
+	for _, line := range res.Log {
+		if strings.Contains(line, "grants a contact") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected the log to mention the granted contact")
+	}
+	// An ability with no contact grant shouldn't get an entry.
+	if _, ok := res.AbilityContacts["familiar"]; ok {
+		t.Error("familiar doesn't grant a contact")
+	}
+}

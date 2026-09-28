@@ -37,7 +37,7 @@ func TestAgentPatch(t *testing.T) {
 		Abilities: []db.AgentAbility{{ID: "wisp"}}, LoadUsed: 1, Items: []db.AgentItem{{Name: "Rope", Used: true}}}
 	p, err := agentPatch(ag, url.Values{
 		"skill.Slip": {"2"}, "harm.Cups.0": {"P"}, "harm.Cups.1": {"S"}, "harm.Wands.0": {""}, "harm.Wands.1": {""},
-		"ability.add": {"burglar"}, "item.toggle": {"Rope"},
+		"item.toggle": {"Rope"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -51,11 +51,6 @@ func TestAgentPatch(t *testing.T) {
 	json.Unmarshal(p["harm"], &harm)
 	if len(harm["Cups"]) != 2 || harm["Cups"][1] != "S" || len(harm["Wands"]) != 0 {
 		t.Errorf("harm = %v", harm)
-	}
-	var abs []db.AgentAbility
-	json.Unmarshal(p["abilities"], &abs)
-	if len(abs) != 2 || abs[1].ID != "burglar" {
-		t.Errorf("abilities = %v", abs)
 	}
 	if string(p["load_used"]) != "0" || string(p["items"]) != "[]" && string(p["items"]) != "null" {
 		t.Errorf("putting back an item should free its load: %s %s", p["items"], p["load_used"])

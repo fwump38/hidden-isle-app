@@ -26,6 +26,10 @@ type kind struct {
 	// access decides whether the actor may see the record at all. Default: campaign membership.
 	access   func(s *Service, tx *gorm.DB, a Actor, obj any) error
 	validate func(snap *gamedata.Snapshot, obj any) []string
+	// checkPatch runs in Update, after the seerOnly check and before the patch is applied, with
+	// obj still holding the record's current (pre-patch) values. It rejects changes checkWrite
+	// and seerOnly can't express, such as the Agent sheet lock (see agent_lock.go).
+	checkPatch func(s *Service, tx *gorm.DB, a Actor, obj any, patch Patch, o Opts) error
 }
 
 // Fields nobody may patch.
@@ -77,7 +81,7 @@ func init() {
 			}
 			return db.VisParty, nil
 		},
-		seerOnly: []string{"owner_id", "class"}, canRead: always,
+		seerOnly: []string{"owner_id", "class", "locked_at"}, canRead: always,
 		access: func(s *Service, tx *gorm.DB, a Actor, o any) error { return s.agentAccess(tx, a, o.(*db.Agent)) },
 		canWrite: func(s *Service, tx *gorm.DB, a Actor, o any) error {
 			if ownsAgent(a, o.(*db.Agent)) {
@@ -85,7 +89,8 @@ func init() {
 			}
 			return ErrForbidden
 		},
-		validate: func(snap *gamedata.Snapshot, o any) []string { return validateAgent(snap, o.(*db.Agent)) },
+		validate:   func(snap *gamedata.Snapshot, o any) []string { return validateAgent(snap, o.(*db.Agent)) },
+		checkPatch: checkAgentPatch,
 	})
 
 	register(&kind{
@@ -129,6 +134,7 @@ func init() {
 			oneOf(&ps, "kind", c.Kind, snap.Campaign.ContactKind)
 			return ps
 		},
+		checkPatch: checkContactPatch,
 	})
 
 	register(&kind{

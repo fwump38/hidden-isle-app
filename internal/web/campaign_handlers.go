@@ -42,12 +42,18 @@ func (s *Server) registerCampaign(mux *http.ServeMux) {
 	mux.Handle("POST /agents", u(s.createAgent))
 	mux.Handle("POST /agents/{id}/campaign", u(s.assignAgent))
 	mux.Handle("POST /c/{cid}/bring", u(s.bringAgent))
+	mux.Handle("POST /c/{cid}/lock-agents", u(s.lockAgents))
 	mux.Handle("POST /agents/{id}/delete", u(s.deleteAgent))
 	mux.Handle("POST /c/{cid}/delete", u(s.deleteCampaign))
 	mux.Handle("GET /agents/{id}", u(s.agentPage))
 	mux.Handle("GET /agents/{id}/print", u(s.agentPrint))
 	mux.Handle("POST /agents/{id}", u(s.updateAgent))
 	mux.Handle("POST /agents/{id}/contacts", u(s.createContact))
+	mux.Handle("POST /agents/{id}/abilities", u(s.addAbility))
+	mux.Handle("POST /agents/{id}/abilities/remove", u(s.removeAbility))
+	mux.Handle("POST /agents/{id}/abilities/contact", u(s.grantAbilityContact))
+	mux.Handle("POST /agents/{id}/xp/skill", u(s.spendSkillXP))
+	mux.Handle("POST /agents/{id}/xp/ability", u(s.spendAbilityXP))
 	mux.Handle("POST /agents/{id}/challenge", u(s.challengeHelper))
 }
 
@@ -152,6 +158,7 @@ type dashboardData struct {
 	Recaps      []db.Entry
 	Players     []db.User
 	MyAgents    int
+	Unlocked    int // Agents in this campaign not yet locked in (Seer only)
 }
 
 func (s *Server) campaignPage(w http.ResponseWriter, r *http.Request) {
@@ -184,8 +191,16 @@ func (s *Server) campaignPage(w http.ResponseWriter, r *http.Request) {
 	}
 	mine, _ := s.Svc.MyAgents(a)
 	for _, ag := range mine {
-		if ag.CampaignID != c.ID {
+		// Only an Active Agent can join a campaign (p. 40); no point offering the others.
+		if ag.CampaignID != c.ID && ag.Status == "Active" {
 			d.MyOther = append(d.MyOther, ag)
+		}
+	}
+	if a.IsSeer() {
+		for _, ag := range d.Agents {
+			if ag.LockedAt == nil {
+				d.Unlocked++
+			}
 		}
 	}
 	s.page(w, r, "campaign", c.Name, c, "overview", d)
@@ -307,12 +322,15 @@ type sheetData struct {
 	Items     []gamedata.Item // common + class items, for the pull list
 	Abil      []abilityView   // the Agent's abilities with their text
 	Unused    []gamedata.Ability
+	Teachers  []string         // contacts at maximum affection, who can teach another class's abilities (p. 25)
+	Taught    []gamedata.Class // other classes' abilities not yet on the sheet; only when there's a teacher
 	Schools   []string
 	Pips      []string // the 40 pips, for card pickers
 }
 
 type suitRow struct {
 	Suit   string
+	Help   string
 	Skills []skillCell
 	XP     int
 	XPKey  string
@@ -321,8 +339,18 @@ type suitRow struct {
 
 type skillCell struct {
 	Name     string
+	Desc     string
 	Points   int
+	Max      int
 	Unlocked bool
+}
+
+// suitHelp explains each suit on the sheet: what it represents (p. 14) and what harm to it means (p. 23).
+var suitHelp = map[string]string{
+	"Swords":    "Swords: wits, strength, and applying your mental abilities (p. 14). Harm here hurts mental clarity and precision (p. 23).",
+	"Wands":     "Wands: creativity, passion, and magic (p. 14). Harm here hurts magic, performance and passion (p. 23).",
+	"Cups":      "Cups: subtlety, emotion, and conversation (p. 14). Harm here hurts stealth, inner feelings and social connections (p. 23).",
+	"Pentacles": "Pentacles: exchange, appraising, and attention to detail (p. 14). Harm here hurts pragmatism, business and dexterity (p. 23).",
 }
 
 type abilityView struct {
@@ -331,6 +359,7 @@ type abilityView struct {
 	Page                  int
 	Custom                bool
 	Source, ClassOfOrigin string
+	NeedsContact          bool // grants a contact (The Old Ways, Celestial Bargain) that isn't named yet
 }
 
 func (s *Server) agentSheet(a campaign.Actor, id uint) (*sheetData, *db.Campaign, error) {
@@ -360,6 +389,11 @@ func (s *Server) agentSheet(a campaign.Actor, id uint) (*sheetData, *db.Campaign
 		d.Campaigns, _ = s.Svc.Campaigns(a)
 	}
 	d.Contacts, _ = s.Svc.Contacts(a, ag.ID)
+	for _, ct := range d.Contacts {
+		if ct.Affection >= snap.Limits.Contact.Affection.Max {
+			d.Teachers = append(d.Teachers, ct.Name)
+		}
+	}
 	if c != nil {
 		var clocks []db.Clock
 		_ = s.Svc.List(a, "clock", c.ID, &clocks, "name")
@@ -379,10 +413,15 @@ func (s *Server) agentSheet(a campaign.Actor, id uint) (*sheetData, *db.Campaign
 		key string
 	}{"Swords": {ag.XPSwords, "xp_swords"}, "Wands": {ag.XPWands, "xp_wands"}, "Cups": {ag.XPCups, "xp_cups"}, "Pentacles": {ag.XPPentacles, "xp_pentacles"}}
 	for _, suit := range []string{"Swords", "Wands", "Cups", "Pentacles"} {
-		row := suitRow{Suit: suit, XP: xp[suit].v, XPKey: xp[suit].key}
+		row := suitRow{Suit: suit, Help: suitHelp[suit], XP: xp[suit].v, XPKey: xp[suit].key}
 		for _, sk := range snap.Skills.Skills {
 			if sk.Suit == suit {
-				row.Skills = append(row.Skills, skillCell{Name: sk.Name, Points: ag.Skills[sk.Name], Unlocked: slices.Contains(ag.UnlockedFourth, sk.Name)})
+				unlocked := slices.Contains(ag.UnlockedFourth, sk.Name)
+				max := snap.Limits.Agent.Skill.Max
+				if unlocked {
+					max = snap.Limits.Agent.Skill.MaxUnlocked
+				}
+				row.Skills = append(row.Skills, skillCell{Name: sk.Name, Desc: sk.SheetDescription, Points: ag.Skills[sk.Name], Unlocked: unlocked, Max: max})
 			}
 		}
 		for i, m := range ag.Harm[suit] {
@@ -398,7 +437,8 @@ func (s *Server) agentSheet(a campaign.Actor, id uint) (*sheetData, *db.Campaign
 	}
 	have := map[string]bool{}
 	for i, ab := range ag.Abilities {
-		v := abilityView{Index: i, Name: ab.Name, Text: ab.Text, Source: ab.Source, Custom: ab.ID == ""}
+		v := abilityView{Index: i, Name: ab.Name, Text: ab.Text, Source: ab.Source, Custom: ab.ID == "",
+			NeedsContact: campaign.AbilityGrantsContact(ab.ID) && ab.GrantedContactID == nil}
 		if ab.ID != "" {
 			have[ab.ID] = true
 			for _, cl := range snap.Classes.Classes {
@@ -429,6 +469,24 @@ func (s *Server) agentSheet(a campaign.Actor, id uint) (*sheetData, *db.Campaign
 		for _, x := range d.Class.Abilities {
 			if !have[x.ID] {
 				d.Unused = append(d.Unused, x)
+			}
+		}
+	}
+	// By themselves Agents learn only their own class's abilities; a max-affection contact can
+	// teach one from any class (p. 25).
+	if len(d.Teachers) > 0 {
+		for _, cl := range snap.Classes.Classes {
+			if cl.ID == ag.Class {
+				continue
+			}
+			g := gamedata.Class{ID: cl.ID, Name: cl.Name}
+			for _, x := range cl.Abilities {
+				if !have[x.ID] {
+					g.Abilities = append(g.Abilities, x)
+				}
+			}
+			if len(g.Abilities) > 0 {
+				d.Taught = append(d.Taught, g)
 			}
 		}
 	}
@@ -482,6 +540,97 @@ func (s *Server) createContact(w http.ResponseWriter, r *http.Request) {
 		err = s.createFromForm(a, "contact", c, r)
 	}
 	s.done(w, r, err, fmt.Sprintf("/agents/%d", id))
+}
+
+// addAbility takes either ability_id (a class ability, possibly with the contact it grants named
+// in contact_name/contact_desc) or name/text/source (a custom one).
+func (s *Server) addAbility(w http.ResponseWriter, r *http.Request) {
+	id := pathID(r, "id")
+	a := s.actor(r)
+	if err := r.ParseForm(); err != nil {
+		s.done(w, r, err, fmt.Sprintf("/agents/%d", id))
+		return
+	}
+	o := writeOpts(r.PostForm)
+	var err error
+	if abID := strings.TrimSpace(r.FormValue("ability_id")); abID != "" {
+		_, err = s.Svc.AddAbility(a, id, abID, r.FormValue("contact_name"), r.FormValue("contact_desc"), nil, o)
+	} else if name := strings.TrimSpace(r.FormValue("name")); name != "" {
+		_, err = s.Svc.AddCustomAbility(a, id, name, r.FormValue("text"), r.FormValue("source"), o)
+	}
+	s.done(w, r, err, fmt.Sprintf("/agents/%d", id))
+}
+
+func (s *Server) removeAbility(w http.ResponseWriter, r *http.Request) {
+	id := pathID(r, "id")
+	a := s.actor(r)
+	if err := r.ParseForm(); err != nil {
+		s.done(w, r, err, fmt.Sprintf("/agents/%d", id))
+		return
+	}
+	i, err := strconv.Atoi(r.FormValue("index"))
+	if err == nil {
+		_, err = s.Svc.RemoveAbility(a, id, i, writeOpts(r.PostForm))
+	}
+	s.done(w, r, err, fmt.Sprintf("/agents/%d", id))
+}
+
+// grantAbilityContact names the contact an already-taken ability grants, when it wasn't named
+// when the ability was added (the sheet and wizard both flag this until it's done).
+func (s *Server) grantAbilityContact(w http.ResponseWriter, r *http.Request) {
+	id := pathID(r, "id")
+	a := s.actor(r)
+	if err := r.ParseForm(); err != nil {
+		s.done(w, r, err, fmt.Sprintf("/agents/%d", id))
+		return
+	}
+	i, err := strconv.Atoi(r.FormValue("index"))
+	if err == nil {
+		_, err = s.Svc.GrantAbilityContact(a, id, i, r.FormValue("name"), r.FormValue("description"), writeOpts(r.PostForm))
+	}
+	s.done(w, r, err, fmt.Sprintf("/agents/%d", id))
+}
+
+func (s *Server) spendSkillXP(w http.ResponseWriter, r *http.Request) {
+	id := pathID(r, "id")
+	a := s.actor(r)
+	if err := r.ParseForm(); err != nil {
+		s.done(w, r, err, fmt.Sprintf("/agents/%d", id))
+		return
+	}
+	_, err := s.Svc.SpendSuitXP(a, id, r.FormValue("skill"), writeOpts(r.PostForm))
+	s.done(w, r, err, fmt.Sprintf("/agents/%d", id))
+}
+
+func (s *Server) spendAbilityXP(w http.ResponseWriter, r *http.Request) {
+	id := pathID(r, "id")
+	a := s.actor(r)
+	if err := r.ParseForm(); err != nil {
+		s.done(w, r, err, fmt.Sprintf("/agents/%d", id))
+		return
+	}
+	o := writeOpts(r.PostForm)
+	_, err := s.Svc.SpendAbilityXP(a, id, r.FormValue("ability_id"), r.FormValue("contact_name"), r.FormValue("contact_desc"), o)
+	s.done(w, r, err, fmt.Sprintf("/agents/%d", id))
+}
+
+// lockAgents is the Seer's "lock in the current roster" button on the campaign page (p. 40-41).
+func (s *Server) lockAgents(w http.ResponseWriter, r *http.Request) {
+	cid := pathID(r, "cid")
+	a := s.actor(r)
+	n, err := s.Svc.LockAgents(a, cid, campaign.Opts{})
+	if err == nil {
+		msg := "No Agents needed locking in."
+		if n == 1 {
+			msg = "Locked in 1 Agent."
+		} else if n > 1 {
+			msg = fmt.Sprintf("Locked in %d Agents.", n)
+		}
+		http.SetCookie(w, &http.Cookie{Name: flashCookie, Value: url.QueryEscape(msg), Path: "/", MaxAge: 60, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+		http.Redirect(w, r, fmt.Sprintf("/c/%d", cid), http.StatusSeeOther)
+		return
+	}
+	s.done(w, r, err, fmt.Sprintf("/c/%d", cid))
 }
 
 // ---------------------------------------------------------------- generic records

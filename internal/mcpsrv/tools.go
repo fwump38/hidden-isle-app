@@ -149,6 +149,48 @@ type advanceIn struct {
 	Step        string `json:"step" jsonschema:"steady (+1), rapid (+2) or setback (-1)"`
 	reasonField
 }
+type addAbilityIn struct {
+	AgentID     uint   `json:"agent_id"`
+	AbilityID   string `json:"ability_id" jsonschema:"rules-data id, e.g. evil-eye (from get_class)"`
+	ContactName string `json:"contact_name,omitempty" jsonschema:"only for an ability that grants a contact (The Old Ways, Celestial Bargain); leave blank to skip it"`
+	ContactDesc string `json:"contact_desc,omitempty"`
+	reasonField
+}
+type addCustomAbilityIn struct {
+	AgentID uint   `json:"agent_id"`
+	Name    string `json:"name"`
+	Text    string `json:"text" jsonschema:"what it does"`
+	Source  string `json:"source,omitempty" jsonschema:"ritual, contact or other (default other)"`
+	reasonField
+}
+type removeAbilityIn struct {
+	AgentID uint `json:"agent_id"`
+	Index   int  `json:"index" jsonschema:"its Index from get_record"`
+	reasonField
+}
+type grantAbilityContactIn struct {
+	AgentID     uint   `json:"agent_id"`
+	Index       int    `json:"index" jsonschema:"the ability's Index from get_record"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	reasonField
+}
+type spendSuitXPIn struct {
+	AgentID uint   `json:"agent_id"`
+	Skill   string `json:"skill" jsonschema:"a skill in the suit whose track is full"`
+	reasonField
+}
+type spendAbilityXPIn struct {
+	AgentID     uint   `json:"agent_id"`
+	AbilityID   string `json:"ability_id"`
+	ContactName string `json:"contact_name,omitempty"`
+	ContactDesc string `json:"contact_desc,omitempty"`
+	reasonField
+}
+type lockAgentsIn struct {
+	CampaignID uint `json:"campaign_id"`
+	reasonField
+}
 type logIn struct {
 	CampaignID uint   `json:"campaign_id"`
 	EntityType string `json:"entity_type,omitempty"`
@@ -337,7 +379,7 @@ func (s *Server) addTools() {
 			}
 			return s.svc.NewAgent(a, in.CampaignID, in.Name, strings.ToLower(in.Class), owner, campaign.Opts{})
 		})
-	tool(s, "move_agent", "Move an Agent into a campaign (adds its player) or out of any campaign (campaign_id 0).",
+	tool(s, "move_agent", "Move an Agent into a campaign (adds its player) or out of any campaign (campaign_id 0). Only an Active Agent may join one. Once locked in (see lock_agents), a player can't move their Agent at all; the Seer always can.",
 		func(ctx context.Context, a campaign.Actor, in moveAgentIn) (any, error) {
 			return note{Note: "moved"}, s.svc.AssignAgent(a, in.AgentID, in.CampaignID, opts(in.reasonField))
 		})
@@ -349,7 +391,7 @@ func (s *Server) addTools() {
 			}
 			return s.svc.CreateRecord(a, in.Kind, in.CampaignID, p, opts(in.reasonField))
 		})
-	tool(s, "update_record", "Change fields of any record, validated against the rules' limits and logged. Agent fields include name, status, burden, burden_card, burden_track, ideal, ideal_card, ideal_track, vices, virtues, fulfilled_virtues (lists), skills (map skill→points; send the whole map), unlocked_fourth, harm (map suit→[P/S/T]; send the whole map), xp_swords/xp_wands/xp_cups/xp_pentacles/xp_ability, abilities ([{id}] or custom [{name,text,source}]), proficiencies ([{school,rank,boxes,segments}]), magical_sources, items, load_used, age, culture, look, why, concept, child_phrase, child_card, adult_verb, adult_phrase, adult_card, notes. Prefer add_harm/heal/award_xp/tick_clock/advance_adversary for those. Campaign fields include table (table agreements: schedule, tone, lines and veils; players see this), visions/thresholds/skip_first_downtime (booleans, pp. 65/89), options (free text for any other house rule), open_threads (players see this too), hand_mascot, hand_name, season, scenarios_played.",
+	tool(s, "update_record", "Change fields of any record, validated against the rules' limits and logged. Agent fields include name, status, burden, burden_card, burden_track, ideal, ideal_card, ideal_track, vices, virtues, fulfilled_virtues (lists), skills (map skill→points; send the whole map), unlocked_fourth, harm (map suit→[P/S/T]; send the whole map), xp_swords/xp_wands/xp_cups/xp_pentacles/xp_ability, proficiencies ([{school,rank,boxes,segments}]), magical_sources, items, load_used, age, culture, look, why, concept, child_phrase, child_card, adult_verb, adult_phrase, adult_card, notes. Prefer add_harm/heal/award_xp/tick_clock/advance_adversary for those, and add_ability/add_custom_ability/remove_ability/spend_suit_xp/spend_ability_xp over patching skills or abilities directly — those apply an ability's clock/proficiency/contact grant and, once an Agent is locked in (get_record's locked_at), are the only way a player may still change skills or abilities; name, culture, why, burden(_card), ideal(_card), child/adult_phrase/card and adult_verb also become Seer-only once locked in. Campaign fields include table (table agreements: schedule, tone, lines and veils; players see this), visions/thresholds/skip_first_downtime (booleans, pp. 65/89), options (free text for any other house rule), open_threads (players see this too), hand_mascot, hand_name, season, scenarios_played.",
 		func(ctx context.Context, a campaign.Actor, in updateRecordIn) (any, error) {
 			p, err := in.Fields.patch()
 			if err != nil {
@@ -396,6 +438,59 @@ func (s *Server) addTools() {
 		func(ctx context.Context, a campaign.Actor, in advanceIn) (any, error) {
 			_, n, err := s.svc.AdvanceAdversary(a, in.AdversaryID, in.Step, opts(in.reasonField))
 			return note{Note: n}, err
+		})
+	tool(s, "add_ability", "Give an Agent one of its class's abilities (or, with a contact at maximum affection, one from another class, p. 25). Free before the Agent is locked in; once locked, only the Seer may call this directly — a player reaches it through spend_ability_xp instead. Some abilities also start a clock or fill proficiency segments automatically; one that creates a contact (The Old Ways, Celestial Bargain) needs contact_name here — if you don't have one yet, leave it blank and call grant_ability_contact once you do (the sheet and wizard both flag it as still needed, so it won't get missed).",
+		func(ctx context.Context, a campaign.Actor, in addAbilityIn) (any, error) {
+			ag, err := s.svc.AddAbility(a, in.AgentID, in.AbilityID, in.ContactName, in.ContactDesc, nil, opts(in.reasonField))
+			if err != nil {
+				return nil, err
+			}
+			return note{Result: map[string]any{"abilities": ag.Abilities}}, nil
+		})
+	tool(s, "add_custom_ability", "Give an Agent a ritual, a contact-taught or a house-ruled ability that isn't in the rules data. Same lock as add_ability.",
+		func(ctx context.Context, a campaign.Actor, in addCustomAbilityIn) (any, error) {
+			ag, err := s.svc.AddCustomAbility(a, in.AgentID, in.Name, in.Text, in.Source, opts(in.reasonField))
+			if err != nil {
+				return nil, err
+			}
+			return note{Result: map[string]any{"abilities": ag.Abilities}}, nil
+		})
+	tool(s, "remove_ability", "Take an ability off the sheet, reversing anything it granted (its clock or contact, and the proficiency segments it filled). Free before the Agent is locked in, to fix a mistake (the rules have no way to lose an ability otherwise); Seer-only after.",
+		func(ctx context.Context, a campaign.Actor, in removeAbilityIn) (any, error) {
+			ag, err := s.svc.RemoveAbility(a, in.AgentID, in.Index, opts(in.reasonField))
+			if err != nil {
+				return nil, err
+			}
+			return note{Result: map[string]any{"abilities": ag.Abilities}}, nil
+		})
+	tool(s, "grant_ability_contact", "Name the contact an already-taken ability grants (The Old Ways, Celestial Bargain, p. 43-45), when add_ability/spend_ability_xp added it without one (get_class or get_record's abilities show which; the sheet and wizard both flag it). A no-op if it already has one. Same lock as add_ability.",
+		func(ctx context.Context, a campaign.Actor, in grantAbilityContactIn) (any, error) {
+			ag, err := s.svc.GrantAbilityContact(a, in.AgentID, in.Index, in.Name, in.Description, opts(in.reasonField))
+			if err != nil {
+				return nil, err
+			}
+			return note{Result: map[string]any{"abilities": ag.Abilities}}, nil
+		})
+	tool(s, "spend_suit_xp", "Redeem a full suit XP track (p. 25): +1 point in a skill of that suit, and the track resets to 0. The track must be full unless you're the Seer.",
+		func(ctx context.Context, a campaign.Actor, in spendSuitXPIn) (any, error) {
+			ag, err := s.svc.SpendSuitXP(a, in.AgentID, in.Skill, opts(in.reasonField))
+			if err != nil {
+				return nil, err
+			}
+			return note{Result: map[string]any{"skills": ag.Skills}}, nil
+		})
+	tool(s, "spend_ability_xp", "Redeem a full ability XP track (p. 25) for a new ability; the track resets to 0. This is how a player learns a new ability once their Agent is locked in. The track must be full unless you're the Seer.",
+		func(ctx context.Context, a campaign.Actor, in spendAbilityXPIn) (any, error) {
+			ag, err := s.svc.SpendAbilityXP(a, in.AgentID, in.AbilityID, in.ContactName, in.ContactDesc, opts(in.reasonField))
+			if err != nil {
+				return nil, err
+			}
+			return note{Result: map[string]any{"abilities": ag.Abilities}}, nil
+		})
+	tool(s, "lock_agents", "Seer only. Lock in every Agent currently in the campaign that isn't locked yet: their name, core self, burden, ideal, culture, why, starting skills, abilities and contacts stop being freely editable by their players and change only through the rules (spend_suit_xp, spend_ability_xp) or the Seer. Usually pressed once a session's roster is set (p. 40-41); an Agent added later stays editable until this is called again.",
+		func(ctx context.Context, a campaign.Actor, in lockAgentsIn) (any, error) {
+			n, err := s.svc.LockAgents(a, in.CampaignID, opts(in.reasonField))
+			return note{Note: fmt.Sprintf("locked in %d Agent(s)", n)}, err
 		})
 	tool(s, "drift_contacts", "Downtime step 2 for one Agent (p. 66): +1 distance on every contact; full distance resets to 0 and costs 1 affection. Handles the Old Ways and Celestial Bargain exceptions.",
 		func(ctx context.Context, a campaign.Actor, in agentIn) (any, error) {

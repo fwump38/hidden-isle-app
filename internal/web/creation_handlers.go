@@ -260,12 +260,26 @@ func (s *Server) runAutomatic(a campaign.Actor, ag *db.Agent, snap *gamedata.Sna
 		note = ag.Notes + "\n\n" + note
 	}
 	res.Fields["notes"] = note
+	// Abilities go through AddAbility, not the plain field patch below, so one with a mechanical
+	// grant (a clock, proficiency segments, a contact) gets it set up the same as it would from
+	// the sheet or the wizard.
+	abilityFields, _ := res.Fields["abilities"].([]map[string]string)
+	delete(res.Fields, "abilities")
 	patch, err := fieldsPatch(res.Fields)
 	if err != nil {
 		return "", err
 	}
 	if _, err := s.Svc.Update(a, "agent", ag.ID, patch, campaign.Opts{Reason: "automatic creation (pp. 40-41)"}); err != nil {
 		return "", err
+	}
+	for _, ab := range abilityFields {
+		var contactName, contactDesc string
+		if c, ok := res.AbilityContacts[ab["id"]]; ok {
+			contactName, contactDesc = c.Name, c.Description
+		}
+		if _, err := s.Svc.AddAbility(a, ag.ID, ab["id"], contactName, contactDesc, nil, campaign.Opts{Reason: "automatic creation (p. 41)"}); err != nil {
+			return "", err
+		}
 	}
 	for _, c := range res.Contacts {
 		cp, err := fieldsPatch(map[string]any{

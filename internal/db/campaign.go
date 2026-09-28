@@ -50,13 +50,21 @@ type Member struct {
 }
 
 // AgentAbility is an ability on a sheet: a class ability from the rules data, or a custom one
-// (a ritual, an ability taught by a contact from another class, a house rule).
+// (a ritual, an ability taught by a contact from another class, a house rule). The Granted*
+// fields record what AddAbility set up automatically for an ability with a mechanical grant
+// (p. 43-64: a clock, filled proficiency segments, or a new contact), so RemoveAbility can
+// reverse exactly that and nothing else.
 type AgentAbility struct {
 	ID     string `json:"id,omitempty"`     // rules-data ability id, e.g. "evil-eye"
 	Name   string `json:"name,omitempty"`   // custom abilities only
 	Text   string `json:"text,omitempty"`   // custom abilities only
 	Source string `json:"source,omitempty"` // class | contact | ritual | other
 	Notes  string `json:"notes,omitempty"`
+
+	GrantedClockID             *uint  `json:"granted_clock_id,omitempty"`
+	GrantedContactID           *uint  `json:"granted_contact_id,omitempty"`
+	GrantedProficiencySchool   string `json:"granted_proficiency_school,omitempty"`
+	GrantedProficiencySegments int    `json:"granted_proficiency_segments,omitempty"`
 }
 
 type AgentProficiency struct {
@@ -79,14 +87,20 @@ type Agent struct {
 	OwnerID    *uint `gorm:"index" json:"owner_id"` // the player; nil = run by the Seer
 	Version    int   `gorm:"not null;default:1" json:"-"`
 
-	Name    string `gorm:"not null" json:"name"`
-	Class   string `gorm:"not null" json:"class"` // rules-data class id
-	Status  string `gorm:"not null;default:Active" json:"status"`
-	Age     string `json:"age"`
-	Culture string `json:"culture"`
-	Look    string `json:"look"`
-	Why     string `json:"why"`     // why they came to Dioscoria
-	Concept string `json:"concept"` // player's own rough description, reused to drive wizard suggestions
+	Name   string `gorm:"not null" json:"name"`
+	Class  string `gorm:"not null" json:"class"` // rules-data class id
+	Status string `gorm:"not null;default:Active" json:"status"`
+	// LockedAt is set once the Seer locks the Agent in (a button on the campaign page, usually
+	// pressed once the roster for a session is set). Nil while it can still be freely edited.
+	// After it's set, a player's creation-time choices, skill points and abilities change only
+	// through the rules (AddAbility/RemoveAbility, SpendSuitXP/SpendAbilityXP); the Seer can
+	// still change anything.
+	LockedAt *time.Time `json:"locked_at,omitempty"`
+	Age      string     `json:"age"`
+	Culture  string     `json:"culture"`
+	Look     string     `json:"look"`
+	Why      string     `json:"why"`     // why they came to Dioscoria
+	Concept  string     `json:"concept"` // player's own rough description, reused to drive wizard suggestions
 
 	ChildPhrase string `json:"child_phrase"`
 	ChildCard   string `json:"child_card"`

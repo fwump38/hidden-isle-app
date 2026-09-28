@@ -48,7 +48,20 @@ type Contact struct {
 type Result struct {
 	Fields   map[string]any
 	Contacts []Contact
-	Log      []string // a human-readable line per step, for the player or Seer to review
+	// AbilityContacts holds a generated contact for any chosen ability that grants one (The Old
+	// Ways, Celestial Bargain, p. 43-45), keyed by the ability's id. The caller should create it
+	// alongside the ability (e.g. via campaign.Service.AddAbility), not through Contacts above.
+	AbilityContacts map[string]Contact
+	Log             []string // a human-readable line per step, for the player or Seer to review
+}
+
+// abilityContactGrants mirrors internal/campaign's own abilityContactGrants (the-old-ways,
+// celestial-bargain, p. 43-45): the two abilities that create a contact when taken. This package
+// stays independent of internal/campaign (it's a pure, offline generator), so the small, stable
+// list of ids is kept here too rather than imported.
+var abilityContactGrants = map[string]string{ // ability id -> Contact Kind
+	"the-old-ways":      "Deity (The Old Ways)",
+	"celestial-bargain": "Angel or Demon (Celestial Bargain)",
 }
 
 // RandomClass picks one class at random, for a player who wants a class chosen for them instead
@@ -131,6 +144,22 @@ func Generate(snap *gamedata.Snapshot, class *gamedata.Class, solo bool) (*Resul
 	}
 	g.Fields["abilities"] = abilityFields
 	g.Log = append(g.Log, fmt.Sprintf("Abilities: %s (p. 41).", strings.Join(names, ", ")))
+
+	for _, ab := range abilities {
+		kind, ok := abilityContactGrants[ab.ID]
+		if !ok {
+			continue
+		}
+		c, err := makeAbilityContact(snap, kind)
+		if err != nil {
+			return nil, err
+		}
+		if g.AbilityContacts == nil {
+			g.AbilityContacts = map[string]Contact{}
+		}
+		g.AbilityContacts[ab.ID] = c
+		g.Log = append(g.Log, fmt.Sprintf("%s grants a contact: %s (%s), a %s (p. 43).", ab.Name, c.Name, c.Card, kind))
+	}
 
 	skills, err := allocateSkills(snap, class, l, solo)
 	if err != nil {
@@ -532,6 +561,21 @@ func makeContact(snap *gamedata.Snapshot, kind, region string, affections []int)
 		desc = card.Meaning + ": " + desc
 	}
 	return Contact{Kind: kind, Name: name, Card: card.Name, Land: land, Description: desc, Affection: affection}, nil
+}
+
+// makeAbilityContact draws a vision card and turns it into the being an ability grants (The Old
+// Ways, Celestial Bargain, p. 43-45): not a mortal from a region, so it's named after the card
+// rather than drawn from a region's name list.
+func makeAbilityContact(snap *gamedata.Snapshot, kind string) (Contact, error) {
+	card, err := drawOne(snap)
+	if err != nil {
+		return Contact{}, err
+	}
+	desc := card.Characters
+	if card.Meaning != "" {
+		desc = card.Meaning + ": " + desc
+	}
+	return Contact{Kind: kind, Name: "The " + card.Name, Card: card.Name, Description: desc}, nil
 }
 
 func remarshal(in any, out any) error {
