@@ -587,40 +587,91 @@ func (s *Server) wizardSuggest(w http.ResponseWriter, r *http.Request) {
 	// already carries it into every step's request, so a hint here (e.g. describing a contact)
 	// must not overwrite it.
 	hint := strings.TrimSpace(r.FormValue("hint"))
-	req, bookOptions, drawnCard := wizardContext(a, s, ag, snap, kind, r.Form)
+	req, bookOptions, drawnCards := wizardContext(a, s, ag, snap, kind, r.Form)
 	req.Hint = hint
 	req.Exclude = append(slices.Clone(d.Exclude), bookOptions...)
-	sugs, err := s.Assist.Suggest(r.Context(), a.User, req)
-	if err != nil {
-		d.Error = sentence(friendly(err))
-		s.partial(w, "wizard", "choices", d)
-		return
+
+	var sugs []assist.Suggestion
+	// sugCards[i], if present, is the card sugs[i] is about — set only when wizardContext drew
+	// more than one card (a contact, p. 41: three to pick from), since then each suggestion is
+	// its own call about one of the three, not one call inspired by all of them at once.
+	var sugCards []string
+	if len(drawnCards) > 1 {
+		exclude := slices.Clone(req.Exclude)
+		var lastErr error
+		for _, card := range drawnCards {
+			cr := req
+			cr.Count = 1
+			cr.Exclude = exclude
+			if line, _ := cardLine(snap, "Their card", card); line != "" {
+				cr.Context = append(slices.Clone(req.Context), line)
+			}
+			sg, err := s.Assist.Suggest(r.Context(), a.User, cr)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			if len(sg) > 0 {
+				sugs = append(sugs, sg[0])
+				sugCards = append(sugCards, card)
+				exclude = append(exclude, sg[0].Fields["name"])
+			}
+		}
+		if len(sugs) == 0 && lastErr != nil {
+			d.Error = sentence(friendly(lastErr))
+			s.partial(w, "wizard", "choices", d)
+			return
+		}
+	} else {
+		sugs, err = s.Assist.Suggest(r.Context(), a.User, req)
+		if err != nil {
+			d.Error = sentence(friendly(err))
+			s.partial(w, "wizard", "choices", d)
+			return
+		}
 	}
-	// A card wizardContext drew for this request, so the player can see what the suggestions
-	// below are actually "in the spirit of" instead of just reading about "the drawn card"
-	// without ever seeing which one it was.
-	if drawnCard != "" {
+
+	// A card (or cards) wizardContext drew for this request, so the player can see what the
+	// suggestions below are actually "in the spirit of" instead of just reading about "the drawn
+	// card" without ever seeing which one it was.
+	if len(drawnCards) == 1 {
 		if forKey := wizCardForKey(kind, r.Form); forKey != "" {
-			wc := newWizCard(snap, ag.ID, forKey, drawnCard, nil)
+			wc := newWizCard(snap, ag.ID, forKey, drawnCards[0], nil)
+			wc.OOB = true
+			d.Card = &wc
+		}
+	} else if len(drawnCards) > 1 {
+		if forKey := wizCardForKey(kind, r.Form); forKey != "" {
+			wc := newWizCard(snap, ag.ID, forKey, "", drawnCards)
 			wc.OOB = true
 			d.Card = &wc
 		}
 	}
 	class := snap.Class(ag.Class)
 	solo := s.isSolo(a, ag)
-	for _, sg := range sugs {
-		if c, ok := wizChoiceFor(kind, sg, ag, class, snap, solo, r.Form); ok {
-			// A card wizardContext drew for this request (the player hadn't drawn one yet) needs
-			// to land in the form too when the suggestion it inspired is picked, or the "card you
-			// drew" box stays empty under an answer that was supposedly drawn from it.
-			if drawnCard != "" {
-				if field, ok := wizCardInput[kind]; ok {
-					c.Fill[field] = drawnCard
-				}
-			}
-			d.Choices = append(d.Choices, c)
-			d.Exclude = append(d.Exclude, c.Label)
+	for i, sg := range sugs {
+		c, ok := wizChoiceFor(kind, sg, ag, class, snap, solo, r.Form)
+		if !ok {
+			continue
 		}
+		// A card wizardContext drew for this request (the player hadn't drawn one yet) needs to
+		// land in the form too when the suggestion it inspired is picked, or the "card you drew"
+		// box stays empty under an answer that was supposedly drawn from it. When several cards
+		// were drawn, each suggestion carries its own (sugCards, parallel to sugs); otherwise
+		// every suggestion shares the one card wizardContext drew.
+		var card string
+		if len(sugCards) == len(sugs) {
+			card = sugCards[i]
+		} else if len(drawnCards) == 1 {
+			card = drawnCards[0]
+		}
+		if card != "" {
+			if field, ok := wizCardInput[kind]; ok {
+				c.Fill[field] = card
+			}
+		}
+		d.Choices = append(d.Choices, c)
+		d.Exclude = append(d.Exclude, c.Label)
 	}
 	if len(d.Choices) == 0 {
 		d.Error = "Nothing usable came back. Try again, or describe what you're after."
@@ -648,11 +699,12 @@ func cardLine(snap *gamedata.Snapshot, label, name string) (string, *gamedata.Vi
 }
 
 // wizardContext describes the Agent so far for one step's request, and returns the book options
-// already on screen for it (so Claude offers different ones) plus the name of a card it drew
-// itself, if the step draws one and the player hadn't entered one yet (so a picked suggestion can
-// fill it in too, instead of leaving the "card you drew" box empty under an answer inspired by a
-// card the player never actually saw).
-func wizardContext(a campaign.Actor, s *Server, ag *db.Agent, snap *gamedata.Snapshot, kind string, form url.Values) (assist.SuggestRequest, []string, string) {
+// already on screen for it (so Claude offers different ones) plus the cards it drew itself, if
+// the step draws one and the player hadn't entered one yet (so a picked suggestion can fill it in
+// too, instead of leaving the "card you drew" box empty under an answer inspired by a card the
+// player never actually saw). Every step draws at most one card of its own except a contact
+// (homeland or dioscorian), which draws three to pick from, same as "Draw 3 for me" (p. 41).
+func wizardContext(a campaign.Actor, s *Server, ag *db.Agent, snap *gamedata.Snapshot, kind string, form url.Values) (assist.SuggestRequest, []string, []string) {
 	req := assist.SuggestRequest{Kind: kind}
 	add := func(format string, args ...any) { req.Context = append(req.Context, fmt.Sprintf(format, args...)) }
 	class := snap.Class(ag.Class)
@@ -713,12 +765,15 @@ func wizardContext(a campaign.Actor, s *Server, ag *db.Agent, snap *gamedata.Sna
 
 	var book []string
 	var drawnCard string
+	var drawnCards []string
 	// cardFor describes the card for a card-driven field. mayDraw is true only for a step's own
-	// card (child/adult/burden/ideal, a contact): if the player hasn't drawn or entered one yet,
-	// it draws one itself (the same digital-draw fallback as "Draw for me", cards.Draw) rather
-	// than asking Claude to invent phrases "in the spirit of" a card that doesn't exist. "look"'s
+	// single card (child/adult/burden/ideal): if the player hasn't drawn or entered one yet, it
+	// draws one itself (the same digital-draw fallback as "Draw for me", cards.Draw) rather than
+	// asking Claude to invent phrases "in the spirit of" a card that doesn't exist. "look"'s
 	// read-only reuse of earlier steps' cards passes false, since drawing a fresh child/adult/
-	// burden/ideal card just to flavor a look suggestion would draw cards those steps never asked for.
+	// burden/ideal card just to flavor a look suggestion would draw cards those steps never asked
+	// for. A contact draws its own three-card fallback below, outside cardFor, since it needs all
+	// three back (p. 41), not just the one card cardFor is built to draw and describe.
 	cardFor := func(label, field, saved string, options func(*gamedata.VisionCard) []string, mayDraw bool) {
 		val := formOr(form, field, saved)
 		if val == "" && mayDraw {
@@ -818,13 +873,22 @@ func wizardContext(a campaign.Actor, s *Server, ag *db.Agent, snap *gamedata.Sna
 		if land := form.Get("set.land"); land != "" {
 			add("Their land: %s", land)
 		}
-		cardFor("Their card", "set.card", "", nil, true)
+		if val := formOr(form, "set.card", ""); val != "" {
+			cardFor("Their card", "set.card", "", nil, false)
+		} else if hands, err := cards.Draw(snap, "vision", []cards.Request{{Count: 3}}); err == nil && len(hands) > 0 {
+			// Three to pick from, same as "Draw 3 for me" (p. 41) — not the single-card draw
+			// cardFor does for the other card-driven steps.
+			drawnCards = hands[0].Cards
+		}
 	case "ability_contact":
 		if name := form.Get("ability_name"); name != "" {
 			add("This ability grants a contact: %s (p. 43).", name)
 		}
 	}
-	return req, book, drawnCard
+	if drawnCard != "" {
+		drawnCards = append(drawnCards, drawnCard)
+	}
+	return req, book, drawnCards
 }
 
 // wizFormSkills is the Agent's skills with any unsaved changes on the skills form applied.

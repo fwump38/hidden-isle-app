@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -287,6 +288,72 @@ func TestWizardSuggestDrawsACardWhenNoneChosenYet(t *testing.T) {
 	}
 	if !strings.Contains(body, `id="card-homeland"`) || !strings.Contains(body, `hx-swap-oob="true"`) {
 		t.Errorf("a homeland contact's freshly-drawn card should be shown immediately too: %s", body)
+	}
+}
+
+// TestWizardContactSuggestDrawsThreeCards is a regression test: a homeland or dioscorian contact
+// draws 3 cards to pick from (p. 41), same as "Draw 3 for me" — asking for suggestions before the
+// player has drawn or entered a card used to draw only 1 and base every suggestion on it, instead
+// of drawing 3 and suggesting one contact per card.
+func TestWizardContactSuggestDrawsThreeCards(t *testing.T) {
+	st, _, srv := newSiteWithServer(t)
+	newWizardAgent(t, st, "prowler")
+
+	var mu sync.Mutex
+	var bodies []map[string]any
+	names := []string{"Marco", "Elena", "Bianca"}
+	wireAssistFunc(t, srv, func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		json.NewDecoder(r.Body).Decode(&b)
+		mu.Lock()
+		i := len(bodies)
+		bodies = append(bodies, b)
+		mu.Unlock()
+		name := names[i%len(names)]
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(suggestResp(map[string]any{"name": name, "land": "Venice", "description": "a " + name, "reason": "fits"}))
+	})
+
+	_, body := st.postBody("Ana", "/agents/1/wizard/suggest", url.Values{"kind": {"contact"}, "set.kind": {"Homeland"}})
+	body = html.UnescapeString(body)
+
+	if len(bodies) != 3 {
+		t.Fatalf("a blank contact card should draw 3 cards and ask for one suggestion per card (3 calls), got %d", len(bodies))
+	}
+	cards := map[string]bool{}
+	for _, b := range bodies {
+		raw, _ := json.Marshal(b)
+		s := string(raw)
+		start := strings.Index(s, "Their card: ")
+		if start < 0 {
+			t.Fatalf("a call for a drawn contact card should describe it: %s", s)
+		}
+		s = s[start+len("Their card: "):]
+		end := strings.Index(s, " — ") // " — ", cardLine's separator before the card's meaning
+		if end < 0 {
+			t.Fatalf("couldn't find the card's name in its context line: %s", s)
+		}
+		cards[s[:end]] = true
+	}
+	if len(cards) != 3 {
+		t.Errorf("the 3 calls should each be about a different drawn card, got %v", cards)
+	}
+	for _, name := range names {
+		if !strings.Contains(body, name) {
+			t.Errorf("a suggestion for each drawn card should be offered (missing %q): %s", name, body)
+		}
+	}
+	// Only count fills in the suggestion choices themselves, before the OOB "pick one of the 3
+	// drawn cards directly" box, which also fills "set.card" once per card it lists.
+	choices, _, _ := strings.Cut(body, `id="card-homeland"`)
+	if n := strings.Count(choices, `"set.card":"`); n != 3 {
+		t.Errorf("each of the 3 suggestions should fill in its own drawn card, got %d: %s", n, choices)
+	}
+	if !strings.Contains(body, `id="card-homeland"`) || !strings.Contains(body, `hx-swap-oob="true"`) {
+		t.Errorf("all 3 freshly-drawn cards should be shown immediately, pick-one style: %s", body)
+	}
+	if !strings.Contains(body, "You drew these") {
+		t.Errorf("3 drawn cards should render as a pick-one draw, not a single card: %s", body)
 	}
 }
 

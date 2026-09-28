@@ -104,6 +104,9 @@ type SuggestRequest struct {
 	// e.g. the real class names, so the model can't return something that reads as plausible but
 	// matches nothing in wizChoiceFor and silently vanishes ("nothing usable came back").
 	Enum map[string][]string
+	// Count overrides suggestKind's own Count when set, e.g. the wizard asking for exactly one
+	// contact per card it already drew, instead of that kind's usual few-per-call default.
+	Count int
 }
 
 // Suggestion is one option: its field values and a short reason.
@@ -151,8 +154,12 @@ func (s *Service) Suggest(ctx context.Context, u *db.User, req SuggestRequest) (
 		return nil, fmt.Errorf("%w (the table's monthly cap)", ErrBudget)
 	}
 
+	count := kind.Count
+	if req.Count > 0 {
+		count = req.Count
+	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s Offer %d options.\n", kind.Ask, kind.Count)
+	fmt.Fprintf(&b, "%s Offer %d options.\n", kind.Ask, count)
 	if len(req.Context) > 0 {
 		b.WriteString("\nDetails:\n")
 		for _, l := range req.Context {
