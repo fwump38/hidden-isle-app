@@ -9,39 +9,33 @@ import (
 	"github.com/fwump38/hidden-isle-app/internal/db"
 )
 
-// TestCreateAgentFlowAutomatic exercises the richer creation flow end to end: class select
-// creates the Agent, the path chooser offers Automatic (and Manual, and Guided when chat is on),
-// and Automatic fills in the whole sheet plus both contacts through the normal validated paths.
+// TestCreateAgentFlowAutomatic exercises the richer creation flow end to end: the path chooser
+// offers Automatic and Manual (and Guided when chat is on) before anything else, choosing a
+// class creates the Agent, and Automatic fills in the whole sheet plus both contacts through the
+// normal validated paths.
 func TestCreateAgentFlowAutomatic(t *testing.T) {
 	st, svc := newSite(t)
 
 	code, body := st.get("Ana", "/agents/create")
-	if code != 200 || !strings.Contains(body, "Occultist") || !strings.Contains(body, "Prowler") {
-		t.Fatalf("class select page: %d %q", code, body)
-	}
-	if strings.Contains(body, "Help me choose") {
-		t.Error("chat is off in this test; the class page shouldn't offer it")
-	}
-
-	code, flash := st.post("Ana", "/agents/create", url.Values{"name": {"Vex"}, "class": {"occultist"}, "campaign_id": {"0"}})
-	if code != 303 || flash != "" {
-		t.Fatalf("create: %d %q", code, flash)
-	}
-	code, body = st.get("Ana", "/agents/1/creation-path")
 	if code != 200 || !strings.Contains(body, "Automatic") || !strings.Contains(body, "Manual") {
-		t.Fatalf("creation-path page: %d %q", code, body)
+		t.Fatalf("path chooser: %d %q", code, body)
 	}
 	if strings.Contains(body, "Guided") {
 		t.Error("chat is off in this test; the path chooser shouldn't offer Guided")
 	}
 
-	// Bram can't run creation for Ana's Agent.
-	code, flash = st.post("Bram", "/agents/1/creation/automatic", nil)
-	if code != 303 || flash == "" {
-		t.Fatalf("expected Bram to be refused, got %d %q", code, flash)
+	code, body = st.get("Ana", "/agents/create/class?path=automatic")
+	if code != 200 || !strings.Contains(body, "Occultist") || !strings.Contains(body, "Prowler") {
+		t.Fatalf("class select page: %d %q", code, body)
+	}
+	if !strings.Contains(body, "Surprise me") {
+		t.Error("the automatic class page should offer a random draw")
+	}
+	if strings.Contains(body, "Help me choose") {
+		t.Error("chat is off in this test; the class page shouldn't offer it")
 	}
 
-	code, flash = st.post("Ana", "/agents/1/creation/automatic", nil)
+	code, flash := st.post("Ana", "/agents/create/class", url.Values{"path": {"automatic"}, "name": {"Vex"}, "class": {"occultist"}, "campaign_id": {"0"}})
 	if code != 303 || flash != "" {
 		t.Fatalf("automatic: %d %q", code, flash)
 	}
@@ -121,13 +115,63 @@ func TestCreateAgentFlowAutomatic(t *testing.T) {
 	}
 }
 
+// TestCreateAgentRandomClass covers the Automatic path's "Surprise me" draw: no class value is
+// submitted, so the server itself must pick one and run the same generator as a normal pick.
+func TestCreateAgentRandomClass(t *testing.T) {
+	st, svc := newSite(t)
+	code, flash := st.post("Ana", "/agents/create/class", url.Values{"path": {"automatic"}, "random": {"1"}, "campaign_id": {"0"}})
+	if code != 303 || flash != "" {
+		t.Fatalf("random class: %d %q", code, flash)
+	}
+	var ag db.Agent
+	if err := svc.DB.First(&ag, 1).Error; err != nil {
+		t.Fatal(err)
+	}
+	if ag.Class == "" {
+		t.Error("random draw left the class empty")
+	}
+}
+
+// TestCreateAgentManual covers the Manual path: its class page has neither the random draw nor
+// chat's "help me choose" (there's no generator or chat to hand off to), and choosing a class
+// creates the Agent, pre-filled skills and all, and sends the player straight to the wizard.
+func TestCreateAgentManual(t *testing.T) {
+	st, svc := newSite(t)
+	code, body := st.get("Ana", "/agents/create/class?path=manual")
+	if code != 200 || !strings.Contains(body, "Occultist") {
+		t.Fatalf("class select page: %d %q", code, body)
+	}
+	if strings.Contains(body, "Surprise me") {
+		t.Error("the manual class page shouldn't offer a random draw")
+	}
+
+	code, flash := st.post("Ana", "/agents/create/class", url.Values{"path": {"manual"}, "name": {"Ines"}, "class": {"occultist"}, "campaign_id": {"0"}})
+	if code != 303 || flash != "" {
+		t.Fatalf("manual: %d %q", code, flash)
+	}
+	var ag db.Agent
+	if err := svc.DB.First(&ag, 1).Error; err != nil {
+		t.Fatal(err)
+	}
+	if ag.Class != "occultist" {
+		t.Errorf("class = %q, want occultist", ag.Class)
+	}
+	if ag.Skills["Channel"] != 2 || ag.Skills["Unleash"] != 1 {
+		t.Errorf("manual creation should pre-fill the class's skills, got %v", ag.Skills)
+	}
+	code, body = st.get("Ana", "/agents/1/wizard")
+	if code != 200 || !strings.Contains(body, "Childhood") {
+		t.Fatalf("wizard should open on childhood, class already set: %d %q", code, body)
+	}
+}
+
 func TestCreateAgentForOtherPlayerBySeer(t *testing.T) {
 	st, svc := newSite(t)
 	code, flash := st.post("Seer", "/campaigns", url.Values{"name": {"Test"}, "mode": {"group"}})
 	if code != 303 || flash != "" {
 		t.Fatalf("create campaign: %d %q", code, flash)
 	}
-	code, flash = st.post("Seer", "/agents/create", url.Values{"name": {"Cyrus"}, "class": {"prowler"}, "campaign_id": {"1"}, "owner_id": {"2"}})
+	code, flash = st.post("Seer", "/agents/create/class", url.Values{"path": {"guided"}, "name": {"Cyrus"}, "class": {"prowler"}, "campaign_id": {"1"}, "owner_id": {"2"}})
 	if code != 303 || flash != "" {
 		t.Fatalf("create for player: %d %q", code, flash)
 	}

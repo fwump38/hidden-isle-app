@@ -51,6 +51,13 @@ type Result struct {
 	Log      []string // a human-readable line per step, for the player or Seer to review
 }
 
+// RandomClass picks one class at random, for a player who wants a class chosen for them instead
+// of picking from the list themselves. It's not a rules-required draw (the book leaves class
+// selection to the player, p. 40) — just a convenience for the Automatic creation path.
+func RandomClass(classes []gamedata.Class) (gamedata.Class, error) {
+	return pickOne(classes)
+}
+
 // Generate runs the full creation procedure once, using real draws and the rules data. class
 // must be the Agent's already-chosen class (step 1 happens before this). solo applies the solo
 // character's skill limits (p. 96).
