@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fwump38/hidden-isle-app/internal/assist"
 	"github.com/fwump38/hidden-isle-app/internal/auth"
-	"github.com/fwump38/hidden-isle-app/internal/chat"
 	"github.com/fwump38/hidden-isle-app/internal/db"
 	"github.com/fwump38/hidden-isle-app/internal/gamedata"
 	"github.com/fwump38/hidden-isle-app/internal/mcpsrv"
@@ -125,11 +125,11 @@ type adminData struct {
 	DeployKey string
 	KeyError  string
 
-	ChatEnabled      bool
-	ChatMonth        string
-	ChatGlobalUSD    float64
-	ChatGlobalCapUSD float64
-	ChatUsage        []chat.UsageRow
+	AssistEnabled      bool
+	AssistMonth        string
+	AssistGlobalUSD    float64
+	AssistGlobalCapUSD float64
+	AssistUsage        []assist.UsageRow
 }
 
 func (s *Server) adminDataFor(r *http.Request) adminData {
@@ -151,10 +151,10 @@ func (s *Server) adminData() adminData {
 	}
 	s.DB.Order("role desc, name").Find(&ad.Users)
 	s.DB.Where("revoked_at IS NULL").Order("created_at desc").Find(&ad.Tokens)
-	if s.Chat != nil {
-		ad.ChatEnabled = true
-		ad.ChatGlobalCapUSD = s.Cfg.ChatMonthlyCapUSD
-		ad.ChatMonth, ad.ChatGlobalUSD, ad.ChatUsage = s.Chat.UsageSummary()
+	if s.Assist != nil {
+		ad.AssistEnabled = true
+		ad.AssistGlobalCapUSD = s.Cfg.AssistMonthlyCapUSD
+		ad.AssistMonth, ad.AssistGlobalUSD, ad.AssistUsage = s.Assist.UsageSummary()
 	}
 	return ad
 }

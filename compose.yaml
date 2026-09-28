@@ -34,8 +34,8 @@ services:
       GAMEDATA_REPO: git@github.com:fwump38/The-Hidden-Isle.git
       GAMEDATA_REF: release                         # or a fixed release like v1.2.0, or a branch like main
       GAMEDATA_INTERVAL: 1h                         # how often to check for new releases
-      # In-app player chat (character creation help, rules Q&A), on your own Anthropic billing.
+      # In-app AI assistance (creation wizard suggestions, and more), on your own Anthropic billing.
       # Leave unset to keep it off. Console API key, not your claude.ai subscription.
       # ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      # HI_CHAT_MONTHLY_CAP_USD: 20                  # table-wide monthly spend cap (0 = no cap)
-      # HI_CHAT_PLAYER_CAP_USD: 5                    # per-player monthly spend cap (0 = no cap)
+      # HI_AI_MONTHLY_CAP_USD: 20                    # table-wide monthly spend cap (0 = no cap)
+      # HI_AI_PLAYER_CAP_USD: 5                      # per-player monthly spend cap (0 = no cap)

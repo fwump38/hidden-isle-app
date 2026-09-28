@@ -1,6 +1,6 @@
 // Package creation is the deterministic "automatic" character-creation path (pp. 40-41): real
 // card draws (internal/cards), the same rules-legal choices a player would make by hand, and no
-// Claude involvement at all — it works even with the in-app chat off. A Seer or player reviews
+// Claude involvement at all — it works even with AI assistance off. A Seer or player reviews
 // and edits the result afterward; nothing here is final until it's saved to the sheet.
 package creation
 
@@ -175,7 +175,7 @@ func Generate(snap *gamedata.Snapshot, class *gamedata.Class, solo bool) (*Resul
 	g.Fields["name"] = name
 	g.Fields["age"] = fmt.Sprint(age)
 	g.Fields["culture"] = cultureOf(region)
-	g.Fields["look"] = fmt.Sprintf("Draft — edit freely, or ask chat to flesh it out: something of %s (%s).", adultCard.Name, adultCard.Characters)
+	g.Fields["look"] = fmt.Sprintf("Draft — edit freely, or flesh it out: something of %s (%s).", adultCard.Name, adultCard.Characters)
 	g.Log = append(g.Log, fmt.Sprintf("Identity: %s, age %d, %s, from %s. Why Dioscoria: %s (p. 41).", name, age, g.Fields["culture"], region, why))
 
 	homeland, err := makeContact(snap, "Homeland", region, l.Creation.HomelandContactAffection)

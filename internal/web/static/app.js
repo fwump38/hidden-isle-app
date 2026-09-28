@@ -91,7 +91,7 @@ document.addEventListener("DOMContentLoaded", () => initTooltips(document));
 // ---------------------------------------------------------------- page cites → rule browser
 // Every page cite on screen ("p. 15", "pp. 72, 100-103", "Sheet p. 3", "Ref p. 8") links to
 // that page in the rule browser. The prefixes come from the rules manifest (<body data-cites>).
-// A MutationObserver catches anything added later: htmx swaps, chat replies, handouts.
+// A MutationObserver catches anything added later: htmx swaps, handouts.
 const citeSkip = "a, button, select, option, textarea, input, script, style, code, pre, [contenteditable], [data-no-cites], .hi-page";
 let citeRe = null, citeBooks = {};
 
@@ -169,7 +169,7 @@ function linkifyCites(root) {
   nodes.forEach((n) => linkifyText(n, re));
 }
 
-const citeRoots = "#main, #chat-drawer, #handout-modal";
+const citeRoots = "#main, #handout-modal";
 document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll(citeRoots).forEach(linkifyCites);
   const obs = new MutationObserver((muts) => {
@@ -285,8 +285,7 @@ function connectLive() {
 
 function busy() {
   const a = document.activeElement;
-  // Typing in the chat panel doesn't count: refreshing the page beside it leaves the panel alone.
-  if (a && !a.closest("#chat-drawer") && a.matches("input:not([type=checkbox]):not([type=radio]), textarea, select")) return true;
+  if (a && a.matches("input:not([type=checkbox]):not([type=radio]), textarea, select")) return true;
   const why = document.getElementById("why-input");
   if (why && why.value) return true;
   return !!document.querySelector("#challenge-out .alert, #challenge-out .border, #oracle-out .card");
@@ -341,108 +340,6 @@ function showHandout(h) {
 
 document.addEventListener("DOMContentLoaded", connectLive);
 document.addEventListener("htmx:afterSettle", connectLive);
-
-// ---------------------------------------------------------------- chat side panel
-// The chat lives in layout.html's #chat-drawer, outside #main, so it stays open while hx-boost
-// swaps pages beside it. #main says which campaign's chat belongs to the current page
-// (data-chat-base); the panel reloads when that changes. The open state is remembered per
-// browser, but only reopened by itself on wide screens, where it docks instead of covering.
-const chatOpenKey = "hi-chat-open";
-let chatLoadedBase = null;
-
-function chatDrawer() { return document.getElementById("chat-drawer"); }
-function chatIsOpen() { const d = chatDrawer(); return !!d && !d.hidden; }
-function chatBase() {
-  const m = document.getElementById("main");
-  return (m && m.dataset.chatBase) || "/chat";
-}
-
-function setChatOpen(open, opts = {}) {
-  const d = chatDrawer();
-  if (!d) return false;
-  d.hidden = !open;
-  document.body.classList.toggle("hi-chat-open", open);
-  document.querySelectorAll("[data-chat-toggle]").forEach((b) => b.setAttribute("aria-expanded", String(open)));
-  try { localStorage.setItem(chatOpenKey, open ? "1" : ""); } catch { /* private window etc. */ }
-  if (open) loadChat(opts);
-  return true;
-}
-
-function loadChat({ ask = "", focus = false } = {}) {
-  const base = chatBase();
-  const m = document.getElementById("main");
-  const where = document.getElementById("chat-drawer-where");
-  if (where) where.textContent = (m && m.dataset.chatLabel) || "";
-  const full = document.getElementById("chat-drawer-full");
-  if (full) full.href = base;
-  if (chatLoadedBase === base) {
-    if (ask) { const ta = chatTextarea(); if (ta) ta.value = ask; }
-    scrollChat();
-    if (focus || ask) chatTextarea()?.focus();
-    return;
-  }
-  chatLoadedBase = base;
-  const url = base + "/panel" + (ask ? "?ask=" + encodeURIComponent(ask) : "");
-  htmx.ajax("GET", url, { target: "#chat-drawer-body", swap: "innerHTML" }).then(() => {
-    scrollChat();
-    if (focus || ask) chatTextarea()?.focus();
-  });
-}
-
-function chatTextarea() { return document.querySelector('#chat-drawer textarea[name="message"]'); }
-function scrollChat() {
-  document.querySelectorAll(".hi-chat-messages").forEach((el) => { el.scrollTop = el.scrollHeight; });
-}
-
-// Capture phase, so a Chat link inside #main opens the panel instead of hx-boost following it.
-document.addEventListener("click", (e) => {
-  const toggle = e.target.closest("[data-chat-toggle]");
-  if (toggle && chatDrawer()) {
-    e.preventDefault();
-    e.stopPropagation();
-    setChatOpen(!chatIsOpen(), { focus: true });
-    return;
-  }
-  if (e.target.closest("[data-chat-close]")) {
-    setChatOpen(false);
-    return;
-  }
-  // <button data-chat-ask="…">: open the panel with a question ready to send.
-  const ask = e.target.closest("[data-chat-ask]");
-  if (ask && chatDrawer()) {
-    e.preventDefault();
-    e.stopPropagation();
-    setChatOpen(true, { ask: ask.dataset.chatAsk });
-  }
-}, true);
-
-document.addEventListener("keydown", (e) => {
-  // Enter sends; Shift+Enter is a new line.
-  const ta = e.target.closest?.(".hi-chat-send textarea");
-  if (ta && e.key === "Enter" && !e.shiftKey && !e.isComposing) {
-    e.preventDefault();
-    if (ta.value.trim()) ta.form.requestSubmit();
-    return;
-  }
-  if (e.key === "Escape" && chatIsOpen() && document.activeElement?.closest("#chat-drawer")) setChatOpen(false);
-});
-
-document.addEventListener("htmx:afterSettle", (e) => {
-  const t = e.detail.target;
-  if (t && (t.id === "chat-drawer-body" || t.classList?.contains("hi-chat") || t.closest?.("#chat-drawer"))) scrollChat();
-  if (t && t.id === "main" && chatIsOpen() && chatBase() !== chatLoadedBase) loadChat();
-});
-
-// Applying a change the chat suggested may alter the sheet on screen beside it.
-document.addEventListener("agentChanged", () => refreshOrNotify());
-
-document.addEventListener("DOMContentLoaded", () => {
-  if (!chatDrawer()) return;
-  let wasOpen = false;
-  try { wasOpen = localStorage.getItem(chatOpenKey) === "1"; } catch { /* ignore */ }
-  if (wasOpen && window.matchMedia("(min-width: 992px)").matches) setChatOpen(true);
-  scrollChat();
-});
 
 // ---------------------------------------------------------------- creation wizard
 // <button data-fill='{"set.burden":"Reckless"}'>: a choice that fills in its form (the book's

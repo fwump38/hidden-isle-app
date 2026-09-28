@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/fwump38/hidden-isle-app/internal/assist"
 	"github.com/fwump38/hidden-isle-app/internal/campaign"
-	"github.com/fwump38/hidden-isle-app/internal/chat"
 	"github.com/fwump38/hidden-isle-app/internal/creation"
 	"github.com/fwump38/hidden-isle-app/internal/db"
 	"github.com/fwump38/hidden-isle-app/internal/gamedata"
@@ -32,9 +32,9 @@ func (s *Server) registerCreation(mux *http.ServeMux) {
 }
 
 type createPathData struct {
-	CampaignID  uint
-	Campaign    *db.Campaign
-	ChatEnabled bool
+	CampaignID    uint
+	Campaign      *db.Campaign
+	AssistEnabled bool
 }
 
 func (s *Server) resolveCampaignParam(a campaign.Actor, r *http.Request) (uint, *db.Campaign, error) {
@@ -51,7 +51,7 @@ func (s *Server) resolveCampaignParam(a campaign.Actor, r *http.Request) (uint, 
 
 func (s *Server) createPathPage(w http.ResponseWriter, r *http.Request) {
 	a := s.actor(r)
-	d := createPathData{ChatEnabled: s.Chat != nil}
+	d := createPathData{AssistEnabled: s.Assist != nil}
 	cid, c, err := s.resolveCampaignParam(a, r)
 	if err != nil {
 		s.fail(w, r, err)
@@ -62,14 +62,14 @@ func (s *Server) createPathPage(w http.ResponseWriter, r *http.Request) {
 }
 
 type createAgentData struct {
-	Path        string // "step" or "automatic"
-	CampaignID  uint
-	Campaign    *db.Campaign
-	AllPlayers  []db.User
-	Classes     []gamedata.Class
-	ChatEnabled bool
-	Agent       *db.Agent // set when going back from the wizard to change an Agent's class
-	Concept     string    // the Agent's saved concept, if any, to prefill the suggest box
+	Path          string // "step" or "automatic"
+	CampaignID    uint
+	Campaign      *db.Campaign
+	AllPlayers    []db.User
+	Classes       []gamedata.Class
+	AssistEnabled bool
+	Agent         *db.Agent // set when going back from the wizard to change an Agent's class
+	Concept       string    // the Agent's saved concept, if any, to prefill the suggest box
 }
 
 // normalizePath reads the creation path; "guided" and "manual" are the old names of the
@@ -88,7 +88,7 @@ func (s *Server) createClassPage(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, campaign.ErrNoData)
 		return
 	}
-	d := createAgentData{Path: normalizePath(r.URL.Query().Get("path")), Classes: snap.Classes.Classes, ChatEnabled: s.Chat != nil}
+	d := createAgentData{Path: normalizePath(r.URL.Query().Get("path")), Classes: snap.Classes.Classes, AssistEnabled: s.Assist != nil}
 	if aid, err := strconv.ParseUint(r.URL.Query().Get("agent"), 10, 64); err == nil && aid > 0 {
 		ag, err := s.Svc.Agent(a, uint(aid))
 		if err != nil || !s.Svc.CanEditAgent(a, ag) {
@@ -204,7 +204,7 @@ func (s *Server) createClassSuggest(w http.ResponseWriter, r *http.Request) {
 	d := wizSuggestions{Exclude: r.Form["exclude"]}
 	snap := s.Data.Current()
 	switch {
-	case s.Chat == nil:
+	case s.Assist == nil:
 		d.Error = "Suggestions need the in-app assistant, which isn't set up."
 	case snap == nil:
 		d.Error = friendly(campaign.ErrNoData)
@@ -215,7 +215,7 @@ func (s *Server) createClassSuggest(w http.ResponseWriter, r *http.Request) {
 		s.partial(w, "create-agent", "choices", d)
 		return
 	}
-	req := chat.SuggestRequest{Kind: "class", Hint: r.FormValue("hint"), Exclude: d.Exclude}
+	req := assist.SuggestRequest{Kind: "class", Hint: r.FormValue("hint"), Exclude: d.Exclude}
 	names := make([]string, 0, len(snap.Classes.Classes))
 	for _, c := range snap.Classes.Classes {
 		req.Context = append(req.Context, fmt.Sprintf("%s (%s): %s", c.Name, c.Guild, c.Summary))
@@ -225,7 +225,7 @@ func (s *Server) createClassSuggest(w http.ResponseWriter, r *http.Request) {
 	// off-list concept (e.g. "a grave digger dabbling in necromancy") can tempt it into inventing
 	// a plausible-sounding class name that then matches nothing and vanishes silently.
 	req.Enum = map[string][]string{"class": names}
-	sugs, err := s.Chat.Suggest(r.Context(), a.User, req)
+	sugs, err := s.Assist.Suggest(r.Context(), a.User, req)
 	if err != nil {
 		d.Error = sentence(friendly(err))
 	}
@@ -282,8 +282,8 @@ func (s *Server) runAutomatic(a campaign.Actor, ag *db.Agent, snap *gamedata.Sna
 	return fmt.Sprintf("/agents/%d/wizard?step=done", ag.ID), nil
 }
 
-// fieldsPatch turns plain field→value pairs into a campaign.Patch (same shape the MCP tools and
-// the in-app chat use for the same purpose).
+// fieldsPatch turns plain field→value pairs into a campaign.Patch (same shape the MCP tools use
+// for the same purpose).
 func fieldsPatch(fields map[string]any) (campaign.Patch, error) {
 	p := campaign.Patch{}
 	for k, v := range fields {

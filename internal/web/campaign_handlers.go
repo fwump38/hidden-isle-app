@@ -192,9 +192,8 @@ func (s *Server) campaignPage(w http.ResponseWriter, r *http.Request) {
 }
 
 type settingsData struct {
-	Users       []db.User
-	Members     map[uint]bool
-	ChatEnabled bool
+	Users   []db.User
+	Members map[uint]bool
 }
 
 func (s *Server) settingsPage(w http.ResponseWriter, r *http.Request) {
@@ -208,7 +207,7 @@ func (s *Server) settingsPage(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	d := settingsData{Members: map[uint]bool{}, ChatEnabled: s.Chat != nil}
+	d := settingsData{Members: map[uint]bool{}}
 	s.DB.Where("role = ? AND active = ?", db.RolePlayer, true).Order("name").Find(&d.Users)
 	members, _ := s.Svc.Members(a, c.ID)
 	for _, m := range members {

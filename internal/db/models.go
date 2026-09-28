@@ -10,13 +10,18 @@ import (
 var models = []any{&SchemaMigration{}, &User{}, &APIToken{},
 	&Campaign{}, &Member{}, &Agent{}, &Contact{}, &Session{}, &Adversary{}, &Territory{}, &Clock{},
 	&HouseRuling{}, &SeerNote{}, &Event{}, &Entry{}, &Handout{}, &DowntimeSubmission{},
-	&ChatThread{}, &ChatMessage{}, &ChatSuggestion{}, &ChatUsage{}}
+	&AIUsage{}}
 
 // migrations are one-off steps AutoMigrate can't express (renames, data fixes). Append only.
 var migrations = []struct {
 	ID string
 	Up func(tx *gorm.DB) error
-}{}
+}{
+	{ID: "2025_drop_chat_tables", Up: func(tx *gorm.DB) error {
+		// The in-app chat is gone; chat_usages (now AIUsage) is the only table that survives it.
+		return tx.Migrator().DropTable("chat_threads", "chat_messages", "chat_suggestions")
+	}},
+}
 
 type SchemaMigration struct {
 	ID        string `gorm:"primaryKey"`

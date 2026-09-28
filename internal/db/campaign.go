@@ -229,7 +229,7 @@ type Event struct {
 	SessionID  *uint           `gorm:"index" json:"session_id,omitempty"`
 	ActorID    *uint           `json:"actor_id,omitempty"`
 	ActorName  string          `json:"actor_name"`
-	Via        string          `json:"via"`         // web | mcp | chat | system
+	Via        string          `json:"via"`         // web | mcp | assist | system
 	EntityType string          `json:"entity_type"` // agent, contact, clock, …
 	EntityID   uint            `json:"entity_id"`
 	EntityName string          `json:"entity_name"`

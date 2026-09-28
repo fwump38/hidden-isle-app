@@ -17,9 +17,9 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/fwump38/hidden-isle-app/internal/assist"
 	"github.com/fwump38/hidden-isle-app/internal/auth"
 	"github.com/fwump38/hidden-isle-app/internal/campaign"
-	"github.com/fwump38/hidden-isle-app/internal/chat"
 	"github.com/fwump38/hidden-isle-app/internal/config"
 	"github.com/fwump38/hidden-isle-app/internal/db"
 	"github.com/fwump38/hidden-isle-app/internal/gamedata"
@@ -32,15 +32,15 @@ import (
 var assets embed.FS
 
 type Server struct {
-	DB    *gorm.DB
-	Cfg   *config.Config
-	Auth  *auth.Authenticator
-	Data  *gamedata.Store
-	Svc   *campaign.Service
-	Live  *live.Hub     // live updates; nil disables them
-	Chat  *chat.Service // in-app player chat; nil disables it (no ANTHROPIC_API_KEY)
-	Rules *rules.Index  // rules search in the rule browser; nil hides it
-	Build string
+	DB     *gorm.DB
+	Cfg    *config.Config
+	Auth   *auth.Authenticator
+	Data   *gamedata.Store
+	Svc    *campaign.Service
+	Live   *live.Hub       // live updates; nil disables them
+	Assist *assist.Service // in-app AI assistance (suggestions, writing help); nil disables it (no ANTHROPIC_API_KEY)
+	Rules  *rules.Index    // rules search in the rule browser; nil hides it
+	Build  string
 
 	pages    map[string]*template.Template
 	book     rulebook.Cache // the rule browser's rendered text
@@ -83,7 +83,6 @@ func (s *Server) Register(mux *http.ServeMux) {
 	s.registerPlay(mux)
 	s.registerWizard(mux)
 	s.registerDowntime(mux)
-	s.registerChat(mux)
 	s.registerCreation(mux)
 	s.registerRules(mux)
 
@@ -134,7 +133,7 @@ type pageData struct {
 	Nav      *campaignNav // set on campaign pages
 	Live     bool         // subscribe to the campaign's live updates
 
-	ChatEnabled bool // the in-app player chat is configured (ANTHROPIC_API_KEY)
+	AssistEnabled bool // in-app AI assistance is configured (ANTHROPIC_API_KEY)
 	// Cites maps the rules' page-cite prefixes to book keys ({"p.":"p","Sheet p.":"sheet"}), so
 	// app.js can link every cite on the page to the rule browser.
 	Cites map[string]string
@@ -143,7 +142,7 @@ type pageData struct {
 func (s *Server) render(w http.ResponseWriter, r *http.Request, page string, status int, pd pageData) {
 	pd.User = auth.User(r.Context())
 	pd.Live = s.Live != nil && pd.Nav != nil && pd.Nav.Campaign != nil
-	pd.ChatEnabled = s.Chat != nil
+	pd.AssistEnabled = s.Assist != nil
 	pd.Info = auth.Info(r.Context())
 	pd.Build = s.Build
 	pd.AssetVer = s.assetVer
