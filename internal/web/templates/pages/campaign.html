@@ -38,20 +38,7 @@
         {{end}}
 
         {{if not $seer}}
-        <details class="mt-3" {{if not $d.Agents}}open{{end}}>
-          <summary class="small text-body-secondary">Create a new Agent here</summary>
-          <form class="row g-2 mt-1" method="post" action="/c/{{$c.ID}}/agents">
-            <div class="col-12 col-md-4"><input class="form-control" name="name" placeholder="Name" required aria-label="Agent name"></div>
-            <div class="col-6 col-md-3">
-              <select class="form-select" name="class" required aria-label="Class">
-                <option value="">Class…</option>
-                {{with $snap}}{{range .Classes.Classes}}<option value="{{.ID}}">{{.Name}}</option>{{end}}{{end}}
-              </select>
-            </div>
-            <div class="col-12 col-md-2"><button class="btn btn-primary w-100" type="submit"><i class="bi bi-person-plus"></i> Create</button></div>
-            <div class="col-12 form-text mt-0">Starts the sheet with the class's pre-filled skills (p. 40). <a href="/agents/create?campaign_id={{$c.ID}}">Get help creating one</a> instead.</div>
-          </form>
-        </details>
+        <a class="btn btn-primary mt-3" href="/agents/create?campaign_id={{$c.ID}}"><i class="bi bi-person-plus"></i> Create an Agent</a>
         {{end}}
       </div>
     </div>
