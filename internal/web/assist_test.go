@@ -182,3 +182,99 @@ func TestWriteAssistMarkupAcrossPages(t *testing.T) {
 		}
 	}
 }
+
+func suggestOptResp(options ...map[string]any) []byte {
+	b, _ := json.Marshal(map[string]any{
+		"id": "msg_1", "type": "message", "role": "assistant", "model": "claude-sonnet-5",
+		"content":     []map[string]any{{"type": "tool_use", "id": "toolu_1", "name": "offer_suggestions", "input": map[string]any{"options": options}}},
+		"stop_reason": "tool_use",
+		"usage":       map[string]any{"input_tokens": 100, "output_tokens": 20},
+	})
+	return b
+}
+
+// TestSeerSuggestAdversary covers the Seer's own suggestion box end to end: it renders choice
+// buttons that fill the new-adversary form's fields.
+func TestSeerSuggestAdversary(t *testing.T) {
+	st, srv := assistWorld(t)
+	wireAssistWith(t, srv, suggestOptResp(map[string]any{
+		"name": "The Choir", "leader": "Brother Anselm", "plot": "smuggling", "motivation": "profit", "members": "Anselm — greedy", "why": "fits the docks",
+	}))
+	code, body := st.postBody("Seer", "/c/1/suggest", url.Values{"kind": {"adversary"}, "hint": {"docks"}})
+	if code != 200 {
+		t.Fatalf("suggest: %d %q", code, body)
+	}
+	for _, want := range []string{`&#34;set.name&#34;:&#34;The Choir&#34;`, `&#34;set.plot&#34;:&#34;smuggling&#34;`, "fits the docks"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q in %s", want, body)
+		}
+	}
+}
+
+// TestSeerSuggestRequiresSeer covers a player trying the Seer's own suggestion box: refused, no
+// API call.
+func TestSeerSuggestRequiresSeer(t *testing.T) {
+	st, srv := assistWorld(t)
+	var calls int
+	wireAssistWithCounter(t, srv, &calls, suggestOptResp(map[string]any{"name": "x"}))
+	code, body := st.postBody("Ana", "/c/1/suggest", url.Values{"kind": {"adversary"}})
+	if code != 200 || !strings.Contains(body, "Only the Seer") {
+		t.Fatalf("player suggest: %d %q", code, body)
+	}
+	if calls != 0 {
+		t.Errorf("calls = %d, want 0", calls)
+	}
+}
+
+// TestSeerSuggestRejectsUnknownKind covers a kind outside seerKinds (e.g. a player-only wizard
+// kind like "class") being refused rather than silently forwarded to the model.
+func TestSeerSuggestRejectsUnknownKind(t *testing.T) {
+	st, srv := assistWorld(t)
+	var calls int
+	wireAssistWithCounter(t, srv, &calls, suggestOptResp(map[string]any{"name": "x"}))
+	code, body := st.postBody("Seer", "/c/1/suggest", url.Values{"kind": {"class"}})
+	if code != 200 || !strings.Contains(body, "Unknown kind") {
+		t.Fatalf("unknown kind: %d %q", code, body)
+	}
+	if calls != 0 {
+		t.Errorf("calls = %d, want 0", calls)
+	}
+}
+
+// TestSeerSuggestBoxesOnPages checks the Seer's own suggest boxes are wired into the campaign
+// pages and gated the same way write-assist is: present with a key, absent without one.
+func TestSeerSuggestBoxesOnPages(t *testing.T) {
+	st, _, srv := newSiteWithServer(t)
+	ok := func(code int, flash string) {
+		t.Helper()
+		if code != 303 || flash != "" {
+			t.Fatalf("setup post: %d %q", code, flash)
+		}
+	}
+	ok(st.post("Seer", "/campaigns", url.Values{"name": {"Venice"}, "mode": {"group"}}))
+	ok(st.post("Seer", "/c/1/r/territory", url.Values{"set.name": {"The Harbor"}}))
+
+	pages := map[string][]string{
+		"/c/1/adversaries": {"adversary"},
+		"/c/1/clocks":      {"clock"},
+		"/c/1/sessions":    {"session"},
+		"/c/1/territories": {"territory_event"},
+		"/c/1/play":        {"handout"},
+	}
+	for path := range pages {
+		_, body := st.get("Seer", path)
+		if strings.Contains(body, `hx-post="/c/1/suggest"`) {
+			t.Errorf("%s: suggest box present with no ANTHROPIC_API_KEY", path)
+		}
+	}
+
+	wireAssistWith(t, srv, suggestOptResp(map[string]any{"name": "x"}))
+	for path, kinds := range pages {
+		_, body := st.get("Seer", path)
+		for _, k := range kinds {
+			if !strings.Contains(body, `name="kind" value="`+k+`"`) {
+				t.Errorf("%s: missing suggest box for kind %q", path, k)
+			}
+		}
+	}
+}

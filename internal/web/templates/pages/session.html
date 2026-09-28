@@ -34,6 +34,7 @@
       <h2 class="h5 card-title text-warning"><i class="bi bi-eye-slash"></i> Seer only</h2>
       <form method="post" action="{{$u}}" class="row g-2">
         <input type="hidden" name="back" value="{{$back}}">
+        {{if $.AssistEnabled}}<div class="col-12">{{template "suggest-box" (dict "URL" (printf "/c/%d/suggest" $c.ID) "Kind" "session" "Label" "Suggest prep" "Placeholder" "Describe what you're after" "Value" "" "Form" "")}}</div>{{end}}
         <div class="col-12"><label class="small text-body-secondary" for="prep">Prep: cast, locations, clocks, likely challenges, twists</label><textarea class="form-control" id="prep" name="set.prep" rows="5">{{$s.Prep}}</textarea>
         {{if $.AssistEnabled}}{{template "write-assist" (dict "Field" "session_prep" "Target" "prep" "AgentID" 0 "CampaignID" $c.ID "SessionID" $s.ID "Draft" false)}}{{end}}</div>
         <div class="col-12"><label class="small text-body-secondary" for="div">Divination: adversary / stakes / goal / lead, visions given and kept</label><textarea class="form-control" id="div" name="set.divination" rows="3">{{$s.Divination}}</textarea>

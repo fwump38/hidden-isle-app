@@ -144,6 +144,41 @@ func TestSuggestForcesTheToolAndParsesOptions(t *testing.T) {
 	}
 }
 
+// TestSuggestSeerKindUsesSeerInstructionsAndBrief covers the Seer's own suggestion boxes
+// (adversary, session, clock, territory_event, handout): the Seer instructions are sent, not the
+// player ones, and the brief's lines reach the request alongside any Context.
+func TestSuggestSeerKindUsesSeerInstructionsAndBrief(t *testing.T) {
+	var body map[string]any
+	w := setup(t, func(rw http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&body)
+		rw.Header().Set("Content-Type", "application/json")
+		rw.Write(toolUseResp("toolu_1", "offer_suggestions", map[string]any{"options": []map[string]any{
+			{"name": "The Choir", "leader": "Brother Anselm", "plot": "smuggling", "motivation": "profit", "members": "Brother Anselm — greedy", "why": "fits the docks"},
+		}}))
+	})
+	brief := &Brief{}
+	brief.Add("Territory: The Harbor, a smuggler's den")
+	got, err := w.assist.Suggest(context.Background(), w.ana, SuggestRequest{
+		Kind: "adversary", Brief: brief, Hint: "something tied to the docks",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Fields["name"] != "The Choir" {
+		t.Fatalf("suggestions = %+v", got)
+	}
+	raw, _ := json.Marshal(body["system"])
+	if !strings.Contains(string(raw), "help the Seer") {
+		t.Errorf("system prompt should use the Seer instructions: %s", raw)
+	}
+	raw, _ = json.Marshal(body["messages"])
+	for _, want := range []string{"The Harbor", "smuggler's den", "tied to the docks"} {
+		if !strings.Contains(string(raw), want) {
+			t.Errorf("request messages missing %q: %s", want, raw)
+		}
+	}
+}
+
 func TestSuggestRespectsTheBudget(t *testing.T) {
 	w := setup(t, func(rw http.ResponseWriter, r *http.Request) {
 		t.Error("no API call should be made over the cap")

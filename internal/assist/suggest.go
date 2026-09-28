@@ -27,9 +27,10 @@ type SuggestField struct {
 
 // suggestKind is what the model is asked for at one step.
 type suggestKind struct {
-	Ask    string
-	Fields []SuggestField
-	Count  int
+	Ask      string
+	Fields   []SuggestField
+	Count    int
+	Audience string // "seer" for the Seer's own suggestion boxes; "" (player) is the default
 }
 
 var suggestKinds = map[string]suggestKind{
@@ -57,17 +58,39 @@ var suggestKinds = map[string]suggestKind{
 		Fields: []SuggestField{{"why", "One sentence"}}},
 	"contact": {Ask: "Suggest who this contact is, reading the drawn card loosely as their personality.", Count: 3,
 		Fields: []SuggestField{{"name", "A full name fitting their land"}, {"land", "Their land (or Dioscorian district)"}, {"description", "Profession and personality, one or two sentences"}}},
+
+	// The Seer's own suggestion boxes.
+	"adversary": {Audience: "seer", Count: 2,
+		Ask: "Suggest a new adversary that fits the campaign so far: a group, cult, family or organisation with a plot the Hand could uncover.",
+		Fields: []SuggestField{{"name", "A short, evocative name"}, {"leader", "The leader's name (invent one if the group doesn't obviously have one yet)"},
+			{"plot", "One sentence: what they're doing"}, {"motivation", "One sentence: why"},
+			{"members", "Up to 4 members, each with a short motivation, one line"}}},
+	"session": {Audience: "seer", Count: 2,
+		Ask:    "Suggest a session title and prep (cast, locations, clocks, likely challenges, twists) that follows on from the campaign so far.",
+		Fields: []SuggestField{{"title", "A short session title"}, {"prep", "Cast, locations, clocks, likely challenges, twists — a short paragraph"}}},
+	"clock": {Audience: "seer", Count: 3,
+		Ask: "Suggest a clock: what happens when it fills (p. 86), fitting the campaign so far.",
+		Fields: []SuggestField{{"name", "What happens when it fills, one line"}, {"segments", "One of the segment counts given"},
+			{"linked_to", "What it's tied to (a territory, adversary, ritual…), or empty"}}},
+	"territory_event": {Audience: "seer", Count: 3,
+		Ask:    "Suggest a territory event: something that's changed or is brewing there, fitting the campaign so far (p. 82, \"the world changes\").",
+		Fields: []SuggestField{{"event", "One or two sentences"}}},
+	"handout": {Audience: "seer", Count: 2,
+		Ask:    "Suggest a handout: a short title and the text the players will read aloud or see verbatim, fitting the campaign so far.",
+		Fields: []SuggestField{{"title", "A short title"}, {"body", "The text itself, one or two sentences"}}},
 }
 
 // SuggestFields lists the fields an option of kind carries, or nil for an unknown kind.
 func SuggestFields(kind string) []SuggestField { return suggestKinds[kind].Fields }
 
 // SuggestRequest is one step's request. Context is plain lines describing the Agent so far
-// (class, drawn cards, chosen phrases…); the caller builds it from the rules data.
+// (class, drawn cards, chosen phrases…); the caller builds it from the rules data. Brief is
+// campaign context for the Seer's own suggestion boxes (nil for the wizard's).
 type SuggestRequest struct {
 	Kind    string
 	Context []string
-	Hint    string   // the player's own description of what they're after
+	Brief   *Brief
+	Hint    string   // what the player or Seer describes they're after
 	Exclude []string // options already on screen, so "more" gives new ones
 	// Enum constrains a field to exactly one of a fixed set of values (keyed by SuggestField.Name),
 	// e.g. the real class names, so the model can't return something that reads as plausible but
@@ -81,12 +104,20 @@ type Suggestion struct {
 	Why    string
 }
 
-const suggestInstructions = `You help a player create a character for The Hidden Isle, a tarot RPG of sorcery and adventure set in 1562, inside the campaign app. You only ever answer through the offer_suggestions tool.
+const suggestPlayerInstructions = `You help a player create a character for The Hidden Isle, a tarot RPG of sorcery and adventure set in 1562, inside the campaign app. You only ever answer through the offer_suggestions tool.
 
 - Offer distinct, evocative options that fit 1562 and the details given. Keep them short.
 - Use only names, classes, abilities, skills and schools exactly as listed in the details; never invent rules or numbers.
 - Never repeat an option listed under "Already shown".
 - If the player describes what they're thinking, follow it closely.
+- "why" is one short line saying why the option fits.`
+
+const suggestSeerInstructions = `You help the Seer (GM) run The Hidden Isle, a tarot RPG of sorcery and adventure set in 1562, inside the campaign app. You only ever answer through the offer_suggestions tool.
+
+- Offer distinct, evocative options that fit 1562 and the campaign details given. Keep them short.
+- Use only names and facts exactly as listed in the campaign details; never invent a rule or a number, and never contradict something already established there.
+- Never repeat an option listed under "Already shown".
+- If the Seer describes what they're after, follow it closely.
 - "why" is one short line saying why the option fits.`
 
 const suggestTokens = 800
@@ -120,8 +151,18 @@ func (s *Service) Suggest(ctx context.Context, u *db.User, req SuggestRequest) (
 			fmt.Fprintf(&b, "- %s\n", l)
 		}
 	}
+	if lines := req.Brief.Lines(); len(lines) > 0 {
+		b.WriteString("\nCampaign details:\n")
+		for _, l := range lines {
+			fmt.Fprintf(&b, "- %s\n", l)
+		}
+	}
+	who := "the player is"
+	if kind.Audience == "seer" {
+		who = "the Seer is"
+	}
 	if h := strings.TrimSpace(req.Hint); h != "" {
-		fmt.Fprintf(&b, "\nWhat the player is thinking: %s\n", h)
+		fmt.Fprintf(&b, "\nWhat %s thinking: %s\n", who, h)
 	}
 	if len(req.Exclude) > 0 {
 		fmt.Fprintf(&b, "\nAlready shown: %s\n", strings.Join(req.Exclude, "; "))
@@ -143,9 +184,13 @@ func (s *Service) Suggest(ctx context.Context, u *db.User, req SuggestRequest) (
 		}},
 	}, "options")
 
+	instructions := suggestPlayerInstructions
+	if kind.Audience == "seer" {
+		instructions = suggestSeerInstructions
+	}
 	resp, err := s.client.Messages.New(ctx, anthropic.MessageNewParams{
 		Model: anthropic.Model(s.cfg.Model), MaxTokens: suggestTokens,
-		System:     []anthropic.TextBlockParam{{Text: suggestInstructions, CacheControl: anthropic.NewCacheControlEphemeralParam()}},
+		System:     []anthropic.TextBlockParam{{Text: instructions, CacheControl: anthropic.NewCacheControlEphemeralParam()}},
 		Messages:   []anthropic.MessageParam{anthropic.NewUserMessage(anthropic.NewTextBlock(b.String()))},
 		Tools:      []anthropic.ToolUnionParam{tool},
 		ToolChoice: anthropic.ToolChoiceParamOfTool("offer_suggestions"),
