@@ -21,12 +21,15 @@ This repo holds **no game text**. The rules data (classes, abilities, cards, tab
 >   matching MCP tools;
 > - live updates over SSE, a Seer dashboard for the table, a secret-link TV view, and
 >   handouts pushed to players' phones;
-> - a step-by-step creation wizard (pp. 40-42), plus a class-picker with a deterministic
->   automatic generator (real card draws, no Claude needed) and a chat-guided path alongside it;
+> - a step-by-step creation wizard (pp. 40-42): enter the cards you draw (or let the app draw),
+>   pick from the options the book gives for each, or ask for more ideas (Claude, in the
+>   background, never saving anything itself); plus a deterministic automatic generator (real
+>   card draws, no Claude needed);
 > - downtime a player plans and submits, and the Seer approves before it touches the sheet;
-> - an in-app Claude chat for players (character-creation help, rules Q&A) that works before a
->   player has even joined a campaign, on the Seer's own Anthropic billing, with monthly spend
->   caps and read-mostly tools scoped to what that player may see. A suggested sheet change is
+> - an in-app Claude chat for players (rules Q&A, help with their Agent) in a side panel that
+>   stays open beside any page and works before a player has even joined a campaign, on the
+>   Seer's own Anthropic billing, with monthly spend caps and read-mostly tools scoped to what
+>   that player may see. A suggested sheet change is
 >   only a card in the chat until the player taps Apply.
 >
 > Next: MCP Apps widgets in claude.ai (an Agent sheet, clock and challenge picker as `ui://`
@@ -102,7 +105,7 @@ claude mcp add --transport http hidden-isle https://isle.example.com/mcp --heade
 
 ## In-app chat for players
 
-Players get their own Claude chat on the campaign's **Chat** tab, for character-creation help and rules questions. It's separate from the MCP connector above: MCP is the Seer's own claude.ai/Claude Code session; this is a chat the app itself runs on the Seer's Anthropic billing, so players never need (or get) their own Anthropic account, and it can't see or touch the Seer's claude.ai account, memories or connectors.
+Players get their own Claude chat, for rules questions and help with their Agent. The **Chat** button in the top bar opens it as a panel on the right that stays open while they move around the app (on a phone it covers the page until closed); inside a campaign it's that campaign's chat. The same API key powers the creation wizard's "more ideas" buttons, which spend from the same monthly caps but never touch the chat. It's separate from the MCP connector above: MCP is the Seer's own claude.ai/Claude Code session; this is a chat the app itself runs on the Seer's Anthropic billing, so players never need (or get) their own Anthropic account, and it can't see or touch the Seer's claude.ai account, memories or connectors.
 
 1. **Get a key.** Go to the [Anthropic Console](https://console.anthropic.com/settings/keys) → **API Keys** → **Create Key**. If it offers identity federation, decline it — that's for workload identity in a cloud provider (AWS/GCP/Azure), not this app; just create a standard API key.
 2. **Expiration:** the app has no way to refresh or rotate this key itself — it's read once from `ANTHROPIC_API_KEY` at startup. If the key expires, the chat quietly stops working until you generate a new one and update it. Set it to **Never**, or note the date somewhere you'll actually see it before it lapses.

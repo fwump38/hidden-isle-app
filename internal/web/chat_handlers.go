@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/fwump38/hidden-isle-app/internal/campaign"
 	"github.com/fwump38/hidden-isle-app/internal/db"
@@ -16,10 +17,12 @@ import (
 func (s *Server) registerChat(mux *http.ServeMux) {
 	u := func(h http.HandlerFunc) http.Handler { return s.requireUser(h) }
 	mux.Handle("GET /chat", u(s.chatPage))
+	mux.Handle("GET /chat/panel", u(s.chatPanel))
 	mux.Handle("GET /chat/with/{uid}", u(s.chatPage))
 	mux.Handle("POST /chat/send", u(s.sendChat))
 	mux.Handle("POST /chat/memory", u(s.saveChatMemory))
 	mux.Handle("GET /c/{cid}/chat", u(s.chatPage))
+	mux.Handle("GET /c/{cid}/chat/panel", u(s.chatPanel))
 	mux.Handle("GET /c/{cid}/chat/with/{uid}", u(s.chatPage))
 	mux.Handle("POST /c/{cid}/chat/send", u(s.sendChat))
 	mux.Handle("POST /c/{cid}/chat/memory", u(s.saveChatMemory))
@@ -36,7 +39,7 @@ type chatPageData struct {
 	Thread      *db.ChatThread
 	Messages    []db.ChatMessage
 	Suggestions []db.ChatSuggestion
-	Prefill     string // pre-fills the message box, e.g. from a "help me choose" link
+	Prefill     string // pre-fills the message box (?ask=)
 	Error       string
 }
 
@@ -49,6 +52,22 @@ func (d chatPageData) Pending() []db.ChatSuggestion {
 		}
 	}
 	return out
+}
+
+// chatPanel renders just the chat for the side panel (layout.html's #chat-drawer), which loads it
+// with htmx and keeps it open while the player moves around the app.
+func (s *Server) chatPanel(w http.ResponseWriter, r *http.Request) {
+	a := s.actor(r)
+	cid := pathID(r, "cid")
+	if cid != 0 {
+		if _, err := s.Svc.Campaign(a, cid); err != nil {
+			http.Error(w, friendly(err), http.StatusForbidden)
+			return
+		}
+	}
+	d := s.buildChatPage(a, cid, r)
+	d.Prefill = r.URL.Query().Get("ask")
+	s.partial(w, "chat", "chat-body", d)
 }
 
 func (s *Server) chatPage(w http.ResponseWriter, r *http.Request) {
@@ -111,7 +130,7 @@ func (s *Server) sendChat(w http.ResponseWriter, r *http.Request) {
 	cid := pathID(r, "cid")
 	d := s.buildChatPage(a, cid, r)
 	if s.Chat != nil && d.Thread != nil {
-		if _, err := s.Chat.Send(r.Context(), a.User, d.Thread.ID, r.FormValue("message")); err != nil {
+		if _, err := s.Chat.Send(r.Context(), a.User, d.Thread.ID, r.FormValue("message"), r.FormValue("page")); err != nil {
 			d.Error = friendly(err)
 		}
 		d.Messages, d.Suggestions, _ = s.Chat.History(d.Thread.ID)
@@ -139,7 +158,11 @@ func (s *Server) applyChatSuggestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := s.Chat.ApplySuggestion(s.actor(r), pathID(r, "id"))
-	s.done(w, r, err, "/")
+	if err == nil && r.Header.Get("HX-Request") == "true" {
+		// The page beside the panel may be showing the sheet that just changed.
+		w.Header().Set("HX-Trigger", "agentChanged")
+	}
+	s.suggestionDone(w, r, err)
 }
 
 func (s *Server) dismissChatSuggestion(w http.ResponseWriter, r *http.Request) {
@@ -147,6 +170,37 @@ func (s *Server) dismissChatSuggestion(w http.ResponseWriter, r *http.Request) {
 		s.done(w, r, fmt.Errorf("chat isn't enabled"), "/")
 		return
 	}
-	err := s.Chat.DismissSuggestion(s.actor(r), pathID(r, "id"))
-	s.done(w, r, err, "/")
+	s.suggestionDone(w, r, s.Chat.DismissSuggestion(s.actor(r), pathID(r, "id")))
+}
+
+// suggestionDone re-renders the chat in place for htmx (the side panel), or redirects back to
+// the full chat page otherwise.
+func (s *Server) suggestionDone(w http.ResponseWriter, r *http.Request, err error) {
+	if r.Header.Get("HX-Request") != "true" {
+		s.done(w, r, err, "/")
+		return
+	}
+	a := s.actor(r)
+	cid := chatCampaignFromBase(r.FormValue("back"))
+	if cid != 0 {
+		if _, cerr := s.Svc.Campaign(a, cid); cerr != nil {
+			cid = 0
+		}
+	}
+	d := s.buildChatPage(a, cid, r)
+	if err != nil {
+		d.Error = friendly(err)
+	}
+	s.partial(w, "chat", "chat-body", d)
+}
+
+// chatCampaignFromBase reads the campaign id out of a chat base ("/c/3/chat" → 3, "/chat" → 0).
+func chatCampaignFromBase(base string) uint {
+	rest, ok := strings.CutPrefix(base, "/c/")
+	if !ok {
+		return 0
+	}
+	id, _, _ := strings.Cut(rest, "/")
+	n, _ := strconv.ParseUint(id, 10, 64)
+	return uint(n)
 }

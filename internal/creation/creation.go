@@ -361,9 +361,22 @@ func describeSkills(skills map[string]int) string {
 // ---------------------------------------------------------------- setting lookups
 
 type schoolTable struct {
-	Schools []struct {
-		Name string `yaml:"name"`
-	} `yaml:"schools"`
+	Schools []School `yaml:"schools"`
+}
+
+// School is one school of magic (p. 33), for a proficiency.
+type School struct {
+	Name string `yaml:"name"`
+	Does string `yaml:"does"`
+}
+
+// MagicSchools lists the schools of magic from the rules data, or nil if there are none.
+func MagicSchools(snap *gamedata.Snapshot) []School {
+	var t schoolTable
+	if err := remarshal(snap.Raw["setting"]["proficiencies"], &t); err != nil {
+		return nil
+	}
+	return t.Schools
 }
 
 func pickProficiencySchool(snap *gamedata.Snapshot) (string, error) {
@@ -448,6 +461,38 @@ func regionName(snap *gamedata.Snapshot, region string) (string, error) {
 	}
 	return full, nil
 }
+
+// NameRegions lists where a name can come from: the book's regional name lists, plus Dioscoria
+// when the homebrew names supplement is installed (the books print no Dioscorian names).
+func NameRegions(snap *gamedata.Snapshot) []string {
+	regions, _ := oracleRegions(snap)
+	if hb := snap.HomebrewRegion("Dioscoria"); hb != nil && len(hb.Given) > 0 {
+		regions = append(regions, "Dioscoria")
+	}
+	return regions
+}
+
+// Names draws up to n different full names for someone from region, the same way the automatic
+// path names an Agent: a given name from the book's list (or the homebrew Dioscorian list), plus
+// a homebrew family name or byname where the supplement has one.
+func Names(snap *gamedata.Snapshot, region string, n int) ([]string, error) {
+	seen := map[string]bool{}
+	var out []string
+	for tries := 0; len(out) < n && tries < n*6; tries++ {
+		name, err := regionName(snap, region)
+		if err != nil {
+			return nil, err
+		}
+		if !seen[name] {
+			seen[name] = true
+			out = append(out, name)
+		}
+	}
+	return out, nil
+}
+
+// Culture is a plain demonym for region, for the sheet's Culture field (not book text).
+func Culture(region string) string { return cultureOf(region) }
 
 func cultureOf(region string) string {
 	if c, ok := cultures[region]; ok {

@@ -1,38 +1,27 @@
 {{define "content"}}
 {{$d := .Data}}
 <h1 class="h4 mb-1">Create an Agent</h1>
-<p class="text-body-secondary">{{if $d.Campaign}}For {{$d.Campaign.Name}}. {{end}}How would you like to build it — core self, burden and ideal, abilities, skills, and who they are?</p>
+<p class="text-body-secondary">{{if $d.Campaign}}For {{$d.Campaign.Name}}. {{end}}How would you like to build them: core self, burden and ideal, abilities, skills, and who they are?</p>
 
 <div class="row g-3">
-  {{if $d.ChatEnabled}}
-  <div class="col-12 col-md-4">
-    <div class="card h-100 border-info-subtle">
+  <div class="col-12 col-md-6">
+    <div class="card h-100 border-primary-subtle">
       <div class="card-body d-flex flex-column">
-        <h2 class="h5 card-title"><i class="bi bi-stars"></i> Guided</h2>
-        <p class="small flex-grow-1">Pick a class, then chat walks you through the rest step by step: it draws cards, explains the choices, and proposes each field for you to approve. Nothing changes until you say so.</p>
-        <a class="btn btn-info mt-2" href="/agents/create/class?path=guided&campaign_id={{$d.CampaignID}}"><i class="bi bi-arrow-right"></i> Choose a class</a>
+        <h2 class="h5 card-title"><i class="bi bi-list-ol"></i> Step by step</h2>
+        <p class="small flex-grow-1">Pick a class, then go through the book's steps one screen at a time. Enter the cards you draw (or let the app draw them) and pick from the options each card gives you, or write your own.{{if $d.ChatEnabled}} Stuck? Ask for more ideas on any step, or describe what you have in mind.{{end}} You can go back and change anything.</p>
+        <a class="btn btn-primary mt-2" href="/agents/create/class?path=step&campaign_id={{$d.CampaignID}}"><i class="bi bi-arrow-right"></i> Choose a class</a>
       </div>
     </div>
   </div>
-  {{end}}
-  <div class="col-12 col-md-4">
+  <div class="col-12 col-md-6">
     <div class="card h-100">
       <div class="card-body d-flex flex-column">
         <h2 class="h5 card-title"><i class="bi bi-shuffle"></i> Automatic</h2>
-        <p class="small flex-grow-1">Pick a class (or draw a random one), then real card draws make every other rules-legal choice for you — core self, burden, ideal, abilities, skills, name, and both contacts. Review and change anything after.</p>
-        <a class="btn btn-primary mt-2" href="/agents/create/class?path=automatic&campaign_id={{$d.CampaignID}}"><i class="bi bi-arrow-right"></i> Choose a class</a>
-      </div>
-    </div>
-  </div>
-  <div class="col-12 col-md-4">
-    <div class="card h-100">
-      <div class="card-body d-flex flex-column">
-        <h2 class="h5 card-title"><i class="bi bi-list-ol"></i> Manual</h2>
-        <p class="small flex-grow-1">The step-by-step sheet, same as always: pick a class, draw your own cards (real or digital), and fill in each field by hand. Every step is checked against the rules' limits.</p>
-        <a class="btn btn-outline-light mt-2" href="/agents/create/class?path=manual&campaign_id={{$d.CampaignID}}"><i class="bi bi-arrow-right"></i> Choose a class</a>
+        <p class="small flex-grow-1">Pick a class (or draw a random one), then real card draws make every other rules-legal choice for you: core self, burden, ideal, abilities, skills, name, and both contacts. Review and change anything after.</p>
+        <a class="btn btn-outline-light mt-2" href="/agents/create/class?path=automatic&campaign_id={{$d.CampaignID}}"><i class="bi bi-arrow-right"></i> Choose a class</a>
       </div>
     </div>
   </div>
 </div>
-<p class="small text-body-secondary mt-3">Whichever you pick, you can always switch: edit anything by hand afterward.</p>
+<p class="small text-body-secondary mt-3">Whichever you pick, you can edit anything by hand afterward.</p>
 {{end}}

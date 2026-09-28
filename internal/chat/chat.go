@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -39,6 +40,9 @@ const (
 	historyMessages = 20 // most recent user+assistant turns kept as context
 	rateLimitCount  = 10
 	rateLimitWindow = 5 * time.Minute
+	// The creation wizard asks for suggestions more often than anyone chats, so it has its own,
+	// looser limit (the monthly budgets still apply to both).
+	suggestRateCount = 30
 )
 
 // Config is set once from environment variables; see internal/config.
@@ -60,8 +64,9 @@ type Service struct {
 	cfg    Config
 	client anthropic.Client
 
-	mu     sync.Mutex
-	recent map[uint][]time.Time
+	mu            sync.Mutex
+	recent        map[uint][]time.Time // chat messages
+	recentSuggest map[uint][]time.Time // wizard suggestions
 }
 
 func New(g *gorm.DB, svc *campaign.Service, data *gamedata.Store, idx *rules.Index, cfg Config) *Service {
@@ -79,7 +84,7 @@ func New(g *gorm.DB, svc *campaign.Service, data *gamedata.Store, idx *rules.Ind
 		opts = append(opts, option.WithBaseURL(cfg.BaseURL))
 	}
 	return &Service{db: g, svc: svc, data: data, rules: idx, cfg: cfg,
-		client: anthropic.NewClient(opts...), recent: map[uint][]time.Time{}}
+		client: anthropic.NewClient(opts...), recent: map[uint][]time.Time{}, recentSuggest: map[uint][]time.Time{}}
 }
 
 // Reply is what one Send call produces.
@@ -108,19 +113,23 @@ func (s *Service) History(threadID uint) ([]db.ChatMessage, []db.ChatSuggestion,
 }
 
 func (s *Service) checkRate(userID uint) error {
+	return s.checkRateIn(s.recent, userID, rateLimitCount)
+}
+
+func (s *Service) checkRateIn(m map[uint][]time.Time, userID uint, limit int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now()
 	var recent []time.Time
-	for _, t := range s.recent[userID] {
+	for _, t := range m[userID] {
 		if now.Sub(t) < rateLimitWindow {
 			recent = append(recent, t)
 		}
 	}
-	if len(recent) >= rateLimitCount {
+	if len(recent) >= limit {
 		return ErrRate
 	}
-	s.recent[userID] = append(recent, now)
+	m[userID] = append(recent, now)
 	return nil
 }
 
@@ -182,8 +191,9 @@ func (s *Service) UsageSummary() (month string, globalUSD float64, rows []UsageR
 
 // Send appends the player's message, runs the tool loop until the assistant produces a final
 // reply, and returns it. It records token spend against the month's cap before spending it,
-// so a request over the cap is refused with no API call.
-func (s *Service) Send(ctx context.Context, u *db.User, threadID uint, text string) (*Reply, error) {
+// so a request over the cap is refused with no API call. page is the app page the player has
+// open beside the chat (e.g. "/agents/3"), or "".
+func (s *Service) Send(ctx context.Context, u *db.User, threadID uint, text, page string) (*Reply, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return nil, errors.New("say something first")
@@ -214,7 +224,7 @@ func (s *Service) Send(ctx context.Context, u *db.User, threadID uint, text stri
 	}
 	msgs = append(msgs, anthropic.NewUserMessage(anthropic.NewTextBlock(text)))
 
-	sys := s.buildSystem(a, th)
+	sys := s.buildSystem(a, th, page)
 	tools := s.toolDefs()
 	var suggestions []db.ChatSuggestion
 	var toolsUsed []string
@@ -311,7 +321,7 @@ Rules:
 - Call update_memory when you learn something worth remembering for next time (a chosen name, class, an open question) — a short note, not a transcript.
 - Keep replies short and conversational; this is a chat, not an essay.`
 
-func (s *Service) buildSystem(a campaign.Actor, th db.ChatThread) []anthropic.TextBlockParam {
+func (s *Service) buildSystem(a campaign.Actor, th db.ChatThread, page string) []anthropic.TextBlockParam {
 	blocks := []anthropic.TextBlockParam{{Text: systemInstructions, CacheControl: anthropic.NewCacheControlEphemeralParam()}}
 	var b strings.Builder
 	fmt.Fprintf(&b, "Player: %s\n", a.User.Name)
@@ -335,11 +345,37 @@ func (s *Service) buildSystem(a campaign.Actor, th db.ChatThread) []anthropic.Te
 			fmt.Fprintf(&b, "- #%d %s, %s\n", ag.ID, ag.Name, ag.Class)
 		}
 	}
+	if p := s.describePage(a, page); p != "" {
+		fmt.Fprintf(&b, "\nThe chat sits beside the app; the player currently has open: %s\n", p)
+	}
 	if th.Memory != "" {
 		fmt.Fprintf(&b, "\nRemembered from earlier chats with this player:\n%s\n", th.Memory)
 	}
 	blocks = append(blocks, anthropic.TextBlockParam{Text: b.String()})
 	return blocks
+}
+
+// describePage turns the path of the page open beside the chat into a line for the model: an
+// Agent's sheet or wizard names the Agent (if the player may see it), anything else is just
+// the path. Only app paths are accepted.
+func (s *Service) describePage(a campaign.Actor, page string) string {
+	page = strings.TrimSpace(page)
+	if !strings.HasPrefix(page, "/") || strings.HasPrefix(page, "//") || len(page) > 200 {
+		return ""
+	}
+	if rest, ok := strings.CutPrefix(page, "/agents/"); ok {
+		idStr, sub, _ := strings.Cut(rest, "/")
+		if id, err := strconv.ParseUint(idStr, 10, 64); err == nil {
+			if ag, err := s.svc.Agent(a, uint(id)); err == nil {
+				what := "the sheet of"
+				if strings.HasPrefix(sub, "wizard") {
+					what = "the creation wizard for"
+				}
+				return fmt.Sprintf("%s Agent #%d %s (%s) — %s", what, ag.ID, ag.Name, ag.Class, page)
+			}
+		}
+	}
+	return page
 }
 
 func strProp(desc string) map[string]any {
