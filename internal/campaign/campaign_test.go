@@ -31,7 +31,8 @@ func fixtureSnap(t *testing.T) *gamedata.Snapshot {
 		}
 	}
 	s.Classes.Classes = []gamedata.Class{{ID: "hunter", Name: "Hunter", PrefilledSkills: map[string]int{"Skirmish": 1, "Unleash": 2},
-		Abilities: []gamedata.Ability{{ID: "butcher", Name: "BUTCHER", Text: "…", Page: 49}}}}
+		Abilities: []gamedata.Ability{{ID: "butcher", Name: "BUTCHER", Text: "…", Page: 49}}},
+		{ID: "prowler", Name: "Prowler", PrefilledSkills: map[string]int{"Slip": 2, "Finesse": 1}}}
 	s.Campaign = gamedata.Campaign{
 		AgentStatus: []string{"Active", "Dead"}, ContactKind: []string{"Homeland", "Dioscorian", "Deity (The Old Ways)", "Fellow Agent"}, SessionStatus: []string{"Prep", "Played"},
 		AdversaryStatus: []string{"Rumored", "Active"}, ClockScope: []string{"Scenario", "Ability"}, ClockStatus: []string{"Running", "Filled"},
@@ -110,6 +111,37 @@ func TestNewAgentPrefillsAndOwnership(t *testing.T) {
 	}
 	if _, err := w.s.NewAgent(w.eve, w.camp.ID, "Outsider", "hunter", nil, Opts{}); !IsForbidden(err) {
 		t.Errorf("non-member created an Agent: %v", err)
+	}
+}
+
+// TestChangeClassOnlyDuringCreation: class is Seer-only for an Agent in play, but its owner may
+// still switch class while creating it, which swaps the pre-filled skills and clears abilities.
+func TestChangeClassOnlyDuringCreation(t *testing.T) {
+	w := setup(t)
+	if _, err := w.s.Update(w.ana, "agent", w.anaAgent.ID, patch(t, map[string]any{"class": "prowler"}), Opts{}); !IsForbidden(err) {
+		t.Errorf("a plain edit changed the class: %v", err)
+	}
+	must(t, func() error {
+		_, err := w.s.Update(w.ana, "agent", w.anaAgent.ID, patch(t, map[string]any{"abilities": []db.AgentAbility{{ID: "butcher"}}}), Opts{})
+		return err
+	}())
+	if _, err := w.s.ChangeClass(w.bram, w.anaAgent.ID, "prowler", Opts{}); !IsForbidden(err) {
+		t.Errorf("another player changed the class: %v", err)
+	}
+	ag, err := w.s.ChangeClass(w.ana, w.anaAgent.ID, "prowler", Opts{})
+	must(t, err)
+	if ag.Class != "prowler" || ag.Skills["Slip"] != 2 || ag.Skills["Unleash"] != 0 || len(ag.Abilities) != 0 {
+		t.Errorf("after ChangeClass: %q %v %v", ag.Class, ag.Skills, ag.Abilities)
+	}
+	must(t, func() error {
+		_, err := w.s.Update(w.ana, "agent", w.anaAgent.ID, patch(t, map[string]any{"xp_swords": 1}), Opts{})
+		return err
+	}())
+	if _, err := w.s.ChangeClass(w.ana, w.anaAgent.ID, "hunter", Opts{}); !IsForbidden(err) {
+		t.Errorf("the owner changed the class of an Agent in play: %v", err)
+	}
+	if _, err := w.s.ChangeClass(w.seer, w.anaAgent.ID, "hunter", Opts{}); err != nil {
+		t.Errorf("the Seer can always change the class: %v", err)
 	}
 }
 

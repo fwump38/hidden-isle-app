@@ -24,6 +24,8 @@ type Opts struct {
 	// Override lets the Seer break a rules limit on purpose; the event is flagged and a house
 	// ruling is recorded with the reason.
 	Override bool
+
+	allowClass bool // set only by ChangeClass, which does its own check
 }
 
 // Patch sets whole fields by their JSON name, e.g. {"burden_track": 3, "harm": {"Cups": ["P"]}}.
@@ -87,6 +89,9 @@ func (s *Service) Update(a Actor, kindName string, id uint, patch Patch, o Opts)
 		for f := range patch {
 			if slices.Contains(lockedFields, f) {
 				return fmt.Errorf("%s can't be changed", f)
+			}
+			if f == "class" && o.allowClass {
+				continue
 			}
 			if !a.IsSeer() && (slices.Contains(k.seerOnly, f) || slices.Contains(k.secret, f)) {
 				return fmt.Errorf("only the Seer can change %s: %w", f, ErrForbidden)

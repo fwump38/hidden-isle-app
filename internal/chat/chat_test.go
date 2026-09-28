@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -130,7 +132,7 @@ func TestSendCallsToolThenReplies(t *testing.T) {
 	// The fake tool_use above references agent_id 0, which won't resolve; swap in the real id
 	// by wrapping the handler isn't easy here, so instead just check the loop completes and the
 	// final assistant text is stored even though the tool call itself errors.
-	reply, err := w.chat.Send(context.Background(), w.ana, th.ID, "How's my Agent?")
+	reply, err := w.chat.Send(context.Background(), w.ana, th.ID, "How's my Agent?", "")
 	if err != nil {
 		t.Fatalf("Send: %v", err)
 	}
@@ -169,7 +171,7 @@ func TestSendRefusesOverBudget(t *testing.T) {
 	if err := w.svc.DB.Create(&db.ChatUsage{UserID: w.ana.ID, Month: currentMonth(), CostUSD: 1}).Error; err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.chat.Send(context.Background(), w.ana, th.ID, "hi"); !errors.Is(err, ErrBudget) {
+	if _, err := w.chat.Send(context.Background(), w.ana, th.ID, "hi", ""); !errors.Is(err, ErrBudget) {
 		t.Errorf("err = %v, want ErrBudget", err)
 	}
 	if atomic.LoadInt32(w.calls) != 0 {
@@ -197,7 +199,7 @@ func TestSuggestAgentChangeApplyAndDismiss(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	reply, err := w.chat.Send(context.Background(), w.ana, th.ID, "Suggest a look for my Agent")
+	reply, err := w.chat.Send(context.Background(), w.ana, th.ID, "Suggest a look for my Agent", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,12 +252,93 @@ func TestUpdateMemoryTool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.chat.Send(context.Background(), w.ana, th.ID, "Remember my Agent's name is Vex"); err != nil {
+	if _, err := w.chat.Send(context.Background(), w.ana, th.ID, "Remember my Agent's name is Vex", ""); err != nil {
 		t.Fatal(err)
 	}
 	var reloaded db.ChatThread
 	w.svc.DB.First(&reloaded, th.ID)
 	if reloaded.Memory != "Ana is playing a Hunter named Vex." {
 		t.Errorf("memory = %q", reloaded.Memory)
+	}
+}
+
+// TestSuggestForcesTheToolAndParsesOptions covers the wizard's background call: one request that
+// forces offer_suggestions, sends the already-shown options so "more" gives new ones, drops
+// options missing a field, stores no chat messages, and counts against the monthly budget.
+func TestSuggestForcesTheToolAndParsesOptions(t *testing.T) {
+	var body map[string]any
+	w := setup(t, func(rw http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&body)
+		rw.Header().Set("Content-Type", "application/json")
+		rw.Write(toolUseResp("toolu_1", "offer_suggestions", map[string]any{"options": []map[string]any{
+			{"word": "Reckless", "why": "The Chariot charges ahead"},
+			{"word": "Proud", "why": "Too sure of the road"},
+			{"why": "missing its word"},
+		}}))
+	})
+	got, err := w.chat.Suggest(context.Background(), w.ana, SuggestRequest{
+		Kind: "burden", Context: []string{"Burden card: The Chariot"}, Hint: "someone who never backs down", Exclude: []string{"Hasty"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].Fields["word"] != "Reckless" || got[1].Why != "Too sure of the road" {
+		t.Fatalf("suggestions = %+v", got)
+	}
+	tc, _ := body["tool_choice"].(map[string]any)
+	if tc["type"] != "tool" || tc["name"] != "offer_suggestions" {
+		t.Errorf("tool_choice = %v, want the forced offer_suggestions tool", body["tool_choice"])
+	}
+	raw, _ := json.Marshal(body["messages"])
+	for _, want := range []string{"The Chariot", "never backs down", "Already shown: Hasty"} {
+		if !strings.Contains(string(raw), want) {
+			t.Errorf("request messages missing %q: %s", want, raw)
+		}
+	}
+	var msgs int64
+	w.svc.DB.Model(&db.ChatMessage{}).Count(&msgs)
+	if msgs != 0 {
+		t.Errorf("suggestions stored %d chat messages; they should never touch a thread", msgs)
+	}
+	var usage db.ChatUsage
+	if err := w.svc.DB.Where("user_id = ?", w.ana.ID).First(&usage).Error; err != nil || usage.CostUSD <= 0 {
+		t.Errorf("suggestion spend wasn't recorded: %+v %v", usage, err)
+	}
+	if _, err := w.chat.Suggest(context.Background(), w.ana, SuggestRequest{Kind: "nonsense"}); err == nil {
+		t.Error("an unknown kind should be refused without an API call")
+	}
+}
+
+func TestSuggestRespectsTheBudget(t *testing.T) {
+	w := setup(t, func(rw http.ResponseWriter, r *http.Request) {
+		t.Error("no API call should be made over the cap")
+	})
+	w.chat.cfg.PlayerCapUSD = 1
+	w.svc.DB.Create(&db.ChatUsage{UserID: w.ana.ID, Month: currentMonth(), CostUSD: 2})
+	if _, err := w.chat.Suggest(context.Background(), w.ana, SuggestRequest{Kind: "name"}); !errors.Is(err, ErrBudget) {
+		t.Fatalf("err = %v, want ErrBudget", err)
+	}
+}
+
+// TestSendTellsTheModelWhichPageIsOpen covers the side panel: the chat sits beside the app, so the
+// system prompt names the Agent whose sheet or wizard the player has open.
+func TestSendTellsTheModelWhichPageIsOpen(t *testing.T) {
+	var body map[string]any
+	w := setup(t, func(rw http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&body)
+		rw.Header().Set("Content-Type", "application/json")
+		rw.Write(textResp("ok"))
+	})
+	th, err := w.chat.Thread(w.ana.ID, w.camp.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := fmt.Sprintf("/agents/%d/wizard", w.agent.ID)
+	if _, err := w.chat.Send(context.Background(), w.ana, th.ID, "what next?", page); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(body["system"])
+	if !strings.Contains(string(raw), "creation wizard for Agent") || !strings.Contains(string(raw), "Ana's Agent") {
+		t.Errorf("system prompt doesn't describe the open page: %s", raw)
 	}
 }

@@ -4,30 +4,30 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
 	"github.com/fwump38/hidden-isle-app/internal/campaign"
+	"github.com/fwump38/hidden-isle-app/internal/chat"
 	"github.com/fwump38/hidden-isle-app/internal/creation"
 	"github.com/fwump38/hidden-isle-app/internal/db"
 	"github.com/fwump38/hidden-isle-app/internal/gamedata"
 )
 
 // The richer creation flow, for a player who wants help rather than typing straight into the
-// quick form on the campaign page. The path is chosen up front, before class or anything else:
-// Guided (chat walks you through it, after you pick a class), Automatic (a deterministic
-// generator does it, no chat needed, after you pick a class or draw a random one), or Manual
-// (the existing step-by-step sheet, after you pick a class the plain way). Every Agent needs a
-// valid class from the moment it's created (the rules data validates it), so all three paths
-// pick one on the same class page; only Automatic offers a random draw, and only Guided and
-// Automatic offer chat's "help me choose". All three end up at the same sheet, editable exactly
-// the same way afterward.
+// quick form on the campaign page. The path is chosen up front: Step by step (the creation
+// wizard, one screen per step of pp. 40-41, offering the book's options and, when the in-app
+// assistant is configured, more ideas from Claude in the background) or Automatic (a
+// deterministic generator does it all with real card draws, no Claude needed). Every Agent needs
+// a valid class from the moment it's created (the rules data validates it), so both paths start
+// on the same class page; the Agent is created there, named "New Agent" until the wizard's first
+// screen names it. Both end up at the same sheet, editable exactly the same way afterward.
 func (s *Server) registerCreation(mux *http.ServeMux) {
 	u := func(h http.HandlerFunc) http.Handler { return s.requireUser(h) }
 	mux.Handle("GET /agents/create", u(s.createPathPage))
 	mux.Handle("GET /agents/create/class", u(s.createClassPage))
 	mux.Handle("POST /agents/create/class", u(s.createClassSubmit))
+	mux.Handle("POST /agents/create/suggest", u(s.createClassSuggest))
 }
 
 type createPathData struct {
@@ -61,22 +61,22 @@ func (s *Server) createPathPage(w http.ResponseWriter, r *http.Request) {
 }
 
 type createAgentData struct {
-	Path          string // "guided", "automatic" or "manual"
-	CampaignID    uint
-	Campaign      *db.Campaign
-	AllPlayers    []db.User
-	Classes       []gamedata.Class
-	ChatEnabled   bool
-	HelpChooseURL string
+	Path        string // "step" or "automatic"
+	CampaignID  uint
+	Campaign    *db.Campaign
+	AllPlayers  []db.User
+	Classes     []gamedata.Class
+	ChatEnabled bool
+	Agent       *db.Agent // set when going back from the wizard to change an Agent's class
 }
 
+// normalizePath reads the creation path; "guided" and "manual" are the old names of the
+// step-by-step path, still accepted from old links.
 func normalizePath(v string) string {
-	switch v {
-	case "automatic", "manual":
+	if v == "automatic" {
 		return v
-	default:
-		return "guided"
 	}
+	return "step"
 }
 
 func (s *Server) createClassPage(w http.ResponseWriter, r *http.Request) {
@@ -87,21 +87,31 @@ func (s *Server) createClassPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d := createAgentData{Path: normalizePath(r.URL.Query().Get("path")), Classes: snap.Classes.Classes, ChatEnabled: s.Chat != nil}
+	if aid, err := strconv.ParseUint(r.URL.Query().Get("agent"), 10, 64); err == nil && aid > 0 {
+		ag, err := s.Svc.Agent(a, uint(aid))
+		if err != nil || !s.Svc.CanEditAgent(a, ag) {
+			s.fail(w, r, orForbidden(err))
+			return
+		}
+		d.Agent, d.Path = ag, "step"
+	}
 	cid, c, err := s.resolveCampaignParam(a, r)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
 	d.CampaignID, d.Campaign = cid, c
-	chatBase := "/chat"
-	if c != nil {
-		chatBase = fmt.Sprintf("/c/%d/chat", c.ID)
-	}
-	d.HelpChooseURL = chatBase + "?ask=" + url.QueryEscape("Help me pick a Hidden Isle class. Here's what I'm thinking: ")
-	if a.IsSeer() {
+	if a.IsSeer() && d.Agent == nil {
 		s.DB.Where("role = ? AND active = ?", db.RolePlayer, true).Order("name").Find(&d.AllPlayers)
 	}
 	s.render(w, r, "create-agent", http.StatusOK, pageData{Title: "Choose a class", Error: takeFlash(w, r), Data: d})
+}
+
+func orForbidden(err error) error {
+	if err == nil {
+		return campaign.ErrForbidden
+	}
+	return err
 }
 
 func (s *Server) createClassSubmit(w http.ResponseWriter, r *http.Request) {
@@ -127,6 +137,10 @@ func (s *Server) createClassSubmit(w http.ResponseWriter, r *http.Request) {
 		s.done(w, r, fmt.Errorf("pick a class"), back)
 		return
 	}
+	if aid, err := strconv.ParseUint(r.FormValue("agent_id"), 10, 64); err == nil && aid > 0 {
+		s.changeClass(w, r, a, uint(aid), classID)
+		return
+	}
 	var owner *uint
 	if n, err := strconv.ParseUint(r.FormValue("owner_id"), 10, 64); err == nil && n > 0 {
 		o := uint(n)
@@ -134,41 +148,65 @@ func (s *Server) createClassSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	name := strings.TrimSpace(r.FormValue("name"))
 	if name == "" {
-		name = "New Agent"
+		name = unnamed
 	}
 	ag, err := s.Svc.NewAgent(a, uint(cid), name, classID, owner, campaign.Opts{})
 	if err != nil {
 		s.done(w, r, err, back)
 		return
 	}
-	switch path {
-	case "guided":
-		http.Redirect(w, r, guidedChatURL(ag, snap), http.StatusSeeOther)
-	case "manual":
-		http.Redirect(w, r, fmt.Sprintf("/agents/%d/wizard", ag.ID), http.StatusSeeOther)
-	default: // automatic
+	if path == "automatic" {
 		redirect, err := s.runAutomatic(a, ag, snap)
 		if err != nil {
 			s.done(w, r, err, fmt.Sprintf("/agents/%d/wizard", ag.ID))
 			return
 		}
 		http.Redirect(w, r, redirect, http.StatusSeeOther)
+		return
 	}
+	http.Redirect(w, r, fmt.Sprintf("/agents/%d/wizard", ag.ID), http.StatusSeeOther)
 }
 
-// guidedChatURL is where the Guided path sends the player once their class is chosen, with a
-// pre-filled first message.
-func guidedChatURL(ag *db.Agent, snap *gamedata.Snapshot) string {
-	base := "/chat"
-	if ag.CampaignID != 0 {
-		base = fmt.Sprintf("/c/%d/chat", ag.CampaignID)
+// changeClass is the wizard's Back from its first screen: the player picked a different class
+// for an Agent they're still creating (campaign.Service.ChangeClass says what that resets).
+func (s *Server) changeClass(w http.ResponseWriter, r *http.Request, a campaign.Actor, agentID uint, classID string) {
+	_, err := s.Svc.ChangeClass(a, agentID, classID, campaign.Opts{})
+	s.done(w, r, err, fmt.Sprintf("/agents/%d/wizard?step=name", agentID))
+}
+
+// createClassSuggest asks Claude, in the background, which classes fit what the player describes.
+func (s *Server) createClassSuggest(w http.ResponseWriter, r *http.Request) {
+	a := s.actor(r)
+	_ = r.ParseForm()
+	d := wizSuggestions{Exclude: r.Form["exclude"]}
+	snap := s.Data.Current()
+	switch {
+	case s.Chat == nil:
+		d.Error = "Suggestions need the in-app assistant, which isn't set up."
+	case snap == nil:
+		d.Error = friendly(campaign.ErrNoData)
+	case strings.TrimSpace(r.FormValue("hint")) == "":
+		d.Error = "Describe the character you have in mind, or how you like to play, first."
 	}
-	className := ag.Class
-	if c := snap.Class(ag.Class); c != nil {
-		className = c.Name
+	if d.Error != "" {
+		s.partial(w, "create-agent", "choices", d)
+		return
 	}
-	ask := fmt.Sprintf("I'm creating a new %s Agent. Let's start with a name themed to the class, then go through core self, burden, ideal, abilities, skills and the rest step by step (pp. 40-41).", className)
-	return base + "?ask=" + url.QueryEscape(ask)
+	req := chat.SuggestRequest{Kind: "class", Hint: r.FormValue("hint"), Exclude: d.Exclude}
+	for _, c := range snap.Classes.Classes {
+		req.Context = append(req.Context, fmt.Sprintf("%s (%s): %s", c.Name, c.Guild, c.Summary))
+	}
+	sugs, err := s.Chat.Suggest(r.Context(), a.User, req)
+	if err != nil {
+		d.Error = sentence(friendly(err))
+	}
+	for _, sg := range sugs {
+		if c, ok := wizChoiceFor("class", sg, nil, nil, snap, nil); ok {
+			d.Choices = append(d.Choices, c)
+			d.Exclude = append(d.Exclude, c.Label)
+		}
+	}
+	s.partial(w, "create-agent", "choices", d)
 }
 
 // runAutomatic runs the deterministic Automatic path (pp. 40-41) on a freshly created Agent and
@@ -209,7 +247,7 @@ func (s *Server) runAutomatic(a campaign.Actor, ag *db.Agent, snap *gamedata.Sna
 			return "", err
 		}
 	}
-	return fmt.Sprintf("/agents/%d/wizard?step=12", ag.ID), nil
+	return fmt.Sprintf("/agents/%d/wizard?step=done", ag.ID), nil
 }
 
 // fieldsPatch turns plain field→value pairs into a campaign.Patch (same shape the MCP tools and

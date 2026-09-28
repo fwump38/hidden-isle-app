@@ -54,7 +54,13 @@ func templateFuncs() template.FuncMap {
 			}
 			return m, nil
 		},
-		"list": func(s ...string) []string { return s },
+		"list":  func(s ...string) []string { return s },
+		"dict2": func(k, v string) map[string]string { return map[string]string{k: v} },
+		// fill encodes a wizard choice's form values for app.js's [data-fill] handler.
+		"fill": func(m map[string]string) string {
+			b, _ := json.Marshal(m)
+			return string(b)
+		},
 		// help renders a small "?" that shows text on hover, focus or tap.
 		"help": func(text string) template.HTML {
 			return template.HTML(`<i class="bi bi-question-circle hi-help" tabindex="0" role="button" data-bs-toggle="tooltip" data-bs-title="` +

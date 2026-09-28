@@ -4,72 +4,72 @@
 {{if not $d.Enabled}}
 <p class="text-body-secondary">The in-app assistant isn't set up yet. Ask the Seer to set <code>ANTHROPIC_API_KEY</code> to turn it on.</p>
 {{else}}
-<p class="small text-body-secondary">Ask about character creation or the rules. It can see your own Agent{{if $d.CampaignID}}, this campaign's public state{{end}} and the rules text — nothing Seer-only, and it never speaks for the Seer. It's a real Claude, on the Seer's own budget, so keep it to Hidden Isle questions.</p>
+<p class="small text-body-secondary">Ask about the rules or your Agent. It can see your own Agent{{if $d.CampaignID}}, this campaign's public state{{end}} and the rules text — nothing Seer-only, and it never speaks for the Seer. It's a real Claude, on the Seer's own budget, so keep it to Hidden Isle questions. Tip: the <i class="bi bi-stars"></i> Chat button in the top bar opens this beside any page.</p>
 {{if $d.ReadOnly}}<p class="small"><span class="badge text-bg-info">read-only</span> Reading {{$d.ViewingName}}'s chat.</p>{{end}}
-{{template "chat-body" $d}}
+<div class="hi-chat-page">{{template "chat-body" $d}}</div>
 {{end}}
 {{end}}
 
+{{/* chat-body is shared by the full page and the side panel (layout.html's #chat-drawer). */}}
 {{define "chat-body"}}
 {{$d := .}}
-<div id="chat-body">
-{{if $d.Error}}<div class="alert alert-danger py-2 small">{{$d.Error}}</div>{{end}}
+<div id="chat-body" class="hi-chat" data-chat-base="{{$d.Base}}">
+{{if not $d.Enabled}}
+<p class="small text-body-secondary p-3 mb-0">The in-app assistant isn't set up yet.</p>
+{{else}}
+{{if $d.Error}}<div class="alert alert-danger py-2 small mb-2">{{$d.Error}}</div>{{end}}
 
 {{if $d.Thread}}
-<div class="card mb-3">
-  <div class="card-body" style="max-height: 55vh; overflow-y: auto;">
-    {{if not $d.Messages}}<p class="small text-body-secondary mb-0">Say hello to get started.</p>{{end}}
-    {{range $d.Messages}}
-    <div class="mb-2 d-flex {{if eq .Role "user"}}justify-content-end{{end}}">
-      <div class="p-2 rounded {{if eq .Role "user"}}bg-primary-subtle{{else}}bg-body-secondary{{end}}" style="max-width: 85%;">
-        <div class="small text-body-secondary">{{if eq .Role "user"}}You{{else}}Assistant{{end}} · {{when .CreatedAt}}</div>
-        <div style="white-space: pre-wrap;">{{.Text}}</div>
-      </div>
+<div class="hi-chat-messages">
+  {{if not $d.Messages}}<p class="small text-body-secondary mb-0">Ask about a rule, an ability, or what your Agent could do next.</p>{{end}}
+  {{range $d.Messages}}
+  <div class="mb-2 d-flex {{if eq .Role "user"}}justify-content-end{{end}}">
+    <div class="p-2 rounded {{if eq .Role "user"}}bg-primary-subtle{{else}}bg-body-secondary{{end}}" style="max-width: 88%;">
+      <div class="small text-body-secondary">{{if eq .Role "user"}}You{{else}}Assistant{{end}} · {{when .CreatedAt}}</div>
+      <div style="white-space: pre-wrap;">{{.Text}}</div>
     </div>
-    {{end}}
   </div>
+  {{end}}
 </div>
 
 {{with $d.Pending}}
-<div class="card mb-3 border-info-subtle">
-  <div class="card-body">
-    <h2 class="h6">Suggested changes</h2>
-    <p class="small text-body-secondary">Nothing here has touched the sheet yet.</p>
-    {{range .}}
-    <div class="border rounded p-2 mb-2">
-      <div>{{.Summary}}</div>
-      {{with .Why}}<div class="small text-body-secondary">{{.}}</div>{{end}}
-      <details class="small text-body-secondary"><summary>fields</summary><pre class="mb-0">{{.Fields}}</pre></details>
-      {{if not $d.ReadOnly}}
-      <div class="mt-1">
-        <form class="d-inline" method="post" action="/chat/suggest/{{.ID}}/apply"><input type="hidden" name="back" value="{{$d.Base}}"><button class="btn btn-sm btn-success" type="submit">Apply</button></form>
-        <form class="d-inline" method="post" action="/chat/suggest/{{.ID}}/dismiss"><input type="hidden" name="back" value="{{$d.Base}}"><button class="btn btn-sm btn-outline-secondary" type="submit">Dismiss</button></form>
-      </div>
-      {{end}}
+<div class="border border-info-subtle rounded p-2 mb-2 small">
+  <div class="fw-semibold">Suggested changes <span class="fw-normal text-body-secondary">— nothing has touched the sheet yet.</span></div>
+  {{range .}}
+  <div class="border rounded p-2 mt-2">
+    <div>{{.Summary}}</div>
+    {{with .Why}}<div class="text-body-secondary">{{.}}</div>{{end}}
+    <details class="text-body-secondary"><summary>fields</summary><pre class="mb-0">{{.Fields}}</pre></details>
+    {{if not $d.ReadOnly}}
+    <div class="mt-1">
+      <form class="d-inline" method="post" action="/chat/suggest/{{.ID}}/apply" hx-post="/chat/suggest/{{.ID}}/apply" hx-target="closest .hi-chat" hx-select="#chat-body" hx-swap="outerHTML"><input type="hidden" name="back" value="{{$d.Base}}"><button class="btn btn-sm btn-success" type="submit">Apply</button></form>
+      <form class="d-inline" method="post" action="/chat/suggest/{{.ID}}/dismiss" hx-post="/chat/suggest/{{.ID}}/dismiss" hx-target="closest .hi-chat" hx-select="#chat-body" hx-swap="outerHTML"><input type="hidden" name="back" value="{{$d.Base}}"><button class="btn btn-sm btn-outline-secondary" type="submit">Dismiss</button></form>
     </div>
     {{end}}
   </div>
+  {{end}}
 </div>
 {{end}}
 
 {{if not $d.ReadOnly}}
-<form hx-post="{{$d.Base}}/send" hx-target="#chat-body" hx-swap="outerHTML" hx-indicator="#chat-sending" class="mb-3">
+<form class="hi-chat-send" hx-post="{{$d.Base}}/send" hx-target="closest .hi-chat" hx-select="#chat-body" hx-swap="outerHTML" hx-vals='js:{page: location.pathname}'>
   <div class="input-group">
-    <textarea class="form-control" name="message" rows="2" placeholder="Ask something…" required>{{$d.Prefill}}</textarea>
-    <button class="btn btn-primary" type="submit"><i class="bi bi-send"></i></button>
+    <textarea class="form-control" name="message" rows="2" placeholder="Ask something…" required aria-label="Message">{{$d.Prefill}}</textarea>
+    <button class="btn btn-primary" type="submit" aria-label="Send"><i class="bi bi-send"></i></button>
   </div>
-  <div id="chat-sending" class="htmx-indicator small text-body-secondary mt-1"><span class="spinner-border spinner-border-sm"></span> thinking…</div>
+  <div class="htmx-indicator small text-body-secondary mt-1"><span class="spinner-border spinner-border-sm"></span> thinking…</div>
 </form>
 
-<details class="small">
+<details class="small mt-2">
   <summary class="text-body-secondary">What it remembers about you here</summary>
-  <form hx-post="{{$d.Base}}/memory" hx-target="#chat-body" hx-swap="outerHTML" class="mt-2">
-    <textarea class="form-control form-control-sm" name="memory" rows="3" placeholder="Nothing yet.">{{$d.Thread.Memory}}</textarea>
+  <form hx-post="{{$d.Base}}/memory" hx-target="closest .hi-chat" hx-select="#chat-body" hx-swap="outerHTML" class="mt-2">
+    <textarea class="form-control form-control-sm" name="memory" rows="3" placeholder="Nothing yet." aria-label="Memory">{{$d.Thread.Memory}}</textarea>
     <button class="btn btn-sm btn-outline-secondary mt-1" type="submit">Save</button>
   </form>
 </details>
 {{else if $d.Thread.Memory}}
 <p class="small text-body-secondary">Remembered: {{$d.Thread.Memory}}</p>
+{{end}}
 {{end}}
 {{end}}
 </div>

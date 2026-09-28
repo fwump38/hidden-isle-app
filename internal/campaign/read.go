@@ -1,6 +1,7 @@
 package campaign
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -121,6 +122,72 @@ func (s *Service) NewAgent(a Actor, campaignID uint, name, class string, ownerID
 		o.Reason = "new Agent"
 	}
 	return ag, s.Create(a, "agent", ag, o)
+}
+
+// ChangeClass switches an Agent to another class: the new class's pre-filled skills replace the
+// old ones (p. 40), and abilities and proficiencies, which came from the old class, are cleared.
+// Class is Seer-only once an Agent is in play, but its owner may still change it while the Agent
+// is being created: nothing earned or marked in play yet (XP, tracks, harm, vices, virtues).
+func (s *Service) ChangeClass(a Actor, agentID uint, class string, o Opts) (*db.Agent, error) {
+	snap, err := s.snap()
+	if err != nil {
+		return nil, err
+	}
+	ag, err := s.Agent(a, agentID)
+	if err != nil {
+		return nil, err
+	}
+	if !s.CanEditAgent(a, ag) {
+		return nil, ErrForbidden
+	}
+	c := snap.Class(class)
+	if c == nil {
+		return nil, fmt.Errorf("no class %q", class)
+	}
+	if c.ID == ag.Class {
+		return ag, nil
+	}
+	if !a.IsSeer() && !inCreation(ag) {
+		return nil, fmt.Errorf("only the Seer can change the class of an Agent in play: %w", ErrForbidden)
+	}
+	skills := map[string]int{}
+	for sk, n := range c.PrefilledSkills {
+		skills[sk] = n
+	}
+	patch := Patch{}
+	for k, v := range map[string]any{"class": c.ID, "skills": skills,
+		"abilities": []db.AgentAbility{}, "proficiencies": []db.AgentProficiency{}} {
+		b, err := json.Marshal(v)
+		if err != nil {
+			return nil, err
+		}
+		patch[k] = b
+	}
+	if o.Reason == "" {
+		o.Reason = "changed class during creation (p. 40)"
+	}
+	o.allowClass = true
+	if _, err := s.Update(a, "agent", ag.ID, patch, o); err != nil {
+		return nil, err
+	}
+	return s.Agent(a, agentID)
+}
+
+// inCreation says whether an Agent has nothing yet from play: no XP, nothing on its tracks,
+// no harm, vices or virtues.
+func inCreation(ag *db.Agent) bool {
+	if ag.XPSwords+ag.XPWands+ag.XPCups+ag.XPPentacles+ag.XPAbility+ag.BurdenTrack+ag.IdealTrack != 0 {
+		return false
+	}
+	if len(ag.Vices)+len(ag.Virtues)+len(ag.FulfilledVirtues) != 0 {
+		return false
+	}
+	for _, marks := range ag.Harm {
+		if len(marks) > 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // MyAgents lists the actor's own Agents, in every campaign and none.

@@ -23,7 +23,7 @@
       <div class="collapse navbar-collapse" id="nav">
         <ul class="navbar-nav me-auto">
           <li class="nav-item"><a class="nav-link" href="/"><i class="bi bi-house"></i> Home</a></li>
-          {{if .ChatEnabled}}<li class="nav-item"><a class="nav-link" href="/chat"><i class="bi bi-stars"></i> Chat</a></li>{{end}}
+          {{if .ChatEnabled}}<li class="nav-item"><a class="nav-link" href="/chat" data-chat-toggle aria-controls="chat-drawer" aria-expanded="false"><i class="bi bi-stars"></i> Chat</a></li>{{end}}
           {{if .User.IsSeer}}<li class="nav-item"><a class="nav-link" href="/admin"><i class="bi bi-gear"></i> Admin</a></li>{{end}}
         </ul>
         <div class="d-flex align-items-center gap-2">
@@ -38,11 +38,23 @@
       {{end}}
     </div>
   </nav>
-  <main class="container pb-5" id="main"{{if .Live}} data-live="/c/{{.Nav.Campaign.ID}}/live" data-user="{{.User.ID}}"{{end}} hx-boost="true" hx-target="#main" hx-select="#main" hx-swap="outerHTML show:none">
+  <main class="container pb-5" id="main"{{if and .User .ChatEnabled}}{{if and .Nav .Nav.Campaign}} data-chat-base="/c/{{.Nav.Campaign.ID}}/chat" data-chat-label="{{.Nav.Campaign.Name}}"{{else}} data-chat-base="/chat" data-chat-label="Outside a campaign"{{end}}{{end}}{{if .Live}} data-live="/c/{{.Nav.Campaign.ID}}/live" data-user="{{.User.ID}}"{{end}} hx-boost="true" hx-target="#main" hx-select="#main" hx-swap="outerHTML show:none">
     {{with .Nav}}{{if .Campaign}}{{template "campaignnav" $}}{{end}}{{end}}
     {{template "flash" .}}
     {{template "content" .}}
   </main>
+  {{if and .User .ChatEnabled}}
+  <aside id="chat-drawer" class="hi-chat-drawer d-print-none" aria-label="Chat" hidden>
+    <div class="hi-chat-head">
+      <i class="bi bi-stars text-warning"></i>
+      <div class="flex-grow-1 lh-sm"><strong>Chat</strong><div class="small text-body-secondary text-truncate" id="chat-drawer-where"></div></div>
+      <a class="btn btn-sm btn-outline-secondary" id="chat-drawer-full" href="/chat" title="Open as a full page" aria-label="Open as a full page"><i class="bi bi-arrows-angle-expand"></i></a>
+      <button type="button" class="btn-close" data-chat-close aria-label="Close chat"></button>
+    </div>
+    <div id="chat-drawer-body" class="hi-chat-drawer-body"><p class="small text-body-secondary mb-0">Loading…</p></div>
+  </aside>
+  <button type="button" class="btn btn-primary rounded-pill shadow hi-chat-fab d-print-none" data-chat-toggle aria-controls="chat-drawer" aria-expanded="false"><i class="bi bi-stars"></i> Chat</button>
+  {{end}}
   <div class="toast-container position-fixed bottom-0 end-0 p-3 d-print-none" id="toasts"></div>
   <div class="modal fade" id="handout-modal" tabindex="-1" aria-labelledby="handout-title" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">

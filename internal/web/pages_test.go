@@ -58,8 +58,24 @@ func (s *site) postBody(user, path string, form url.Values) (int, string) {
 	return w.Code, string(b)
 }
 
-func (s *site) doPost(user, path string, form url.Values) *httptest.ResponseRecorder {
+// postLocation submits a form as user and returns the status and where it redirects.
+func (s *site) postLocation(user, path string, form url.Values) (int, string) {
+	w := s.doPost(user, path, form)
+	return w.Code, w.Header().Get("Location")
+}
+
+// htmxPost submits a form the way htmx does and returns the status, body and response headers.
+func (s *site) htmxPost(user, path string, form url.Values) (int, string, http.Header) {
+	w := s.doPost(user, path, form, "HX-Request", "true")
+	b, _ := io.ReadAll(w.Result().Body)
+	return w.Code, string(b), w.Header()
+}
+
+func (s *site) doPost(user, path string, form url.Values, headers ...string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
+	for i := 0; i+1 < len(headers); i += 2 {
+		r.Header.Set(headers[i], headers[i+1])
+	}
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	r.Header.Set("Sec-Fetch-Site", "same-origin")
 	r.RemoteAddr = "192.168.1.10:1234"
@@ -470,8 +486,9 @@ func TestCreationWizard(t *testing.T) {
 		t.Errorf("another player opened the wizard: %d", code)
 	}
 
+	// Named on the quick form already, so the wizard skips its Name step.
 	if code, body := st.get("Ana", "/agents/1/wizard"); code != http.StatusOK || !strings.Contains(body, "As a child") {
-		t.Fatalf("wizard should start at step 1: %d", code)
+		t.Fatalf("wizard should start at the childhood step: %d", code)
 	}
 
 	ok(st.post("Ana", "/agents/1", url.Values{"set.child_phrase": {"Never looking back"}, "set.child_card": {"The Fool"}, "back": {"/agents/1/wizard?step=2"}}))
@@ -496,11 +513,11 @@ func TestCreationWizard(t *testing.T) {
 
 	// Prowler pre-fills Slip 2, Finesse 1 (3 points); add 4 more (7 total, cap 2/skill).
 	ok(st.post("Ana", "/agents/1", url.Values{"skill.Skirmish": {"2"}, "skill.Convince": {"2"}, "back": {"/agents/1/wizard?step=6"}}))
-	if _, body := st.get("Ana", "/agents/1/wizard?step=6"); !strings.Contains(body, "Ready to continue") {
+	if _, body := st.get("Ana", "/agents/1/wizard?step=skills"); !strings.Contains(body, "7 of 7 points used") {
 		t.Fatal("7 points should satisfy the skill step")
 	}
-	// Prowler has no magic: should skip straight to step 8.
-	if _, body := st.get("Ana", "/agents/1/wizard"); !strings.Contains(body, "Name, look, age, culture") {
+	// Prowler has no magic: should skip straight to the look step.
+	if _, body := st.get("Ana", "/agents/1/wizard"); !strings.Contains(body, "Look, age and culture") {
 		t.Fatal("non-magical class should skip the magic step")
 	}
 	ok(st.post("Ana", "/agents/1", url.Values{"set.name": {"Ines"}, "set.age": {"24"}, "set.culture": {"Lisbon"}, "set.look": {"Sharp-eyed"}, "back": {"/agents/1/wizard?step=9"}}))
@@ -513,7 +530,7 @@ func TestCreationWizard(t *testing.T) {
 	ok(st.post("Ana", "/agents/1/contacts", url.Values{"set.kind": {"Dioscorian"}, "set.name": {"Old Marco"}, "set.affection": {"1"}, "back": {"/agents/1/wizard?step=11"}}))
 
 	if _, body := st.get("Ana", "/agents/1/wizard"); !strings.Contains(body, "is ready") || !strings.Contains(body, "Mother Agnese") {
-		t.Fatal("should finish at step 12 with a transcription checklist")
+		t.Fatal("should finish on the review step with a transcription checklist")
 	}
 }
 
@@ -538,23 +555,23 @@ func TestWizardMagicStepAndDraw(t *testing.T) {
 	form(url.Values{"ability.custom_name": {"Extra"}, "ability.custom_text": {"test"}})
 	form(url.Values{"skill.Skirmish": {"2"}, "skill.Convince": {"2"}, "skill.Study": {"2"}}) // Unleash1+Channel2 prefilled + 6 = 9, over target but fine for this test
 
-	if _, body := st.get("Ana", "/agents/1/wizard?step=7"); !strings.Contains(body, "Occultists, Illusionists, Siphoners") {
+	if _, body := st.get("Ana", "/agents/1/wizard?step=magic"); !strings.Contains(body, "Occultists, Illusionists, Siphoners") {
 		t.Fatalf("occultist should see the magic step prompt: %s", body)
 	}
 	form(url.Values{"prof.add": {"Illusion"}, "prof.rank": {"Adept"}})
-	if _, body := st.get("Ana", "/agents/1/wizard?step=7"); !strings.Contains(body, "Illusion") || !strings.Contains(body, "Continue") {
+	if _, body := st.get("Ana", "/agents/1/wizard?step=magic"); !strings.Contains(body, "Illusion") || !strings.Contains(body, "Continue") {
 		t.Fatal("proficiency should be listed with a continue link")
 	}
 
-	// Digital draw: returns a card and re-renders the current step.
-	r := httptest.NewRequest(http.MethodPost, "/agents/1/wizard/draw", strings.NewReader(url.Values{"deck": {"vision"}, "count": {"1"}, "step": {"3"}, "for": {"burden"}}.Encode()))
+	// Digital draw: returns a card and re-renders that step's card picker with its options.
+	r := httptest.NewRequest(http.MethodPost, "/agents/1/wizard/draw", strings.NewReader(url.Values{"for": {"burden"}}.Encode()))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	r.Header.Set("Sec-Fetch-Site", "same-origin")
 	r.RemoteAddr = "192.168.1.10:1"
 	r.AddCookie(st.cookies["Ana"])
 	w := httptest.NewRecorder()
 	st.h.ServeHTTP(w, r)
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "drawn:") {
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `id="card-burden"`) || !strings.Contains(w.Body.String(), "TestBurden") {
 		t.Errorf("digital draw: %d %s", w.Code, w.Body.String())
 	}
 }

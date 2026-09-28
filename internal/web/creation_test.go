@@ -10,18 +10,17 @@ import (
 )
 
 // TestCreateAgentFlowAutomatic exercises the richer creation flow end to end: the path chooser
-// offers Automatic and Manual (and Guided when chat is on) before anything else, choosing a
-// class creates the Agent, and Automatic fills in the whole sheet plus both contacts through the
-// normal validated paths.
+// offers Step by step and Automatic before anything else, choosing a class creates the Agent, and
+// Automatic fills in the whole sheet plus both contacts through the normal validated paths.
 func TestCreateAgentFlowAutomatic(t *testing.T) {
 	st, svc := newSite(t)
 
 	code, body := st.get("Ana", "/agents/create")
-	if code != 200 || !strings.Contains(body, "Automatic") || !strings.Contains(body, "Manual") {
+	if code != 200 || !strings.Contains(body, "Automatic") || !strings.Contains(body, "Step by step") {
 		t.Fatalf("path chooser: %d %q", code, body)
 	}
-	if strings.Contains(body, "Guided") {
-		t.Error("chat is off in this test; the path chooser shouldn't offer Guided")
+	if strings.Contains(body, "Guided") || strings.Contains(body, "chat") {
+		t.Error("creation no longer goes through the chat; the path chooser shouldn't mention it")
 	}
 
 	code, body = st.get("Ana", "/agents/create/class?path=automatic")
@@ -31,10 +30,10 @@ func TestCreateAgentFlowAutomatic(t *testing.T) {
 	if !strings.Contains(body, "Surprise me") {
 		t.Error("the automatic class page should offer a random draw")
 	}
-	if strings.Contains(body, "Help me choose") {
-		t.Error("chat is off in this test; the class page shouldn't offer it")
+	if strings.Contains(body, "Suggest a class") {
+		t.Error("chat is off in this test; the class page shouldn't offer suggestions")
 	}
-	if strings.Contains(body, "ca-name") {
+	if strings.Contains(body, `name="name"`) {
 		t.Error("automatic draws its own name; the class page shouldn't ask for one")
 	}
 
@@ -59,9 +58,9 @@ func TestCreateAgentFlowAutomatic(t *testing.T) {
 
 	// The sheet stores only ability ids; the wizard's review step must resolve them to their
 	// names from the class data, not show them blank (a real bug caught by this smoke test).
-	code, body = st.get("Ana", "/agents/1/wizard?step=12")
+	code, body = st.get("Ana", "/agents/1/wizard?step=done")
 	if code != 200 || strings.Contains(body, "Abilities: ,") {
-		t.Fatalf("step 12 didn't resolve ability names: %d %q", code, body)
+		t.Fatalf("the review step didn't resolve ability names: %d %q", code, body)
 	}
 	for _, ab := range ag.Abilities {
 		found := false
@@ -135,52 +134,78 @@ func TestCreateAgentRandomClass(t *testing.T) {
 	}
 }
 
-// TestCreateAgentManual covers the Manual path: its class page has neither the random draw nor
-// chat's "help me choose" (there's no generator or chat to hand off to), and choosing a class
-// creates the Agent, pre-filled skills and all, and sends the player straight to the wizard.
-func TestCreateAgentManual(t *testing.T) {
+// TestCreateAgentStepByStep covers the step-by-step path: its class page has neither the random
+// draw nor a name field (naming is the wizard's first screen, after the class), and choosing a
+// class creates the Agent, pre-filled skills and all, and sends the player straight to the wizard.
+// The old Guided and Manual links land on the same path.
+func TestCreateAgentStepByStep(t *testing.T) {
 	st, svc := newSite(t)
-	code, body := st.get("Ana", "/agents/create/class?path=manual")
-	if code != 200 || !strings.Contains(body, "Occultist") {
-		t.Fatalf("class select page: %d %q", code, body)
-	}
-	if strings.Contains(body, "Surprise me") {
-		t.Error("the manual class page shouldn't offer a random draw")
-	}
-	if !strings.Contains(body, "ca-name") {
-		t.Error("manual has no other prompt for a name; the class page should ask for one")
+	for _, path := range []string{"step", "manual", "guided"} {
+		code, body := st.get("Ana", "/agents/create/class?path="+path)
+		if code != 200 || !strings.Contains(body, "Occultist") {
+			t.Fatalf("class select page (%s): %d %q", path, code, body)
+		}
+		if strings.Contains(body, "Surprise me") {
+			t.Errorf("the %s class page shouldn't offer a random draw", path)
+		}
+		if strings.Contains(body, `name="name"`) {
+			t.Errorf("the %s class page shouldn't ask for a name; the wizard does, after the class", path)
+		}
 	}
 
-	code, flash := st.post("Ana", "/agents/create/class", url.Values{"path": {"manual"}, "name": {"Ines"}, "class": {"occultist"}, "campaign_id": {"0"}})
-	if code != 303 || flash != "" {
-		t.Fatalf("manual: %d %q", code, flash)
+	code, loc := st.postLocation("Ana", "/agents/create/class", url.Values{"path": {"step"}, "class": {"occultist"}, "campaign_id": {"0"}})
+	if code != 303 || loc != "/agents/1/wizard" {
+		t.Fatalf("step by step should go straight to the wizard, not the chat: %d %q", code, loc)
 	}
 	var ag db.Agent
 	if err := svc.DB.First(&ag, 1).Error; err != nil {
 		t.Fatal(err)
 	}
-	if ag.Class != "occultist" {
-		t.Errorf("class = %q, want occultist", ag.Class)
+	if ag.Class != "occultist" || ag.Name != "New Agent" {
+		t.Errorf("agent = %q %q, want an unnamed occultist", ag.Name, ag.Class)
 	}
 	if ag.Skills["Channel"] != 2 || ag.Skills["Unleash"] != 1 {
-		t.Errorf("manual creation should pre-fill the class's skills, got %v", ag.Skills)
+		t.Errorf("creation should pre-fill the class's skills, got %v", ag.Skills)
 	}
-	code, body = st.get("Ana", "/agents/1/wizard")
-	if code != 200 || !strings.Contains(body, "Childhood") {
-		t.Fatalf("wizard should open on childhood, class already set: %d %q", code, body)
+	code, body := st.get("Ana", "/agents/1/wizard")
+	if code != 200 || !strings.Contains(body, "called?") || !strings.Contains(body, "Change class") {
+		t.Fatalf("wizard should open on the Name step, with a way back to the class: %d %q", code, body)
 	}
 }
 
-// TestCreateAgentGuidedDefersNaming covers the Guided path: naming comes after class selection,
-// in chat, so the suggestions can be themed to the class instead of asked for blind up front.
-func TestCreateAgentGuidedDefersNaming(t *testing.T) {
-	st, _ := newSite(t)
-	code, body := st.get("Ana", "/agents/create/class?path=guided")
-	if code != 200 || !strings.Contains(body, "Occultist") {
-		t.Fatalf("class select page: %d %q", code, body)
+// TestCreateAgentChangeClassFromWizard covers Back from the wizard's first screen: the class page
+// for an existing Agent, where picking another class swaps in its pre-filled skills and clears
+// abilities chosen for the old one.
+func TestCreateAgentChangeClassFromWizard(t *testing.T) {
+	st, svc := newSite(t)
+	if code, _ := st.post("Ana", "/agents/create/class", url.Values{"path": {"step"}, "class": {"occultist"}, "campaign_id": {"0"}}); code != 303 {
+		t.Fatal("create")
 	}
-	if strings.Contains(body, "ca-name") {
-		t.Error("guided defers naming to chat; the class page shouldn't ask for one")
+	if code, flash := st.post("Ana", "/agents/1", url.Values{"ability.add": {"evil-eye"}}); code != 303 || flash != "" {
+		t.Fatalf("add ability: %d %q", code, flash)
+	}
+	code, body := st.get("Ana", "/agents/create/class?agent=1&campaign_id=0")
+	if code != 200 || !strings.Contains(body, `name="agent_id" value="1"`) || !strings.Contains(body, "Switch to Prowler") {
+		t.Fatalf("change-class page: %d %q", code, body)
+	}
+	if code, _ := st.get("Bram", "/agents/create/class?agent=1"); code == 200 {
+		t.Error("another player shouldn't be able to change Ana's Agent's class")
+	}
+	code, loc := st.postLocation("Ana", "/agents/create/class", url.Values{"path": {"step"}, "class": {"prowler"}, "agent_id": {"1"}})
+	if code != 303 || loc != "/agents/1/wizard?step=name" {
+		t.Fatalf("change class: %d %q", code, loc)
+	}
+	var ag db.Agent
+	if err := svc.DB.First(&ag, 1).Error; err != nil {
+		t.Fatal(err)
+	}
+	if ag.Class != "prowler" || ag.Skills["Slip"] != 2 || ag.Skills["Channel"] != 0 || len(ag.Abilities) != 0 {
+		t.Errorf("after the change: class %q skills %v abilities %v", ag.Class, ag.Skills, ag.Abilities)
+	}
+	var n int64
+	svc.DB.Model(&db.Agent{}).Count(&n)
+	if n != 1 {
+		t.Errorf("changing class created another Agent (%d total)", n)
 	}
 }
 

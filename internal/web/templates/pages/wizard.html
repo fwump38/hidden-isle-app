@@ -2,12 +2,13 @@
 
 {{define "wizard-body"}}
 {{$d := .}}{{$a := $d.Agent}}{{$id := $a.ID}}{{$act := printf "/agents/%d" $id}}
+{{$sug := printf "/agents/%d/wizard/suggest" $id}}
 <datalist id="vision-cards">{{range $d.Vision}}<option value="{{.}}">{{end}}</datalist>
 
 <div id="wizard-body">
 <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
   <div>
-    <h1 class="h4 mb-0">Creating {{$a.Name}}</h1>
+    <h1 class="h4 mb-0">{{if eq $a.Name "New Agent"}}Creating a new Agent{{else}}Creating {{$a.Name}}{{end}}</h1>
     <div class="text-body-secondary small">{{with $d.Class}}{{.Name}} · {{.Guild}}{{end}}{{if $d.Solo}} · <span class="badge text-bg-secondary">Solo character (p. 96)</span>{{end}}</div>
   </div>
   <a class="btn btn-sm btn-outline-light" href="{{$act}}"><i class="bi bi-card-list"></i> Full sheet</a>
@@ -17,132 +18,140 @@
 
 <nav class="mb-3 d-print-none" aria-label="Creation steps">
   <ol class="nav nav-pills small hi-tabs flex-wrap">
-    {{range $d.Steps}}
+    {{range $d.Steps}}{{if or (ne .Key "magic") $d.NeedsMagic}}
     <li class="nav-item">
-      <a class="nav-link {{if eq .N $d.Step}}active{{else if index $d.Done .N}}text-success{{end}}" href="/agents/{{$id}}/wizard?step={{.N}}">
-        {{if index $d.Done .N}}<i class="bi bi-check-circle-fill"></i>{{else}}{{.N}}.{{end}} {{.Title}}
+      <a class="nav-link {{if eq .N $d.Step}}active{{else if index $d.Done .N}}text-success{{end}}" href="{{$d.URL .Key}}"{{if eq .N $d.Step}} aria-current="step"{{end}}>
+        {{if index $d.Done .N}}<i class="bi bi-check-circle-fill"></i>{{end}} {{.Title}}
       </a>
     </li>
-    {{end}}
+    {{end}}{{end}}
   </ol>
 </nav>
 
-{{/* ================= Step 1: childhood ================= */}}
-{{if eq $d.Step 1}}
-<div class="card"><div class="card-body">
-  <h2 class="h5">As a child, I solved problems by… <span class="small text-body-secondary fw-normal">(p. 40)</span></h2>
-  <p class="small text-body-secondary">Draw a vision card and pick one of its three phrases, or write your own. If the card doesn't fit, draw again.</p>
-  <form method="post" action="/agents/{{$id}}/wizard/draw" hx-post="/agents/{{$id}}/wizard/draw" hx-target="#wizard-body" hx-select="#wizard-body" hx-swap="outerHTML">
-    <input type="hidden" name="deck" value="vision"><input type="hidden" name="count" value="1"><input type="hidden" name="step" value="1"><input type="hidden" name="for" value="child">
-    <button class="btn btn-sm btn-outline-secondary mb-2" type="submit"><i class="bi bi-shuffle"></i> Draw a card digitally</button>
-  </form>
-  <form method="post" action="{{$act}}" class="row g-2">
-    <input type="hidden" name="back" value="/agents/{{$id}}/wizard?step=2">
-    <div class="col-12 col-md-5">
-      <label class="form-label small mb-0" for="cc-card">Card{{if and $d.Drawn (eq $d.DrawFor "child")}} (drawn: {{index $d.Drawn 0}}){{end}}</label>
-      <input class="form-control form-control-sm" id="cc-card" name="set.child_card" list="vision-cards" value="{{if and $d.Drawn (eq $d.DrawFor "child")}}{{index $d.Drawn 0}}{{else}}{{$a.ChildCard}}{{end}}" placeholder="e.g. The Chariot">
-    </div>
-    <div class="col-12 col-md-7">
-      <label class="form-label small mb-0" for="cc-phrase">Phrase</label>
-      <input class="form-control form-control-sm" id="cc-phrase" name="set.child_phrase" value="{{$a.ChildPhrase}}" placeholder="Pick one of the card's phrases, or write your own">
-    </div>
-    <div class="col-12"><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-arrow-right"></i> Save and continue</button></div>
-  </form>
-  <p class="small text-body-secondary mt-2 mb-0">Not sure what your card offers? Look it up on the <a href="#" data-bs-toggle="collapse" data-bs-target="#cc-guide">Vision Guide</a> below, or ask in chat.</p>
-</div></div>
+{{/* ================= Name ================= */}}
+{{if eq $d.Key "name"}}
+<form class="card" method="post" action="{{$act}}"><div class="card-body">
+  <input type="hidden" name="back" value="{{$d.Next}}">
+  <input type="hidden" name="set.culture" value="{{$a.Culture}}">
+  <h2 class="h5">What's your {{with $d.Class}}{{.Name}}{{else}}Agent{{end}} called?</h2>
+  <p class="small text-body-secondary">Have a name in mind? Type it in. Or pick where they come from to see names from that land, or ask for ideas. You can change it any time.</p>
+  <label class="form-label small mb-0" for="w-name">Name</label>
+  <input class="form-control" id="w-name" name="set.name" value="{{if ne $a.Name "New Agent"}}{{$a.Name}}{{end}}" placeholder="Their name" required autocomplete="off">
+  {{if $d.Regions}}
+  <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
+    <label class="small text-body-secondary" for="name-region">Names from</label>
+    <select class="form-select form-select-sm w-auto" id="name-region" name="name_region"
+      hx-get="/agents/{{$id}}/wizard/names" hx-trigger="change" hx-target="#name-choices" hx-select="unset" hx-swap="innerHTML" hx-include="#name-region">
+      <option value="">choose a land…</option>
+      {{range $d.Regions}}<option value="{{.}}">{{.}}</option>{{end}}
+    </select>
+    <button class="btn btn-sm btn-outline-secondary" type="button" hx-get="/agents/{{$id}}/wizard/names" hx-include="#name-region" hx-target="#name-choices" hx-select="unset" hx-swap="innerHTML"><i class="bi bi-arrow-repeat"></i> More names</button>
+  </div>
+  <div id="name-choices" class="d-flex flex-wrap gap-2 mt-2"></div>
+  {{end}}
+  {{if $d.ChatEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "name" "Label" "Suggest names" "Placeholder" "Describe them, e.g. a Venetian widow with a sharp tongue")}}{{end}}
+  <div class="hi-wiz-foot">
+    <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Change class</a>
+    <button class="btn btn-primary" type="submit">Save and continue <i class="bi bi-arrow-right"></i></button>
+  </div>
+</div></form>
 {{end}}
 
-{{/* ================= Step 2: adulthood ================= */}}
-{{if eq $d.Step 2}}
-<div class="card"><div class="card-body">
-  <h2 class="h5">As an adult, I survived / flourished by… <span class="small text-body-secondary fw-normal">(p. 40)</span></h2>
-  <p class="small text-body-secondary">Draw again, and choose whether you <em>survived</em> or <em>flourished</em>.</p>
-  <form method="post" action="/agents/{{$id}}/wizard/draw" hx-post="/agents/{{$id}}/wizard/draw" hx-target="#wizard-body" hx-select="#wizard-body" hx-swap="outerHTML">
-    <input type="hidden" name="deck" value="vision"><input type="hidden" name="count" value="1"><input type="hidden" name="step" value="2"><input type="hidden" name="for" value="adult">
-    <button class="btn btn-sm btn-outline-secondary mb-2" type="submit"><i class="bi bi-shuffle"></i> Draw a card digitally</button>
-  </form>
-  <form method="post" action="{{$act}}" class="row g-2">
-    <input type="hidden" name="back" value="/agents/{{$id}}/wizard?step=3">
-    <div class="col-12 col-md-5">
-      <label class="form-label small mb-0" for="ac-card">Card{{if and $d.Drawn (eq $d.DrawFor "adult")}} (drawn: {{index $d.Drawn 0}}){{end}}</label>
-      <input class="form-control form-control-sm" id="ac-card" name="set.adult_card" list="vision-cards" value="{{if and $d.Drawn (eq $d.DrawFor "adult")}}{{index $d.Drawn 0}}{{else}}{{$a.AdultCard}}{{end}}">
-    </div>
-    <div class="col-6 col-md-3">
-      <label class="form-label small mb-0" for="ac-verb">I…</label>
-      <select class="form-select form-select-sm" id="ac-verb" name="set.adult_verb">
+{{/* ================= Core self: childhood ================= */}}
+{{if eq $d.Key "child"}}
+<form class="card" method="post" action="{{$act}}"><div class="card-body">
+  <input type="hidden" name="back" value="{{$d.Next}}">
+  <h2 class="h5">Core self: as a child, I solved problems by… <span class="small text-body-secondary fw-normal">(p. 40)</span></h2>
+  <p class="small text-body-secondary">Draw a card from the vision deck (the Major Arcana and Courts) and enter it below, or let the app draw one. Each card offers three phrases: pick one, write your own, or draw again if nothing fits.</p>
+  {{template "wizard-card" ($d.Card "child")}}
+  <label class="form-label small mb-0 mt-3" for="cc-phrase">As a child, I solved problems by…</label>
+  <input class="form-control" id="cc-phrase" name="set.child_phrase" value="{{$a.ChildPhrase}}" placeholder="Pick a phrase above, or write your own" required autocomplete="off">
+  {{if $d.ChatEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "child" "Label" "More ideas" "Placeholder" "Or describe what you're thinking, e.g. talking my way out of things")}}{{end}}
+  <div class="hi-wiz-foot">
+    <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
+    <button class="btn btn-primary" type="submit">Save and continue <i class="bi bi-arrow-right"></i></button>
+  </div>
+</div></form>
+{{end}}
+
+{{/* ================= Core self: adulthood ================= */}}
+{{if eq $d.Key "adult"}}
+<form class="card" method="post" action="{{$act}}"><div class="card-body">
+  <input type="hidden" name="back" value="{{$d.Next}}">
+  <h2 class="h5">Core self: as an adult, I survived or flourished by… <span class="small text-body-secondary fw-normal">(p. 40)</span></h2>
+  <p class="small text-body-secondary">Draw another vision card. Pick one of its phrases or write your own, and choose whether you <em>survived</em> or <em>flourished</em>.</p>
+  {{with $a.ChildPhrase}}<p class="small mb-2">As a child, you solved problems by <em>{{.}}</em>.</p>{{end}}
+  {{template "wizard-card" ($d.Card "adult")}}
+  <div class="row g-2 mt-2">
+    <div class="col-12 col-sm-4">
+      <label class="form-label small mb-0" for="ac-verb">As an adult, I…</label>
+      <select class="form-select" id="ac-verb" name="set.adult_verb" required>
         <option value="" {{if eq $a.AdultVerb ""}}selected{{end}}>choose…</option>
         <option value="survived" {{if eq $a.AdultVerb "survived"}}selected{{end}}>survived</option>
         <option value="flourished" {{if eq $a.AdultVerb "flourished"}}selected{{end}}>flourished</option>
       </select>
     </div>
-    <div class="col-6 col-md-4">
+    <div class="col-12 col-sm-8">
       <label class="form-label small mb-0" for="ac-phrase">by…</label>
-      <input class="form-control form-control-sm" id="ac-phrase" name="set.adult_phrase" value="{{$a.AdultPhrase}}">
+      <input class="form-control" id="ac-phrase" name="set.adult_phrase" value="{{$a.AdultPhrase}}" placeholder="Pick a phrase above, or write your own" required autocomplete="off">
     </div>
-    <div class="col-12"><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-arrow-right"></i> Save and continue</button></div>
-  </form>
-</div></div>
+  </div>
+  {{if $d.ChatEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "adult" "Label" "More ideas" "Placeholder" "Or describe what you're thinking")}}{{end}}
+  <div class="hi-wiz-foot">
+    <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
+    <button class="btn btn-primary" type="submit">Save and continue <i class="bi bi-arrow-right"></i></button>
+  </div>
+</div></form>
 {{end}}
 
-{{/* ================= Step 3: burden ================= */}}
-{{if eq $d.Step 3}}
-<div class="card"><div class="card-body">
-  <h2 class="h5">Burden <span class="small text-body-secondary fw-normal">(p. 41)</span></h2>
-  <p class="small text-body-secondary">An adjective or -ing verb (e.g. "Reckless", "Doubting"). Write it if you know it, or draw a card and use its Burdens word.</p>
-  <form method="post" action="/agents/{{$id}}/wizard/draw" hx-post="/agents/{{$id}}/wizard/draw" hx-target="#wizard-body" hx-select="#wizard-body" hx-swap="outerHTML">
-    <input type="hidden" name="deck" value="vision"><input type="hidden" name="count" value="1"><input type="hidden" name="step" value="3"><input type="hidden" name="for" value="burden">
-    <button class="btn btn-sm btn-outline-secondary mb-2" type="submit"><i class="bi bi-shuffle"></i> Draw a card digitally</button>
-  </form>
-  <form method="post" action="{{$act}}" class="row g-2">
-    <input type="hidden" name="back" value="/agents/{{$id}}/wizard?step=4">
-    <div class="col-12 col-md-5">
-      <label class="form-label small mb-0" for="b-card">Card{{if and $d.Drawn (eq $d.DrawFor "burden")}} (drawn: {{index $d.Drawn 0}}){{end}}</label>
-      <input class="form-control form-control-sm" id="b-card" name="set.burden_card" list="vision-cards" value="{{if and $d.Drawn (eq $d.DrawFor "burden")}}{{index $d.Drawn 0}}{{else}}{{$a.BurdenCard}}{{end}}">
-    </div>
-    <div class="col-12 col-md-7">
-      <label class="form-label small mb-0" for="b-word">Burden</label>
-      <input class="form-control form-control-sm" id="b-word" name="set.burden" value="{{$a.Burden}}" placeholder="e.g. Reckless">
-    </div>
-    <div class="col-12"><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-arrow-right"></i> Save and continue</button></div>
-  </form>
-</div></div>
+{{/* ================= Burden ================= */}}
+{{if eq $d.Key "burden"}}
+<form class="card" method="post" action="{{$act}}"><div class="card-body">
+  <input type="hidden" name="back" value="{{$d.Next}}">
+  <h2 class="h5">Burden <span class="small text-body-secondary fw-normal">(p. 40)</span></h2>
+  <p class="small text-body-secondary">One adjective or -ing verb for the flaw that gets your Agent into trouble, like "Reckless" or "Doubting". Already know it? Just type it. Otherwise draw a vision card and pick one of its Burdens.</p>
+  {{template "wizard-card" ($d.Card "burden")}}
+  <label class="form-label small mb-0 mt-3" for="b-word">Burden</label>
+  <input class="form-control" id="b-word" name="set.burden" value="{{$a.Burden}}" placeholder="e.g. Reckless" required autocomplete="off">
+  {{if $d.ChatEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "burden" "Label" "More ideas" "Placeholder" "Or describe the flaw you have in mind")}}{{end}}
+  <div class="hi-wiz-foot">
+    <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
+    <button class="btn btn-primary" type="submit">Save and continue <i class="bi bi-arrow-right"></i></button>
+  </div>
+</div></form>
 {{end}}
 
-{{/* ================= Step 4: ideal ================= */}}
-{{if eq $d.Step 4}}
-<div class="card"><div class="card-body">
-  <h2 class="h5">Ideal <span class="small text-body-secondary fw-normal">(p. 41)</span></h2>
-  <p class="small text-body-secondary">Same method, using the card's Ideals word. Vices and virtues are never chosen at creation; they're earned in play.</p>
-  <form method="post" action="/agents/{{$id}}/wizard/draw" hx-post="/agents/{{$id}}/wizard/draw" hx-target="#wizard-body" hx-select="#wizard-body" hx-swap="outerHTML">
-    <input type="hidden" name="deck" value="vision"><input type="hidden" name="count" value="1"><input type="hidden" name="step" value="4"><input type="hidden" name="for" value="ideal">
-    <button class="btn btn-sm btn-outline-secondary mb-2" type="submit"><i class="bi bi-shuffle"></i> Draw a card digitally</button>
-  </form>
-  <form method="post" action="{{$act}}" class="row g-2">
-    <input type="hidden" name="back" value="/agents/{{$id}}/wizard?step=5">
-    <div class="col-12 col-md-5">
-      <label class="form-label small mb-0" for="i-card">Card{{if and $d.Drawn (eq $d.DrawFor "ideal")}} (drawn: {{index $d.Drawn 0}}){{end}}</label>
-      <input class="form-control form-control-sm" id="i-card" name="set.ideal_card" list="vision-cards" value="{{if and $d.Drawn (eq $d.DrawFor "ideal")}}{{index $d.Drawn 0}}{{else}}{{$a.IdealCard}}{{end}}">
-    </div>
-    <div class="col-12 col-md-7">
-      <label class="form-label small mb-0" for="i-word">Ideal</label>
-      <input class="form-control form-control-sm" id="i-word" name="set.ideal" value="{{$a.Ideal}}" placeholder="e.g. Curious">
-    </div>
-    <div class="col-12"><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-arrow-right"></i> Save and continue</button></div>
-  </form>
-</div></div>
+{{/* ================= Ideal ================= */}}
+{{if eq $d.Key "ideal"}}
+<form class="card" method="post" action="{{$act}}"><div class="card-body">
+  <input type="hidden" name="back" value="{{$d.Next}}">
+  <h2 class="h5">Ideal <span class="small text-body-secondary fw-normal">(p. 40)</span></h2>
+  <p class="small text-body-secondary">Same method, for what your Agent aspires to: type it, or draw a card and pick one of its Ideals. Vices and virtues aren't chosen now; they're earned in play.</p>
+  {{with $a.Burden}}<p class="small mb-2">Burden: <em>{{.}}</em>.</p>{{end}}
+  {{template "wizard-card" ($d.Card "ideal")}}
+  <label class="form-label small mb-0 mt-3" for="i-word">Ideal</label>
+  <input class="form-control" id="i-word" name="set.ideal" value="{{$a.Ideal}}" placeholder="e.g. Curious" required autocomplete="off">
+  {{if $d.ChatEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "ideal" "Label" "More ideas" "Placeholder" "Or describe what drives them")}}{{end}}
+  <div class="hi-wiz-foot">
+    <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
+    <button class="btn btn-primary" type="submit">Save and continue <i class="bi bi-arrow-right"></i></button>
+  </div>
+</div></form>
 {{end}}
 
-{{/* ================= Step 5: abilities ================= */}}
-{{if eq $d.Step 5}}
+{{/* ================= Abilities ================= */}}
+{{if eq $d.Key "abilities"}}
 <div class="card"><div class="card-body">
-  <h2 class="h5">Abilities <span class="small text-body-secondary fw-normal">(p. 41)</span></h2>
-  <p class="small text-body-secondary">Choose {{$d.Limits.Creation.Abilities}} from {{with $d.Class}}{{.Name}}'s{{end}} list. Quote text depends on exact wording, so it's copied verbatim.</p>
+  <h2 class="h5">Abilities <span class="small text-body-secondary fw-normal">(p. 40)</span></h2>
+  <p class="small text-body-secondary">Choose {{$d.Limits.Creation.Abilities}} from {{with $d.Class}}{{.Name}}'s{{end}} list. The text is quoted exactly, since rulings depend on its wording.</p>
+  <form id="wiz-ability-add" method="post" action="{{$act}}"><input type="hidden" name="back" value="{{$d.URL "abilities"}}"></form>
   {{if $a.Abilities}}
-  <ul class="list-group list-group-flush mb-2">
+  <div class="small text-body-secondary">Chosen:</div>
+  <ul class="list-group list-group-flush mb-3">
     {{range $ab := $d.Abil}}
-    <li class="list-group-item d-flex justify-content-between align-items-start px-0">
+    <li class="list-group-item d-flex justify-content-between align-items-start gap-2 px-0">
       <div><strong>{{$ab.Name}}</strong><div class="small text-body-secondary">{{$ab.Text}}</div></div>
-      <form method="post" action="{{$act}}"><input type="hidden" name="back" value="/agents/{{$id}}/wizard?step=5">
+      <form method="post" action="{{$act}}"><input type="hidden" name="back" value="{{$d.URL "abilities"}}">
         <button class="btn btn-sm btn-outline-danger" type="submit" name="ability.remove" value="{{$ab.Index}}">Remove</button></form>
     </li>
     {{end}}
@@ -155,186 +164,234 @@
       <div class="border rounded p-2 h-100 d-flex flex-column">
         <div class="fw-semibold">{{.Name}} <span class="small text-body-secondary">(p. {{.Page}})</span></div>
         <div class="small flex-grow-1">{{.Text}}</div>
-        <form method="post" action="{{$act}}" class="mt-2"><input type="hidden" name="back" value="/agents/{{$id}}/wizard?step=5">
-          <button class="btn btn-sm btn-outline-primary" type="submit" name="ability.add" value="{{.ID}}">Choose</button></form>
+        <button class="btn btn-sm btn-outline-primary mt-2 align-self-start" type="submit" form="wiz-ability-add" name="ability.add" value="{{.ID}}">Choose</button>
       </div>
     </div>
     {{end}}{{end}}{{end}}
   </div>
-  {{else}}
-  <a class="btn btn-primary" href="/agents/{{$id}}/wizard?step=6"><i class="bi bi-arrow-right"></i> Continue</a>
+  {{if $d.ChatEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "abilities" "Label" "Which fit my Agent?" "Placeholder" "Optional: how you want to play them")}}{{end}}
   {{end}}
+  <div class="hi-wiz-foot">
+    <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
+    {{if lt (len $a.Abilities) $d.Limits.Creation.Abilities}}
+    <span class="small text-body-secondary">Choose {{sub $d.Limits.Creation.Abilities (len $a.Abilities)}} more to continue</span>
+    {{else}}
+    <a class="btn btn-primary" href="{{$d.Next}}">Continue <i class="bi bi-arrow-right"></i></a>
+    {{end}}
+  </div>
 </div></div>
 {{end}}
 
-{{/* ================= Step 6: skills ================= */}}
-{{if eq $d.Step 6}}
+{{/* ================= Skills ================= */}}
+{{if eq $d.Key "skills"}}
 {{$total := 0}}{{range $k, $v := $a.Skills}}{{$total = add $total $v}}{{end}}
 {{$need := $d.Limits.Creation.TotalPoints}}{{if $d.Solo}}{{$need = $d.Limits.Creation.Solo.TotalPoints}}{{end}}
 {{$cap := $d.Limits.Creation.MaxSkill}}{{if $d.Solo}}{{$cap = $d.Limits.Creation.Solo.MaxSkill}}{{end}}
-<div class="card"><div class="card-body">
-  <h2 class="h5">Skills <span class="small text-body-secondary fw-normal">(p. 41)</span></h2>
-  <p class="small text-body-secondary">Add 2 points inspired by your core self and 2 anywhere ({{$need}} total including the {{$d.Limits.Creation.PrefilledPoints}} pre-filled). Max {{$cap}} in any skill at creation{{if $d.Solo}} (solo: only {{$d.Limits.Creation.Solo.MaxSkillsAt3}} skill may reach 3){{end}}.</p>
-  <div class="alert {{if eq $total $need}}alert-success{{else}}alert-warning{{end}} py-2 small">
-    {{$total}} of {{$need}} points used.
-    {{if lt $total $need}}Add {{sub $need $total}} more.{{else if gt $total $need}}Remove {{sub $total $need}}.{{else}}<i class="bi bi-check-circle"></i> Ready to continue.{{end}}
-  </div>
-  <form method="post" action="{{$act}}">
-    <input type="hidden" name="back" value="/agents/{{$id}}/wizard?step=6">
-    <div class="row g-3">
-      {{range $suit := list "Swords" "Wands" "Cups" "Pentacles"}}
-      <div class="col-6 col-md-3">
-        <div class="fw-semibold hi-suit-{{$suit}} mb-1">{{$suit}}</div>
-        {{range $sk := (index (dict "Swords" (list "Skirmish" "Convince" "Study") "Wands" (list "Unleash" "Perform" "Channel") "Cups" (list "Slip" "Soothe" "Mingle") "Pentacles" (list "Finesse" "Bargain" "Survey")) $suit)}}
-        <div class="d-flex justify-content-between align-items-center small mb-1">
-          <span>{{$sk}}</span>
-          <select class="form-select form-select-sm w-auto" name="skill.{{$sk}}" aria-label="{{$sk}} points">
-            {{range $n := seq 0 3}}<option value="{{$n}}" {{if eq $n (index $a.Skills $sk)}}selected{{end}}>{{$n}}</option>{{end}}
-          </select>
-        </div>
-        {{end}}
+<form class="card" id="wiz-skills" method="post" action="{{$act}}" data-need="{{$need}}"><div class="card-body">
+  <h2 class="h5">Skills <span class="small text-body-secondary fw-normal">(p. 40)</span></h2>
+  <p class="small text-body-secondary">Your class pre-fills {{$d.Limits.Creation.PrefilledPoints}} points. Add 2 inspired by your core self and 2 anywhere, for {{$need}} in total. Max {{$cap}} in any skill at creation{{if $d.Solo}} (solo: only {{$d.Limits.Creation.Solo.MaxSkillsAt3}} skill may reach 3){{end}}.</p>
+  {{with $a.ChildPhrase}}<p class="small mb-2">Core self: as a child, <em>{{.}}</em>{{with $a.AdultPhrase}}; as an adult, {{$a.AdultVerb}} by <em>{{.}}</em>{{end}}.</p>{{end}}
+  <div class="alert py-2 small {{if eq $total $need}}alert-success{{else}}alert-warning{{end}}" id="skill-total" aria-live="polite">{{$total}} of {{$need}} points used.</div>
+  <div class="row g-3">
+    {{range $suit := list "Swords" "Wands" "Cups" "Pentacles"}}
+    <div class="col-6 col-md-3">
+      <div class="fw-semibold hi-suit-{{$suit}} mb-1">{{$suit}}</div>
+      {{range $sk := index $d.Skills $suit}}
+      <div class="d-flex justify-content-between align-items-center small mb-1">
+        <label for="sk-{{$sk}}">{{$sk}}</label>
+        <select class="form-select form-select-sm w-auto" id="sk-{{$sk}}" name="skill.{{$sk}}">
+          {{range $n := seq 0 3}}<option value="{{$n}}" {{if eq $n (index $a.Skills $sk)}}selected{{end}}>{{$n}}</option>{{end}}
+        </select>
       </div>
       {{end}}
     </div>
-    <button class="btn btn-sm btn-outline-light mt-2" type="submit">Save</button>
-    {{if eq $total $need}}<a class="btn btn-sm btn-primary mt-2" href="/agents/{{$id}}/wizard?step=7"><i class="bi bi-arrow-right"></i> Continue</a>{{end}}
-  </form>
-</div></div>
+    {{end}}
+  </div>
+  {{if $d.ChatEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "skills" "Label" "Suggest where to put them" "Placeholder" "Optional: what you want to be good at")}}{{end}}
+  <div class="hi-wiz-foot">
+    <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-light" type="submit" name="back" value="{{$d.URL "skills"}}">Save</button>
+      <button class="btn btn-primary" type="submit" name="back" value="{{$d.Next}}">Save and continue <i class="bi bi-arrow-right"></i></button>
+    </div>
+  </div>
+</div></form>
 {{end}}
 
-{{/* ================= Step 7: magic (conditional) ================= */}}
-{{if eq $d.Step 7}}
+{{/* ================= Magic ================= */}}
+{{if eq $d.Key "magic"}}
 <div class="card"><div class="card-body">
-  <h2 class="h5">Magic <span class="small text-body-secondary fw-normal">(p. 41)</span></h2>
-  {{if and $d.Class $d.Class.StartsWithAdeptProficiency}}
+  <h2 class="h5">Magic <span class="small text-body-secondary fw-normal">(p. 40)</span></h2>
+  {{if $d.NeedsMagic}}
   <p class="small text-body-secondary">Occultists, Illusionists, Siphoners and anyone with a magical background choose 1 proficiency at Adept.</p>
   {{if $a.Proficiencies}}
   <ul class="list-group list-group-flush mb-2">
     {{range $p := $a.Proficiencies}}<li class="list-group-item px-0">{{$p.School}}: {{$p.Rank}}</li>{{end}}
   </ul>
-  <a class="btn btn-primary" href="/agents/{{$id}}/wizard?step=8"><i class="bi bi-arrow-right"></i> Continue</a>
-  {{else}}
-  <form method="post" action="{{$act}}" class="row g-2">
-    <input type="hidden" name="back" value="/agents/{{$id}}/wizard?step=8">
-    <input type="hidden" name="prof.rank" value="Adept">
-    <div class="col-8"><input class="form-control form-control-sm" name="prof.add" placeholder="Proficiency, e.g. Summoning" aria-label="Proficiency"></div>
-    <div class="col-4"><button class="btn btn-sm btn-primary w-100" type="submit">Add</button></div>
-  </form>
-  {{end}}
-  {{else}}
-  <p class="small text-body-secondary mb-2">Not a magical class — nothing to choose here.</p>
-  <a class="btn btn-primary" href="/agents/{{$id}}/wizard?step=8"><i class="bi bi-arrow-right"></i> Continue</a>
-  {{end}}
-</div></div>
-{{end}}
-
-{{/* ================= Step 8: who they are ================= */}}
-{{if eq $d.Step 8}}
-<div class="card"><div class="card-body">
-  <h2 class="h5">Name, look, age, culture <span class="small text-body-secondary fw-normal">(p. 41)</span></h2>
-  <form method="post" action="{{$act}}" class="row g-2">
-    <input type="hidden" name="back" value="/agents/{{$id}}/wizard?step=9">
-    <div class="col-12 col-md-6"><label class="form-label small mb-0" for="w-name">Name</label><input class="form-control form-control-sm" id="w-name" name="set.name" value="{{$a.Name}}"></div>
-    <div class="col-6 col-md-3"><label class="form-label small mb-0" for="w-age">Age</label><input class="form-control form-control-sm" id="w-age" name="set.age" value="{{$a.Age}}"></div>
-    <div class="col-6 col-md-3"><label class="form-label small mb-0" for="w-culture">Culture</label><input class="form-control form-control-sm" id="w-culture" name="set.culture" value="{{$a.Culture}}" placeholder="e.g. Turkish"></div>
-    <div class="col-12"><label class="form-label small mb-0" for="w-look">Look</label><input class="form-control form-control-sm" id="w-look" name="set.look" value="{{$a.Look}}" placeholder="How they appear, echoing your drawn cards"></div>
-    <div class="col-12"><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-arrow-right"></i> Save and continue</button></div>
-  </form>
-</div></div>
-{{end}}
-
-{{/* ================= Step 9: why Dioscoria ================= */}}
-{{if eq $d.Step 9}}
-<div class="card"><div class="card-body">
-  <h2 class="h5">Why Dioscoria? <span class="small text-body-secondary fw-normal">(p. 41)</span></h2>
-  <div class="d-flex flex-wrap gap-2 mb-2 small">
-    {{range $reason := list "Fleeing famine, disaster or war" "Persecuted for how I live" "A magician seeking acceptance for my art" "Native-born, coming of age and ready to serve"}}
-    <form method="post" action="{{$act}}"><input type="hidden" name="back" value="/agents/{{$id}}/wizard?step=9"><input type="hidden" name="set.why" value="{{$reason}}">
-      <button class="btn btn-sm btn-outline-secondary" type="submit">{{$reason}}</button></form>
-    {{end}}
+  <div class="hi-wiz-foot">
+    <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
+    <a class="btn btn-primary" href="{{$d.Next}}">Continue <i class="bi bi-arrow-right"></i></a>
   </div>
-  <form method="post" action="{{$act}}" class="row g-2">
-    <input type="hidden" name="back" value="/agents/{{$id}}/wizard?step=10">
-    <div class="col-12"><input class="form-control form-control-sm" name="set.why" value="{{$a.Why}}" placeholder="Or write your own"></div>
-    <div class="col-12"><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-arrow-right"></i> Save and continue</button></div>
-  </form>
-</div></div>
-{{end}}
-
-{{/* ================= Step 10: homeland contact ================= */}}
-{{if eq $d.Step 10}}
-<div class="card"><div class="card-body">
-  <h2 class="h5">Homeland contact <span class="small text-body-secondary fw-normal">(p. 41)</span></h2>
-  {{if $d.Homeland}}
-  <p class="small">{{$d.Homeland.Name}} ({{$d.Homeland.Card}}) — affection {{$d.Homeland.Affection}}. <a href="{{$act}}">Edit on the sheet</a>.</p>
-  <a class="btn btn-primary" href="/agents/{{$id}}/wizard?step=11"><i class="bi bi-arrow-right"></i> Continue</a>
   {{else}}
-  <p class="small text-body-secondary">Draw 3 vision cards, pick one, and describe them. Affection: 2 acquaintance, 4 friend, 6 very close.</p>
-  <form method="post" action="/agents/{{$id}}/wizard/draw" hx-post="/agents/{{$id}}/wizard/draw" hx-target="#wizard-body" hx-select="#wizard-body" hx-swap="outerHTML">
-    <input type="hidden" name="deck" value="vision"><input type="hidden" name="count" value="3"><input type="hidden" name="step" value="10"><input type="hidden" name="for" value="homeland">
-    <button class="btn btn-sm btn-outline-secondary mb-2" type="submit"><i class="bi bi-shuffle"></i> Draw 3 cards digitally</button>
+  <form method="post" action="{{$act}}">
+    <input type="hidden" name="back" value="{{$d.Next}}">
+    <input type="hidden" name="prof.rank" value="Adept">
+    {{if $d.Schools}}
+    <div class="d-flex flex-wrap gap-2 mb-2">
+      {{range $d.Schools}}<button class="btn btn-sm btn-outline-light hi-choice" type="button" data-fill="{{fill (dict2 "prof.add" .Name)}}">{{.Name}}{{with .Does}}<span class="why">{{.}}</span>{{end}}</button>{{end}}
+    </div>
+    {{end}}
+    <label class="form-label small mb-0" for="m-school">School</label>
+    <input class="form-control" id="m-school" name="prof.add" placeholder="Pick one above, e.g. Illusion" required autocomplete="off">
+    {{if $d.ChatEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "magic" "Label" "Which fits my Agent?" "Placeholder" "Optional: the kind of magic you imagine")}}{{end}}
+    <div class="hi-wiz-foot">
+      <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
+      <button class="btn btn-primary" type="submit">Save and continue <i class="bi bi-arrow-right"></i></button>
+    </div>
   </form>
-  {{if and $d.Drawn (eq $d.DrawFor "homeland")}}<p class="small">Drawn: {{join $d.Drawn ", "}}</p>{{end}}
-  <form method="post" action="/agents/{{$id}}/contacts" class="row g-2">
-    <input type="hidden" name="back" value="/agents/{{$id}}/wizard?step=10">
-    <input type="hidden" name="set.kind" value="Homeland">
-    <div class="col-6"><input class="form-control form-control-sm" name="set.name" placeholder="Name" required aria-label="Name"></div>
-    <div class="col-6"><input class="form-control form-control-sm" name="set.card" list="vision-cards" placeholder="Card" aria-label="Card"></div>
-    <div class="col-6"><input class="form-control form-control-sm" name="set.land" placeholder="Land" aria-label="Land"></div>
-    <div class="col-6"><select class="form-select form-select-sm" name="set.affection" aria-label="Affection"><option value="2">2 acquaintance</option><option value="4">4 friend</option><option value="6">6 very close</option></select></div>
-    <div class="col-12"><textarea class="form-control form-control-sm" name="set.description" rows="2" placeholder="Who they are (profession, personality)" aria-label="Description"></textarea></div>
-    <div class="col-12"><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-arrow-right"></i> Save and continue</button></div>
-  </form>
-  <a class="small d-inline-block mt-2" href="/agents/{{$id}}/wizard?step=11">Skip for now (one-shots or a quick start, p. 41)</a>
+  {{end}}
+  {{else}}
+  <p class="small text-body-secondary mb-2">Not a magical class, so there's nothing to choose here (unless the Seer agrees your Agent has a magical background, p. 40).</p>
+  <div class="hi-wiz-foot">
+    <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
+    <a class="btn btn-primary" href="{{$d.Next}}">Continue <i class="bi bi-arrow-right"></i></a>
+  </div>
   {{end}}
 </div></div>
 {{end}}
 
-{{/* ================= Step 11: Dioscorian contact ================= */}}
-{{if eq $d.Step 11}}
+{{/* ================= Look, age, culture ================= */}}
+{{if eq $d.Key "look"}}
+<form class="card" method="post" action="{{$act}}"><div class="card-body">
+  <input type="hidden" name="back" value="{{$d.Next}}">
+  <h2 class="h5">Look, age and culture <span class="small text-body-secondary fw-normal">(p. 40)</span></h2>
+  <p class="small text-body-secondary">How does {{$a.Name}} appear? Let the cards you drew inspire you.</p>
+  <div class="row g-2">
+    <div class="col-6 col-md-3"><label class="form-label small mb-0" for="w-age">Age</label><input class="form-control" id="w-age" name="set.age" value="{{$a.Age}}" autocomplete="off"></div>
+    <div class="col-6 col-md-3"><label class="form-label small mb-0" for="w-culture">Culture</label><input class="form-control" id="w-culture" name="set.culture" value="{{$a.Culture}}" placeholder="e.g. Turkish" autocomplete="off"></div>
+    <div class="col-12"><label class="form-label small mb-0" for="w-look">Look</label><textarea class="form-control" id="w-look" name="set.look" rows="2" placeholder="How they appear" required>{{$a.Look}}</textarea></div>
+  </div>
+  {{if $d.ChatEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "look" "Label" "Suggest a look" "Placeholder" "Optional: anything you already picture")}}{{end}}
+  <div class="hi-wiz-foot">
+    <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
+    <button class="btn btn-primary" type="submit">Save and continue <i class="bi bi-arrow-right"></i></button>
+  </div>
+</div></form>
+{{end}}
+
+{{/* ================= Why Dioscoria ================= */}}
+{{if eq $d.Key "why"}}
+<form class="card" method="post" action="{{$act}}"><div class="card-body">
+  <input type="hidden" name="back" value="{{$d.Next}}">
+  <h2 class="h5">Why did you come to Dioscoria? <span class="small text-body-secondary fw-normal">(p. 40)</span></h2>
+  <p class="small text-body-secondary">The book's examples are below. Pick one, make it your own, or write something else.</p>
+  <div class="d-flex flex-wrap gap-2 mb-2">
+    {{range $d.WhyReasons}}<button class="btn btn-sm btn-outline-light hi-choice" type="button" data-fill="{{fill (dict2 "set.why" .)}}">{{.}}</button>{{end}}
+  </div>
+  <label class="form-label small mb-0" for="w-why">Why Dioscoria</label>
+  <textarea class="form-control" id="w-why" name="set.why" rows="2" required>{{$a.Why}}</textarea>
+  {{if $d.ChatEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "why" "Label" "More ideas" "Placeholder" "Optional: what you're thinking")}}{{end}}
+  <div class="hi-wiz-foot">
+    <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
+    <button class="btn btn-primary" type="submit">Save and continue <i class="bi bi-arrow-right"></i></button>
+  </div>
+</div></form>
+{{end}}
+
+{{/* ================= Contacts ================= */}}
+{{if or (eq $d.Key "homeland") (eq $d.Key "dioscorian")}}
+{{$home := eq $d.Key "homeland"}}{{$have := $d.Homeland}}{{if not $home}}{{$have = $d.Dioscorian}}{{end}}
 <div class="card"><div class="card-body">
-  <h2 class="h5">Dioscorian contact <span class="small text-body-secondary fw-normal">(p. 41)</span></h2>
-  {{if $d.Dioscorian}}
-  <p class="small">{{$d.Dioscorian.Name}} ({{$d.Dioscorian.Card}}) — affection {{$d.Dioscorian.Affection}}. <a href="{{$act}}">Edit on the sheet</a>.</p>
-  <a class="btn btn-primary" href="/agents/{{$id}}/wizard?step=12"><i class="bi bi-arrow-right"></i> Continue</a>
+  <h2 class="h5">{{if $home}}Homeland contact{{else}}Dioscorian contact{{end}} <span class="small text-body-secondary fw-normal">(p. 41)</span></h2>
+  {{if $have}}
+  <p>{{$have.Name}}{{with $have.Card}} ({{.}}){{end}}, affection {{$have.Affection}}.{{with $have.Description}} <span class="text-body-secondary">{{.}}</span>{{end}} <a class="small" href="{{$act}}">Edit on the sheet</a></p>
+  <div class="hi-wiz-foot">
+    <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
+    <a class="btn btn-primary" href="{{$d.Next}}">Continue <i class="bi bi-arrow-right"></i></a>
+  </div>
   {{else}}
-  <p class="small text-body-secondary">Same method, at 1 affection.</p>
-  <form method="post" action="/agents/{{$id}}/wizard/draw" hx-post="/agents/{{$id}}/wizard/draw" hx-target="#wizard-body" hx-select="#wizard-body" hx-swap="outerHTML">
-    <input type="hidden" name="deck" value="vision"><input type="hidden" name="count" value="3"><input type="hidden" name="step" value="11"><input type="hidden" name="for" value="dioscorian">
-    <button class="btn btn-sm btn-outline-secondary mb-2" type="submit"><i class="bi bi-shuffle"></i> Draw 3 cards digitally</button>
+  <p class="small text-body-secondary">{{if $home}}Someone from the land you left behind. Draw 3 vision cards and pick the one that speaks to you: it hints at who they are. Affection: 2 acquaintance, 4 friend, 6 very close.{{else}}Someone you've met since arriving, at 1 affection. Same method: draw 3 vision cards and pick one.{{end}}</p>
+  <form method="post" action="/agents/{{$id}}/contacts">
+    <input type="hidden" name="back" value="{{$d.Next}}">
+    <input type="hidden" name="set.kind" value="{{if $home}}Homeland{{else}}Dioscorian{{end}}">
+    {{template "wizard-card" ($d.Card $d.Key)}}
+    <div class="row g-2 mt-2">
+      <div class="col-12 col-md-6"><label class="form-label small mb-0" for="c-name">Name</label><input class="form-control" id="c-name" name="set.name" required autocomplete="off"></div>
+      <div class="col-{{if $home}}6{{else}}12{{end}} col-md-{{if $home}}3{{else}}6{{end}}"><label class="form-label small mb-0" for="c-land">{{if $home}}Land{{else}}District{{end}}</label><input class="form-control" id="c-land" name="set.land" value="{{if $home}}{{$a.Culture}}{{end}}" autocomplete="off"></div>
+      {{if $home}}
+      <div class="col-6 col-md-3"><label class="form-label small mb-0" for="c-aff">Affection</label>
+        <select class="form-select" id="c-aff" name="set.affection"><option value="2">2 acquaintance</option><option value="4">4 friend</option><option value="6">6 very close</option></select></div>
+      {{else}}<input type="hidden" name="set.affection" value="1">{{end}}
+      <div class="col-12"><label class="form-label small mb-0" for="c-desc">Who they are</label><textarea class="form-control" id="c-desc" name="set.description" rows="2" placeholder="Profession, personality"></textarea></div>
+    </div>
+    {{if $d.ChatEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "contact" "Label" "Suggest who they are" "Placeholder" "Optional: what you imagine")}}{{end}}
+    <div class="hi-wiz-foot">
+      <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
+      <div class="d-flex gap-2 align-items-center">
+        <a class="small" href="{{$d.Next}}">Skip for now</a>
+        <button class="btn btn-primary" type="submit">Save and continue <i class="bi bi-arrow-right"></i></button>
+      </div>
+    </div>
   </form>
-  {{if and $d.Drawn (eq $d.DrawFor "dioscorian")}}<p class="small">Drawn: {{join $d.Drawn ", "}}</p>{{end}}
-  <form method="post" action="/agents/{{$id}}/contacts" class="row g-2">
-    <input type="hidden" name="back" value="/agents/{{$id}}/wizard?step=11">
-    <input type="hidden" name="set.kind" value="Dioscorian"><input type="hidden" name="set.affection" value="1">
-    <div class="col-6"><input class="form-control form-control-sm" name="set.name" placeholder="Name" required aria-label="Name"></div>
-    <div class="col-6"><input class="form-control form-control-sm" name="set.card" list="vision-cards" placeholder="Card" aria-label="Card"></div>
-    <div class="col-12"><input class="form-control form-control-sm" name="set.land" placeholder="District" aria-label="District"></div>
-    <div class="col-12"><textarea class="form-control form-control-sm" name="set.description" rows="2" placeholder="Who they are" aria-label="Description"></textarea></div>
-    <div class="col-12"><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-arrow-right"></i> Save and continue</button></div>
-  </form>
-  <a class="small d-inline-block mt-2" href="/agents/{{$id}}/wizard?step=12">Skip for now</a>
+  <p class="small text-body-secondary mt-2 mb-0">Contacts can wait for one-shots or a quick start (p. 41).</p>
   {{end}}
 </div></div>
 {{end}}
 
-{{/* ================= Step 12: done ================= */}}
-{{if eq $d.Step 12}}
+{{/* ================= Done ================= */}}
+{{if eq $d.Key "done"}}
 <div class="card border-success"><div class="card-body">
   <h2 class="h5 text-success"><i class="bi bi-check-circle"></i> {{$a.Name}} is ready</h2>
-  <p class="small">Ask the Seer or Claude for a 3-sentence pitch to read at the table, or write your own.</p>
+  <p class="small">Think of a few sentences to introduce them at the table.</p>
   <h3 class="h6 mt-3">Transcription checklist for the paper sheet</h3>
   <ul class="small">
     <li>As a child: {{$a.ChildPhrase}} ({{$a.ChildCard}}) · As an adult, {{$a.AdultVerb}}: {{$a.AdultPhrase}} ({{$a.AdultCard}})</li>
     <li>Skills: {{range $k, $v := $a.Skills}}{{$k}} {{$v}}, {{end}}</li>
     <li>Burden: {{$a.Burden}} ({{$a.BurdenCard}}) · Ideal: {{$a.Ideal}} ({{$a.IdealCard}})</li>
     <li>Abilities: {{range $d.Abil}}{{.Name}}, {{end}}</li>
-    <li>{{if $d.Class}}{{if $d.Class.StartsWithAdeptProficiency}}Proficiency: {{range $a.Proficiencies}}{{.School}} ({{.Rank}}){{end}}{{end}}{{end}}</li>
+    {{if $d.NeedsMagic}}<li>Proficiency: {{range $a.Proficiencies}}{{.School}} ({{.Rank}}){{end}}</li>{{end}}
     <li>Contacts: {{with $d.Homeland}}{{.Name}} (homeland){{end}}{{if and $d.Homeland $d.Dioscorian}}, {{end}}{{with $d.Dioscorian}}{{.Name}} (Dioscorian){{end}}</li>
     {{with $a.Why}}<li>Why Dioscoria: {{.}}</li>{{end}}
   </ul>
-  <a class="btn btn-primary" href="{{$act}}"><i class="bi bi-card-list"></i> Go to the full sheet</a>
+  <div class="hi-wiz-foot">
+    <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
+    <a class="btn btn-primary" href="{{$act}}"><i class="bi bi-card-list"></i> Go to the full sheet</a>
+  </div>
 </div></div>
 {{end}}
+</div>
+{{end}}
+
+{{/* One step's card picker (web.wizCard): the card the player drew, typed in or drawn by the app,
+     and the options the book gives for it. */}}
+{{define "wizard-card"}}
+{{$contact := or (eq .For "homeland") (eq .For "dioscorian")}}
+<div class="hi-card-pick" id="card-{{.For}}">
+  <div class="row g-2 align-items-end">
+    <div class="col-12 col-sm-7">
+      <label class="form-label small mb-0" for="card-in-{{.For}}">{{if $contact}}Card{{else}}The card you drew{{end}}</label>
+      <input class="form-control" id="card-in-{{.For}}" name="{{.Input}}" list="vision-cards" value="{{.Value}}" placeholder="e.g. The Chariot" autocomplete="off" data-card-input
+        hx-get="/agents/{{.AgentID}}/wizard/card?for={{.For}}" hx-trigger="change" hx-target="#card-{{.For}}" hx-select="#card-{{.For}}" hx-swap="outerHTML">
+    </div>
+    <div class="col-12 col-sm-5">
+      <button class="btn btn-outline-secondary w-100" type="button" hx-post="/agents/{{.AgentID}}/wizard/draw" hx-vals='{"for": "{{.For}}"}' hx-target="#card-{{.For}}" hx-select="#card-{{.For}}" hx-swap="outerHTML">
+        <i class="bi bi-shuffle"></i> {{if .Value}}Draw again{{else if $contact}}Draw 3 for me{{else}}Draw for me{{end}}
+      </button>
+    </div>
+  </div>
+  {{if .Unknown}}<div class="small text-warning mt-1">"{{.Value}}" isn't a vision card (the 22 Major Arcana and 16 Courts). Check the spelling, or pick from the list.</div>{{end}}
+  {{with .Card}}
+  <div class="hi-card-meaning small mt-2"><strong>{{.Name}}</strong>{{with .Meaning}}: {{.}}{{end}}{{if $contact}}{{with .Characters}}<br><span class="text-body-secondary">As a person:</span> {{.}}{{end}}{{end}}</div>
+  {{end}}
+  {{if .Choices}}
+  <div class="small text-body-secondary mt-2">The card offers:</div>
+  <div class="d-flex flex-wrap gap-2 mt-1">{{range .Choices}}{{template "choice" .}}{{end}}</div>
+  {{end}}
+  {{if .Drawn}}
+  <div class="small text-body-secondary mt-2">You drew these. Pick the one that speaks to you:</div>
+  <div class="d-flex flex-wrap gap-2 mt-1">
+    {{range .Drawn}}<button class="btn btn-sm btn-outline-light hi-choice" type="button" data-fill="{{fill (dict2 "set.card" .Name)}}">{{.Name}}<span class="why">{{.Meaning}}{{if and .Meaning .Characters}} · {{end}}{{.Characters}}</span></button>{{end}}
+  </div>
+  {{end}}
 </div>
 {{end}}
