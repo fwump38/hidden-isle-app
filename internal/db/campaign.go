@@ -136,6 +136,7 @@ type Agent struct {
 	LoadUsed       int                `json:"load_used"`
 
 	Notes     string    `json:"notes"`
+	Intro     string    `json:"intro"` // a few sentences to introduce the Agent at the table
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

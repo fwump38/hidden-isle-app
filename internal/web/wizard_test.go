@@ -198,7 +198,7 @@ func TestWizardSuggest(t *testing.T) {
 
 	wireAssistWith(t, srv, suggestResp(map[string]any{"ability": "Familiar", "reason": "a companion"}, map[string]any{"ability": "FIREBALL", "reason": "made up"}))
 	_, body = st.postBody("Ana", "/agents/1/wizard/suggest", url.Values{"kind": {"abilities"}})
-	if !strings.Contains(body, `name="ability.add" value="familiar"`) || strings.Contains(body, "FIREBALL") {
+	if !strings.Contains(body, `name="ability_id" value="familiar"`) || strings.Contains(body, "FIREBALL") {
 		t.Errorf("ability suggestions should be the class's own, pickable: %s", body)
 	}
 

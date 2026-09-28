@@ -141,10 +141,11 @@
 
 {{/* ================= Abilities ================= */}}
 {{if eq $d.Key "abilities"}}
+{{$remaining := sub $d.Limits.Creation.Abilities (len $a.Abilities)}}
 <div class="card"><div class="card-body">
   <h2 class="h5">Abilities <span class="small text-body-secondary fw-normal">(p. 40)</span></h2>
   <p class="small text-body-secondary">Choose {{$d.Limits.Creation.Abilities}} from {{with $d.Class}}{{.Name}}'s{{end}} list. The text is quoted exactly, since rulings depend on its wording.</p>
-  <form id="wiz-ability-add" method="post" action="{{$act}}/abilities"><input type="hidden" name="back" value="{{$d.URL "abilities"}}"></form>
+  <form id="wiz-ability-add" method="post" action="{{$act}}/abilities" data-remaining="{{$remaining}}"><input type="hidden" name="back" value="{{$d.URL "abilities"}}"></form>
   {{if $a.Abilities}}
   <div class="small text-body-secondary">Chosen:</div>
   <ul class="list-group list-group-flush mb-3">
@@ -155,29 +156,34 @@
         <form method="post" action="{{$act}}/abilities/remove"><input type="hidden" name="back" value="{{$d.URL "abilities"}}">
           <button class="btn btn-sm btn-outline-danger" type="submit" name="index" value="{{$ab.Index}}">Remove</button></form>
       </div>
-      {{if $ab.NeedsContact}}{{template "ability-contact-prompt" dict "Action" (printf "%s/abilities/contact" $act) "Index" $ab.Index "Back" ($d.URL "abilities")}}{{end}}
+      {{if $ab.NeedsContact}}{{template "wizard-ability-contact-modal" dict "Ability" $ab "Act" $act "Sug" $sug "AssistEnabled" $d.AssistEnabled "Back" ($d.URL "abilities")}}{{end}}
     </li>
     {{end}}
   </ul>
   {{end}}
-  {{if lt (len $a.Abilities) $d.Limits.Creation.Abilities}}
+  {{if gt $remaining 0}}
   <div class="row g-2">
     {{with $d.Class}}{{range .Abilities}}{{if not (index $d.Chosen .ID)}}
     <div class="col-12 col-md-6">
       <div class="border rounded p-2 h-100 d-flex flex-column">
         <div class="fw-semibold">{{.Name}} <span class="small text-body-secondary">(p. {{.Page}})</span></div>
         <div class="small flex-grow-1">{{.Text}}</div>
-        <button class="btn btn-sm btn-outline-primary mt-2 align-self-start" type="submit" form="wiz-ability-add" name="ability_id" value="{{.ID}}">Choose</button>
+        <input type="checkbox" class="btn-check" id="ability-{{.ID}}" name="ability_id" value="{{.ID}}" form="wiz-ability-add" autocomplete="off">
+        <label class="btn btn-sm btn-outline-primary mt-2 align-self-start" for="ability-{{.ID}}">Pick this one</label>
       </div>
     </div>
     {{end}}{{end}}{{end}}
   </div>
   {{if $d.AssistEnabled}}{{template "suggest-box" (dict "URL" $sug "Kind" "abilities" "Label" "Which fit my Agent?" "Placeholder" "Optional: how you want to play them" "Value" "")}}{{end}}
+  <div class="d-flex align-items-center gap-2 mt-3">
+    <span class="small text-body-secondary" id="ability-picked-count">0 of {{$remaining}} selected</span>
+    <button class="btn btn-sm btn-primary" type="submit" form="wiz-ability-add" id="wiz-ability-submit" disabled>Add selected</button>
+  </div>
   {{end}}
   <div class="hi-wiz-foot">
     <a class="btn btn-sm btn-outline-secondary" href="{{$d.Prev}}"><i class="bi bi-arrow-left"></i> Back</a>
-    {{if lt (len $a.Abilities) $d.Limits.Creation.Abilities}}
-    <span class="small text-body-secondary">Choose {{sub $d.Limits.Creation.Abilities (len $a.Abilities)}} more to continue</span>
+    {{if gt $remaining 0}}
+    <span class="small text-body-secondary">Choose {{$remaining}} more to continue</span>
     {{else}}
     <a class="btn btn-primary" href="{{$d.Next}}">Continue <i class="bi bi-arrow-right"></i></a>
     {{end}}
@@ -345,9 +351,21 @@
 {{if eq $d.Key "done"}}
 {{$needsContact := false}}{{range $d.Abil}}{{if .NeedsContact}}{{$needsContact = true}}{{end}}{{end}}
 {{if $needsContact}}<div class="alert alert-warning py-2 small"><i class="bi bi-exclamation-diamond"></i> An ability still needs its contact named. <a href="{{$d.URL "abilities"}}">Go back to Abilities</a> to name them.</div>{{end}}
-<div class="card border-success"><div class="card-body">
+<div class="card {{if $d.Ready}}border-success{{else}}border-warning{{end}}"><div class="card-body">
+  {{if $d.Ready}}
   <h2 class="h5 text-success"><i class="bi bi-check-circle"></i> {{$a.Name}} is ready</h2>
-  <p class="small">Think of a few sentences to introduce them at the table.</p>
+  {{else}}
+  <h2 class="h5 text-warning"><i class="bi bi-exclamation-diamond"></i> {{$a.Name}} isn't finished yet</h2>
+  <p class="small">Still missing:</p>
+  <ul class="small">{{range $d.MissingSteps}}<li><a href="{{$d.URL .Key}}">{{.Title}}</a></li>{{end}}</ul>
+  {{end}}
+  <label class="form-label small mb-0 mt-2" for="w-intro">Introduce them at the table</label>
+  <form method="post" action="{{$act}}">
+    <input type="hidden" name="back" value="{{$d.URL "done"}}">
+    <textarea class="form-control" id="w-intro" name="set.intro" rows="3" placeholder="A sentence or two to read aloud">{{$a.Intro}}</textarea>
+    {{if $d.AssistEnabled}}{{template "write-assist" (dict "Field" "agent_intro" "Target" "w-intro" "AgentID" $a.ID "CampaignID" 0 "SessionID" 0 "Draft" true)}}{{end}}
+    <button class="btn btn-sm btn-outline-light mt-2" type="submit">Save intro</button>
+  </form>
   <h3 class="h6 mt-3">Transcription checklist for the paper sheet</h3>
   <ul class="small">
     <li>As a child: {{$a.ChildPhrase}} ({{$a.ChildCard}}) · As an adult, {{$a.AdultVerb}}: {{$a.AdultPhrase}} ({{$a.AdultCard}})</li>
@@ -364,6 +382,38 @@
   </div>
 </div></div>
 {{end}}
+</div>
+{{end}}
+
+{{/* An ability that grants a contact but hasn't named one yet (web.wizardAbility.NeedsContact):
+     a modal, not a silent skip, so it doesn't get forgotten — pops up right after the ability
+     itself is saved (app.js data-auto-modal). args: dict "Ability" web.wizardAbility "Act" the
+     Agent's own URL "Sug" the wizard's suggest URL "AssistEnabled" bool "Back" the abilities step URL. */}}
+{{define "wizard-ability-contact-modal"}}
+{{$ab := .Ability}}{{$mid := printf "ability-contact-modal-%d" $ab.Index}}
+<div class="modal fade" id="{{$mid}}" tabindex="-1" data-auto-modal aria-labelledby="{{$mid}}-title" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+    <form method="post" action="{{.Act}}/abilities/contact">
+      <input type="hidden" name="index" value="{{$ab.Index}}">
+      <input type="hidden" name="back" value="{{.Back}}">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="{{$mid}}-title"><i class="bi bi-exclamation-diamond text-warning"></i> {{$ab.Name}} grants a contact</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-body-secondary">Name them now, or close this and use the "Chosen" list later (p. 43).</p>
+        <div class="mb-2"><label class="form-label small mb-0" for="{{$mid}}-name">Name</label>
+          <input class="form-control form-control-sm" id="{{$mid}}-name" name="name" placeholder="Name" required autocomplete="off"></div>
+        <div><label class="form-label small mb-0" for="{{$mid}}-desc">Who or what they are</label>
+          <input class="form-control form-control-sm" id="{{$mid}}-desc" name="description" placeholder="Who or what they are" autocomplete="off"></div>
+        {{if .AssistEnabled}}{{template "suggest-box" (dict "URL" .Sug "Kind" "ability_contact" "Label" "Suggest who they are" "Placeholder" "Optional: what you imagine" "Value" "" "Extra" (dict "ability_name" $ab.Name))}}{{end}}
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-dismiss="modal">Later</button>
+        <button class="btn btn-sm btn-primary" type="submit">Create the contact</button>
+      </div>
+    </form>
+  </div></div>
 </div>
 {{end}}
 

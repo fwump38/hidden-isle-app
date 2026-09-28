@@ -81,7 +81,7 @@ func (s *Server) assistWrite(w http.ResponseWriter, r *http.Request) {
 	if r.FormValue("mode") == "draft" && af.AllowDraft {
 		mode = assist.ModeDraft
 	}
-	brief := buildBrief(a, s.Svc, campaignID, briefOpts{AgentID: agentID, SessionID: formID(r, "session_id"), Public: af.Public})
+	brief := buildBrief(a, s.Svc, s.Data.Current(), campaignID, briefOpts{AgentID: agentID, SessionID: formID(r, "session_id"), Public: af.Public})
 
 	out, err := s.Assist.Write(r.Context(), a.User, assist.WriteRequest{
 		Field: af.Label, Mode: mode, Text: r.FormValue("text"), Brief: brief, Guide: af.Guide,
@@ -124,7 +124,7 @@ func (s *Server) seerSuggest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req := assist.SuggestRequest{
-		Kind: kind, Brief: buildBrief(a, s.Svc, campaignID, briefOpts{}),
+		Kind: kind, Brief: buildBrief(a, s.Svc, s.Data.Current(), campaignID, briefOpts{}),
 		Hint: r.FormValue("hint"), Exclude: d.Exclude,
 	}
 	if kind == "clock" {

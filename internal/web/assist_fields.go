@@ -44,9 +44,11 @@ var assistFields = map[string]assistField{
 	"territory_notes":      {Label: "territory's notes", SeerOnly: true},
 
 	// Agent sheet (the owner or the Seer).
-	"agent_look":   {Label: "Agent's look", NeedsAgent: true, Guide: "One or two sentences."},
-	"agent_why":    {Label: "why the Agent came to Dioscoria", NeedsAgent: true, Guide: "One or two sentences."},
-	"agent_notes":  {Label: "Agent's notes", NeedsAgent: true},
+	"agent_look":  {Label: "Agent's look", NeedsAgent: true, Guide: "One or two sentences."},
+	"agent_why":   {Label: "why the Agent came to Dioscoria", NeedsAgent: true, Guide: "One or two sentences."},
+	"agent_notes": {Label: "Agent's notes", NeedsAgent: true},
+	"agent_intro": {Label: "table introduction", NeedsAgent: true, AllowDraft: true,
+		Guide: "2-4 sentences, ready to read aloud when introducing the Agent at the table."},
 	"ability_text": {Label: "custom ability's text", NeedsAgent: true, Guide: "Keep it rules-light, in the style of the book's ability text."},
 
 	// Contacts (the owner, the Seer, or a player during downtime/wizard).

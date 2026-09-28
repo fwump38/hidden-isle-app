@@ -1,11 +1,13 @@
 package web
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/fwump38/hidden-isle-app/internal/assist"
 	"github.com/fwump38/hidden-isle-app/internal/campaign"
 	"github.com/fwump38/hidden-isle-app/internal/db"
+	"github.com/fwump38/hidden-isle-app/internal/gamedata"
 )
 
 // briefOpts controls how much of a campaign buildBrief pulls in.
@@ -22,13 +24,13 @@ type briefOpts struct {
 // campaign.Service with the caller's Actor so the usual permission checks decide what a non-Seer
 // caller can see at all. For the Seer, opts.Public additionally strips content that's fine for
 // the Seer to read but shouldn't end up drafted into something players will read.
-func buildBrief(a campaign.Actor, svc *campaign.Service, campaignID uint, opts briefOpts) *assist.Brief {
+func buildBrief(a campaign.Actor, svc *campaign.Service, snap *gamedata.Snapshot, campaignID uint, opts briefOpts) *assist.Brief {
 	b := &assist.Brief{}
 	if campaignID == 0 {
 		// Not yet in a campaign (e.g. the creation wizard before the Agent joins one): there's no
 		// campaign-wide context to add, but the Agent's own details still apply.
 		if opts.AgentID != 0 {
-			addAgentDetail(a, svc, b, opts.AgentID, opts.Public)
+			addAgentDetail(a, svc, snap, b, opts.AgentID, opts.Public)
 		}
 		return b
 	}
@@ -63,7 +65,7 @@ func buildBrief(a campaign.Actor, svc *campaign.Service, campaignID uint, opts b
 	}
 
 	if opts.AgentID != 0 {
-		addAgentDetail(a, svc, b, opts.AgentID, opts.Public)
+		addAgentDetail(a, svc, snap, b, opts.AgentID, opts.Public)
 	}
 
 	var advs []db.Adversary
@@ -133,13 +135,54 @@ func buildBrief(a campaign.Actor, svc *campaign.Service, campaignID uint, opts b
 	return b
 }
 
-// addAgentDetail adds one Agent's own concept, contacts and recent history to the brief.
-func addAgentDetail(a campaign.Actor, svc *campaign.Service, b *assist.Brief, agentID uint, public bool) {
+// addAgentDetail adds one Agent's own concept, core self, skills, abilities, look, contacts and
+// recent history to the brief — everything a writing-assistant field needs to draft something
+// true to the character, not just its name and why.
+func addAgentDetail(a campaign.Actor, svc *campaign.Service, snap *gamedata.Snapshot, b *assist.Brief, agentID uint, public bool) {
 	ag, err := svc.Agent(a, agentID)
 	if err != nil {
 		return
 	}
 	b.Add("This Agent, %s: class %s, why they came to Dioscoria: %s. Concept: %s.", ag.Name, ag.Class, ag.Why, ag.Concept)
+	if ag.ChildPhrase != "" {
+		b.Add("As a child, %s solved problems by %s.", ag.Name, ag.ChildPhrase)
+	}
+	if ag.AdultPhrase != "" {
+		b.Add("As an adult, %s %s by %s.", ag.Name, orDefault(ag.AdultVerb, "survived"), ag.AdultPhrase)
+	}
+	if ag.Burden != "" || ag.Ideal != "" {
+		b.Add("Burden: %s. Ideal: %s.", ag.Burden, ag.Ideal)
+	}
+	if ag.Look != "" || ag.Age != "" || ag.Culture != "" {
+		b.Add("Age: %s. Culture: %s. Look: %s.", ag.Age, ag.Culture, ag.Look)
+	}
+	if len(ag.Skills) > 0 {
+		var parts []string
+		for name, v := range ag.Skills {
+			if v > 0 {
+				parts = append(parts, fmt.Sprintf("%s %d", name, v))
+			}
+		}
+		if len(parts) > 0 {
+			b.Add("Skills: %s.", strings.Join(parts, ", "))
+		}
+	}
+	if snap != nil {
+		if abil := resolveAbilities(ag.Abilities, snap.Class(ag.Class)); len(abil) > 0 {
+			var names []string
+			for _, ab := range abil {
+				names = append(names, ab.Name)
+			}
+			b.Add("Abilities: %s.", strings.Join(names, ", "))
+		}
+	}
+	if len(ag.Proficiencies) > 0 {
+		var parts []string
+		for _, p := range ag.Proficiencies {
+			parts = append(parts, fmt.Sprintf("%s (%s)", p.School, p.Rank))
+		}
+		b.Add("Magic: %s.", strings.Join(parts, ", "))
+	}
 	if contacts, err := svc.Contacts(a, agentID); err == nil {
 		for _, c := range contacts {
 			b.Add("%s's contact %s (%s): %s", ag.Name, c.Name, c.Kind, c.Description)

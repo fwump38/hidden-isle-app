@@ -428,6 +428,46 @@ document.addEventListener("change", (e) => {
 document.addEventListener("htmx:afterSettle", () => updateSkillTotal(document.getElementById("wiz-skills")));
 document.addEventListener("DOMContentLoaded", () => updateSkillTotal(document.getElementById("wiz-skills")));
 
+// The Abilities step's checkboxes (partials/choices.html "choice", wizard.html): the class list
+// and Claude's suggestions can offer the same ability twice, so every checkbox sharing a value is
+// kept in sync, and the group is capped at the remaining slots (#wiz-ability-add's data-remaining)
+// without a server round-trip. Nothing is saved until "Add selected" is pressed.
+function syncAbilityChecks() {
+  const form = document.getElementById("wiz-ability-add");
+  if (!form) return;
+  const boxes = Array.from(document.querySelectorAll('input[type="checkbox"][name="ability_id"][form="wiz-ability-add"]'));
+  const remaining = Number(form.dataset.remaining || 0);
+  const checked = new Set(boxes.filter((b) => b.checked).map((b) => b.value));
+  boxes.forEach((b) => {
+    b.checked = checked.has(b.value);
+    if (!b.checked) b.disabled = checked.size >= remaining;
+  });
+  const submit = document.getElementById("wiz-ability-submit");
+  if (submit) submit.disabled = checked.size === 0;
+  const count = document.getElementById("ability-picked-count");
+  if (count) count.textContent = `${checked.size} of ${remaining} selected`;
+}
+document.addEventListener("change", (e) => {
+  if (e.target.matches?.('input[type="checkbox"][name="ability_id"]')) syncAbilityChecks();
+});
+document.addEventListener("htmx:afterSettle", syncAbilityChecks);
+document.addEventListener("DOMContentLoaded", syncAbilityChecks);
+
+// An ability that grants a contact pops a modal to name them right after it's saved
+// (partials wizard.html "wizard-ability-contact-modal", [data-auto-modal]). More than one can
+// need naming at once (two contact-granting abilities picked together); show them one at a time.
+function showNextAbilityContactModal() {
+  const next = document.querySelector("[data-auto-modal]");
+  if (!next || !window.bootstrap) return;
+  next.removeAttribute("data-auto-modal");
+  new bootstrap.Modal(next).show();
+}
+document.addEventListener("hidden.bs.modal", (e) => {
+  if (e.target.matches?.("[id^='ability-contact-modal-']")) showNextAbilityContactModal();
+});
+document.addEventListener("htmx:afterSettle", showNextAbilityContactModal);
+document.addEventListener("DOMContentLoaded", showNextAbilityContactModal);
+
 // ---------------------------------------------------------------- writing assistant
 // .hi-assist (partials/choices.html "write-assist"): "Enhance" sends the target textarea's
 // current value to /assist/write; "Draft from campaign" sends none. Either way the result

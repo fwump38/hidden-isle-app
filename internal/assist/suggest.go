@@ -58,6 +58,8 @@ var suggestKinds = map[string]suggestKind{
 		Fields: []SuggestField{{"why", "One sentence"}}},
 	"contact": {Ask: "Suggest who this contact is, reading the drawn card loosely as their personality.", Count: 3,
 		Fields: []SuggestField{{"name", "A full name fitting their land"}, {"land", "Their land (or Dioscorian district)"}, {"description", "Profession and personality, one or two sentences"}}},
+	"ability_contact": {Ask: "Suggest who or what this granted contact is: a being or patron an ability grants (a deity, angel or demon), not an ordinary contact. Fit the Agent's core self.", Count: 3,
+		Fields: []SuggestField{{"name", "A name or title fitting them"}, {"description", "One or two sentences: who or what they are"}}},
 
 	// The Seer's own suggestion boxes.
 	"adversary": {Audience: "seer", Count: 2,

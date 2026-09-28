@@ -96,6 +96,8 @@ type wizardData struct {
 	Skills        map[string][]string // suit -> skill names
 	SuitHelp      map[string]string   // suit -> the same explanation the full sheet shows (p. 14, p. 23)
 	Cards         map[string]wizCard  // the card pickers on this screen, by step key
+	Ready         bool                // every step is complete, independent of any ?step= override
+	MissingSteps  []wizStepInfo       // steps still incomplete, for the Done screen
 	Error         string
 }
 
@@ -164,38 +166,52 @@ func resolveAbilities(abilities []db.AgentAbility, class *gamedata.Class) []wiza
 	return out
 }
 
+// stepDone says whether step n (1-12; 13, the review screen, is handled separately as "Ready")
+// is complete on its own terms — the single source of truth for both creationStep (which step to
+// land on) and the wizard's per-step checkmarks, so a checkmark can't disagree with where the
+// wizard would actually send the player.
+func stepDone(n int, ag *db.Agent, class *gamedata.Class, l *gamedata.Limits, solo bool, contacts []db.Contact) bool {
+	switch n {
+	case 1:
+		return strings.TrimSpace(ag.Name) != "" && ag.Name != unnamed
+	case 2:
+		return strings.TrimSpace(ag.ChildPhrase) != ""
+	case 3:
+		return strings.TrimSpace(ag.AdultPhrase) != "" && ag.AdultVerb != ""
+	case 4:
+		return strings.TrimSpace(ag.Burden) != ""
+	case 5:
+		return strings.TrimSpace(ag.Ideal) != ""
+	case 6:
+		return len(ag.Abilities) >= l.Creation.Abilities
+	case 7:
+		return skillTotal(ag) >= creationTotalPoints(l, solo)
+	case 8:
+		if class == nil || !class.StartsWithAdeptProficiency {
+			return true // not a magical class: nothing to choose, never blocks
+		}
+		return len(ag.Proficiencies) > 0
+	case 9:
+		return strings.TrimSpace(ag.Look) != ""
+	case 10:
+		return strings.TrimSpace(ag.Why) != ""
+	case 11:
+		return hasContactKind(contacts, "Homeland")
+	case 12:
+		return hasContactKind(contacts, "Dioscorian")
+	}
+	return true
+}
+
 // creationStep works out the first incomplete step for ag (1-13; 13 = everything's there).
 func creationStep(ag *db.Agent, class *gamedata.Class, l *gamedata.Limits, solo bool, contacts []db.Contact) int {
-	switch {
-	case strings.TrimSpace(ag.Name) == "" || ag.Name == unnamed:
-		return 1
-	case strings.TrimSpace(ag.ChildPhrase) == "":
-		return 2
-	case strings.TrimSpace(ag.AdultPhrase) == "" || ag.AdultVerb == "":
-		return 3
-	case strings.TrimSpace(ag.Burden) == "":
-		return 4
-	case strings.TrimSpace(ag.Ideal) == "":
-		return 5
-	case len(ag.Abilities) < l.Creation.Abilities:
-		return 6
-	case skillTotal(ag) < creationTotalPoints(l, solo):
-		return 7
-	}
-	if class != nil && class.StartsWithAdeptProficiency && len(ag.Proficiencies) == 0 {
-		return 8
-	}
-	switch {
-	case strings.TrimSpace(ag.Look) == "":
-		return 9
-	case strings.TrimSpace(ag.Why) == "":
-		return 10
-	}
-	if !hasContactKind(contacts, "Homeland") {
-		return 11
-	}
-	if !hasContactKind(contacts, "Dioscorian") {
-		return 12
+	for _, st := range wizStepList {
+		if st.N == wizLastStep {
+			break
+		}
+		if !stepDone(st.N, ag, class, l, solo, contacts) {
+			return st.N
+		}
 	}
 	return wizLastStep
 }
@@ -297,8 +313,16 @@ func (s *Server) buildWizardData(a campaign.Actor, ag *db.Agent, snap *gamedata.
 		Skills: map[string][]string{}, SuitHelp: suitHelp}
 	current := creationStep(ag, class, &snap.Limits, solo, contacts)
 	for _, st := range wizStepList {
-		d.Done[st.N] = st.N < current
+		if st.N == wizLastStep {
+			d.Done[st.N] = current == wizLastStep
+			continue
+		}
+		d.Done[st.N] = stepDone(st.N, ag, class, &snap.Limits, solo, contacts)
+		if !d.Done[st.N] {
+			d.MissingSteps = append(d.MissingSteps, st)
+		}
 	}
+	d.Ready = current == wizLastStep
 	d.setStep(current)
 	for _, v := range snap.Cards.Vision {
 		d.Vision = append(d.Vision, v.Name)
@@ -730,6 +754,10 @@ func wizardContext(a campaign.Actor, s *Server, ag *db.Agent, snap *gamedata.Sna
 			add("Their land: %s", land)
 		}
 		cardFor("Their card", "set.card", "", nil)
+	case "ability_contact":
+		if name := form.Get("ability_name"); name != "" {
+			add("This ability grants a contact: %s (p. 43).", name)
+		}
 	}
 	return req, book
 }
@@ -789,6 +817,9 @@ func wizChoiceFor(kind string, sg assist.Suggestion, ag *db.Agent, class *gameda
 	case "contact":
 		c.Label = f["name"] + " — " + f["description"]
 		c.Fill["set.name"], c.Fill["set.land"], c.Fill["set.description"] = f["name"], f["land"], f["description"]
+	case "ability_contact":
+		c.Label = f["name"] + " — " + f["description"]
+		c.Fill["name"], c.Fill["description"] = f["name"], f["description"]
 	case "magic":
 		for _, sc := range creation.MagicSchools(snap) {
 			if strings.EqualFold(sc.Name, f["school"]) {

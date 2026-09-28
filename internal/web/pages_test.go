@@ -544,6 +544,63 @@ func TestCreationWizard(t *testing.T) {
 	}
 }
 
+// TestWizardStepCheckmarksSurviveASkippedStep: completing steps out of order (skipping Abilities
+// but finishing everything after it) must still check off each completed step on its own, and
+// the review screen must not claim the Agent is ready — and must not be spoofable by navigating
+// straight to ?step=done — until Abilities is actually done too.
+func TestWizardStepCheckmarksSurviveASkippedStep(t *testing.T) {
+	st, _ := newSite(t)
+	ok := func(code int, flash string) {
+		t.Helper()
+		if code != http.StatusSeeOther || flash != "" {
+			t.Fatalf("post: %d %q", code, flash)
+		}
+	}
+	ok(st.post("Ana", "/agents", url.Values{"name": {"Ines"}, "class": {"prowler"}, "campaign_id": {"0"}}))
+	form := func(v url.Values, back string) {
+		t.Helper()
+		v.Set("back", "/agents/1/wizard?step="+back)
+		ok(st.post("Ana", "/agents/1", v))
+	}
+	form(url.Values{"set.child_phrase": {"Never looking back"}, "set.child_card": {"The Fool"}}, "child")
+	form(url.Values{"set.adult_phrase": {"My wild youth"}, "set.adult_card": {"The Chariot"}, "set.adult_verb": {"survived"}}, "adult")
+	form(url.Values{"set.burden": {"Reckless"}, "set.burden_card": {"The Chariot"}}, "burden")
+	form(url.Values{"set.ideal": {"Curious"}, "set.ideal_card": {"The Fool"}}, "ideal")
+	// Abilities (step 6) deliberately skipped. Finish every step after it.
+	form(url.Values{"skill.Skirmish": {"2"}, "skill.Convince": {"2"}}, "skills")
+	form(url.Values{"set.age": {"24"}, "set.culture": {"Lisbon"}, "set.look": {"Sharp-eyed"}}, "look")
+	form(url.Values{"set.why": {"Fleeing famine, disaster or war"}}, "why")
+	ok(st.post("Ana", "/agents/1/contacts", url.Values{"set.kind": {"Homeland"}, "set.name": {"Mother Agnese"}, "set.card": {"Page of Cups"}, "set.affection": {"4"}, "back": {"/agents/1/wizard?step=homeland"}}))
+	ok(st.post("Ana", "/agents/1/contacts", url.Values{"set.kind": {"Dioscorian"}, "set.name": {"Old Marco"}, "set.affection": {"1"}, "back": {"/agents/1/wizard?step=dioscorian"}}))
+
+	// Every step after the skipped one should still show its own checkmark.
+	_, body := st.get("Ana", "/agents/1/wizard?step=skills")
+	for _, title := range []string{"Skills", "Look", "Why Dioscoria", "Homeland contact", "Dioscorian contact"} {
+		if !strings.Contains(body, `bi-check-circle-fill"></i> `+title) {
+			t.Errorf("%s should be checked off even though Abilities was skipped", title)
+		}
+	}
+	if strings.Contains(body, `bi-check-circle-fill"></i> Abilities`) {
+		t.Error("Abilities is still incomplete and shouldn't be checked off")
+	}
+
+	// Navigating straight to ?step=done shouldn't claim the Agent is ready: it's missing Abilities.
+	_, body = st.get("Ana", "/agents/1/wizard?step=done")
+	if strings.Contains(body, "is ready") {
+		t.Error("shouldn't claim readiness while a step is still incomplete")
+	}
+	if !strings.Contains(body, "isn't finished") || !strings.Contains(body, `href="/agents/1/wizard?step=abilities">Abilities`) {
+		t.Errorf("should list Abilities as still missing: %s", body)
+	}
+
+	// A single POST with two ability_id values (the checkbox picker's batch add) finishes it.
+	ok(st.post("Ana", "/agents/1/abilities", url.Values{"ability_id": {"wisp", "burglar"}, "back": {"/agents/1/wizard?step=abilities"}}))
+	_, body = st.get("Ana", "/agents/1/wizard?step=done")
+	if !strings.Contains(body, "is ready") {
+		t.Errorf("should be ready once Abilities is finished too: %s", body)
+	}
+}
+
 func TestWizardMagicStepAndDraw(t *testing.T) {
 	st, _ := newSite(t)
 	if code, _ := st.post("Ana", "/agents", url.Values{"name": {"Cyrus"}, "class": {"occultist"}, "campaign_id": {"0"}}); code != http.StatusSeeOther {
@@ -703,7 +760,7 @@ func TestAbilityContactPrompt(t *testing.T) {
 	}
 	ok(st.post("Ana", "/agents/1/abilities", url.Values{"ability_id": {"the-old-ways"}}))
 	_, body := st.get("Ana", "/agents/1/wizard?step=abilities")
-	if !strings.Contains(body, "This ability grants a contact") {
+	if !strings.Contains(body, "grants a contact") || !strings.Contains(body, "data-auto-modal") {
 		t.Fatal("wizard should prompt for the granted contact's name, not skip it silently")
 	}
 

@@ -542,8 +542,10 @@ func (s *Server) createContact(w http.ResponseWriter, r *http.Request) {
 	s.done(w, r, err, fmt.Sprintf("/agents/%d", id))
 }
 
-// addAbility takes either ability_id (a class ability, possibly with the contact it grants named
-// in contact_name/contact_desc) or name/text/source (a custom one).
+// addAbility takes either one or more ability_id (class abilities — a lone one may carry the
+// contact it grants, named in contact_name/contact_desc; the wizard's checkbox picker sends
+// several at once, each named after saving through its own contact prompt) or name/text/source
+// (a custom ability).
 func (s *Server) addAbility(w http.ResponseWriter, r *http.Request) {
 	id := pathID(r, "id")
 	a := s.actor(r)
@@ -553,12 +555,31 @@ func (s *Server) addAbility(w http.ResponseWriter, r *http.Request) {
 	}
 	o := writeOpts(r.PostForm)
 	var err error
-	if abID := strings.TrimSpace(r.FormValue("ability_id")); abID != "" {
-		_, err = s.Svc.AddAbility(a, id, abID, r.FormValue("contact_name"), r.FormValue("contact_desc"), nil, o)
-	} else if name := strings.TrimSpace(r.FormValue("name")); name != "" {
-		_, err = s.Svc.AddCustomAbility(a, id, name, r.FormValue("text"), r.FormValue("source"), o)
+	switch ids := abilityIDs(r.Form["ability_id"]); {
+	case len(ids) == 1:
+		_, err = s.Svc.AddAbility(a, id, ids[0], r.FormValue("contact_name"), r.FormValue("contact_desc"), nil, o)
+	case len(ids) > 1:
+		for _, abID := range ids {
+			if _, err = s.Svc.AddAbility(a, id, abID, "", "", nil, o); err != nil {
+				break
+			}
+		}
+	case strings.TrimSpace(r.FormValue("name")) != "":
+		_, err = s.Svc.AddCustomAbility(a, id, r.FormValue("name"), r.FormValue("text"), r.FormValue("source"), o)
 	}
 	s.done(w, r, err, fmt.Sprintf("/agents/%d", id))
+}
+
+// abilityIDs trims, drops empties and dedupes the ability_id values a checkbox picker posts (the
+// same id can appear twice: once from the class list, once from its AI-suggested twin).
+func abilityIDs(vals []string) []string {
+	var out []string
+	for _, v := range vals {
+		if v = strings.TrimSpace(v); v != "" && !slices.Contains(out, v) {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 func (s *Server) removeAbility(w http.ResponseWriter, r *http.Request) {
